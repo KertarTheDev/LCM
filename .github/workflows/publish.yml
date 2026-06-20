@@ -38,6 +38,118 @@ permissions:
   packages: write
 
 jobs:
+  lcm-alpha-artifacts:
+    name: LCM alpha artifacts
+    if: github.repository == 'KertarTheDev/LCM' && github.ref == 'refs/heads/kilocode-lcm-prerelease'
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v6 # kilocode_change
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: actions/setup-node@v6 # kilocode_change
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Install VSIX packager
+        run: bun install -g @vscode/vsce
+
+      - name: Compute LCM alpha version
+        id: alpha
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          base="${INPUT_VERSION:-}"
+          if [ -z "$base" ]; then
+            base="$(node -p "require('./package.json').version")"
+          fi
+          base="${base#v}"
+          base="${base%%-*}"
+          node -e 'const semver = require("semver"); const base = process.argv[1]; if (!semver.valid(base)) { console.error(`Invalid upstream base version: ${base}`); process.exit(1); }' "$base"
+
+          git fetch --force --tags origin "refs/tags/v${base}-lcm.*:refs/tags/v${base}-lcm.*" || true
+          last="$(git tag -l "v${base}-lcm.*" | awk -F. '/^v[0-9]+\.[0-9]+\.[0-9]+-lcm\.[0-9]+$/ { print $NF }' | sort -n | tail -1)"
+          next="$(( ${last:-0} + 1 ))"
+          version="${base}-lcm.${next}"
+          tag="v${version}"
+
+          {
+            echo "base=${base}"
+            echo "version=${version}"
+            echo "tag=${tag}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create draft prerelease
+        run: |
+          notes="$RUNNER_TEMP/lcm-alpha-notes.md"
+          cat > "$notes" <<EOF
+          LCM alpha build based on upstream Kilo Code v${{ steps.alpha.outputs.base }}.
+
+          Branch: ${GITHUB_REF_NAME}
+          Commit: ${GITHUB_SHA}
+          EOF
+
+          gh release create "${{ steps.alpha.outputs.tag }}" \
+            --draft \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "LCM alpha ${{ steps.alpha.outputs.version }}" \
+            --notes-file "$notes" \
+            --repo "$GITHUB_REPOSITORY"
+
+      - name: Build CLI archives
+        env:
+          KILO_VERSION: ${{ steps.alpha.outputs.version }}
+          KILO_PRE_RELEASE: "true"
+          KILO_RELEASE: "1"
+        run: bun run --cwd packages/opencode build
+
+      - name: Upload CLI archives as workflow artifact
+        uses: actions/upload-artifact@v7 # kilocode_change
+        with:
+          name: kilo-cli-${{ steps.alpha.outputs.version }}
+          path: |
+            packages/opencode/dist/kilo-*.tar.gz
+            packages/opencode/dist/kilo-*.zip
+
+      - name: Build VSIX packages
+        working-directory: packages/kilo-vscode
+        env:
+          CLI_DIST_DIR: ../../packages/opencode/dist
+          KILO_VERSION: ${{ steps.alpha.outputs.version }}
+          KILO_PRE_RELEASE: "true"
+        run: bun script/build.ts
+
+      - name: Upload VSIX files to draft prerelease
+        run: |
+          mapfile -t files < <(compgen -G "packages/kilo-vscode/out/*.vsix")
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No VSIX files found under packages/kilo-vscode/out" >&2
+            exit 1
+          fi
+          gh release upload "${{ steps.alpha.outputs.tag }}" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Upload VSIX files as workflow artifact
+        uses: actions/upload-artifact@v7 # kilocode_change
+        with:
+          name: kilo-vscode-${{ steps.alpha.outputs.version }}
+          path: packages/kilo-vscode/out/*.vsix
+
+      - name: Publish prerelease
+        run: |
+          gh release edit "${{ steps.alpha.outputs.tag }}" \
+            --draft=false \
+            --prerelease \
+            --title "LCM alpha ${{ steps.alpha.outputs.version }}" \
+            --repo "$GITHUB_REPOSITORY"
+
   version:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.repository == 'Kilo-Org/kilocode'
