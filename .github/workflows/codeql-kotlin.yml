@@ -18,6 +18,7 @@ on:
 
 jobs:
   analyze:
+    if: github.repository == 'Kilo-Org/kilocode'
     name: Analyze (java-kotlin)
     runs-on: ubuntu-latest
     permissions:
