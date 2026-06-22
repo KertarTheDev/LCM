@@ -21,6 +21,27 @@
 
 ---
 
+### KiloCode-LCM Prerelease
+
+KiloCode-LCM is a modified version of Kilo Code designed to improve the handling of long sessions.
+
+Normal coding agents eventually run out of room in their chat history. When that happens, they usually squeeze older parts of the conversation into a short summary and drop the details. That keeps the chat going, but it can make the agent forget exact commands, files, errors, and decisions from earlier in the task.
+
+LCM is different. It keeps a local memory of the conversation, summarises older parts when needed, and gives the agent safe ways to look those details up later. The goal is simple: long sessions should feel less like starting over after every context limit and more like working with someone who can still check their notes.
+
+What this should improve:
+
+- Better continuity in long coding tasks.
+- Less accidental forgetting after context gets large.
+- More reliable recovery of exact earlier details.
+- Fewer cases where old context is silently thrown away.
+
+Token usage will vary by task. Short chats may use about the same number of tokens, or a little more, because LCM keeps recent context fresh and may do background memory work. Longer sessions should usually spend fewer tokens on repeatedly carrying old chat history in the main prompt, but some savings can be traded for memory maintenance or lookup calls. In practice, expect LCM to optimise first for remembering more safely, and second for reducing wasted long-context tokens.
+
+This is still a prerelease. Use the GitHub release artefacts from this repository when testing LCM. The normal Kilo Code Marketplace and npm packages remain the upstream releases.
+
+LCM is inspired by the paper [LCM: Lossless Context Management](https://arxiv.org/abs/2605.04050). More implementation detail is available in the [current-code specifications](specifications/README.md).
+
 Kilo Code is an AI coding agent that meets you everywhere you work: [VS Code](https://kilo.ai/landing/vs-code), [JetBrains](https://kilo.ai/features/jetbrains-native), and the [CLI](https://kilo.ai/cli). It's open source with open pricing. You pick from 500+ models, switch between them mid-task, and pay the model provider's rate with zero markup. No API keys required to start.
 
 ### Installation

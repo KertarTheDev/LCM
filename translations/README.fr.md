@@ -21,6 +21,27 @@
 
 ---
 
+### Préversion de KiloCode-LCM
+
+KiloCode-LCM est une version modifiée de Kilo Code conçue pour mieux gérer les longues sessions.
+
+Les agents de codage classiques finissent par manquer de place dans l'historique de discussion. Quand cela arrive, ils compressent généralement les anciens échanges dans un court résumé et abandonnent les détails. Cela permet de continuer la conversation, mais l'agent peut oublier des commandes exactes, des fichiers, des erreurs et des décisions prises plus tôt dans la tâche.
+
+LCM fonctionne autrement. Il conserve une mémoire locale de la conversation, résume les parties anciennes quand c'est nécessaire et donne à l'agent des moyens sûrs de retrouver les détails plus tard. L'objectif est simple : les longues sessions doivent moins donner l'impression de repartir de zéro après chaque limite de contexte, et davantage celle de travailler avec quelqu'un qui peut encore consulter ses notes.
+
+Ce que cela devrait améliorer :
+
+- Une meilleure continuité dans les longues tâches de codage.
+- Moins d'oublis accidentels quand le contexte devient volumineux.
+- Une récupération plus fiable des détails exacts précédents.
+- Moins de cas où l'ancien contexte est supprimé silencieusement.
+
+L'utilisation de tokens varie selon la tâche. Les chats courts peuvent utiliser à peu près le même nombre de tokens, ou un peu plus, car LCM garde le contexte récent disponible et peut effectuer du travail de mémoire en arrière-plan. Les sessions plus longues devraient généralement dépenser moins de tokens à transporter sans cesse l'ancien historique dans le prompt principal, mais une partie de cette économie peut être utilisée pour la maintenance de la mémoire ou des recherches. En pratique, attendez-vous à ce que LCM optimise d'abord la fiabilité de la mémoire, puis la réduction des tokens gaspillés dans les longs contextes.
+
+Cela reste une préversion. Utilisez les artefacts GitHub Releases de ce dépôt pour tester LCM. Les paquets Kilo Code habituels du Marketplace et de npm restent les versions upstream.
+
+LCM s'inspire de l'article [LCM: Lossless Context Management](https://arxiv.org/abs/2605.04050). Vous trouverez plus de détails d'implémentation dans les [spécifications du code actuel](specifications/README.md).
+
 Kilo Code est un agent de codage avec IA qui vous accompagne partout où vous travaillez : [VS Code](https://kilo.ai/landing/vs-code), [JetBrains](https://kilo.ai/features/jetbrains-native) et la [CLI](https://kilo.ai/cli). Il est open source avec une tarification ouverte. Vous choisissez parmi plus de 500 modèles, vous pouvez en changer en cours de tâche et vous payez le tarif du fournisseur du modèle sans majoration. Aucune clé API n'est nécessaire pour commencer.
 
 ### Installation

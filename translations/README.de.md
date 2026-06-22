@@ -21,6 +21,27 @@
 
 ---
 
+### KiloCode-LCM-Vorabversion
+
+KiloCode-LCM ist eine modifizierte Version von Kilo Code, die lange Sitzungen besser handhaben soll.
+
+Normale Coding-Agenten haben irgendwann keinen Platz mehr in ihrem Chatverlauf. Wenn das passiert, pressen sie ältere Gespräche meist in eine kurze Zusammenfassung und lassen Details fallen. So kann der Chat weitergehen, aber der Agent kann genaue Befehle, Dateien, Fehler und Entscheidungen von früher in der Aufgabe vergessen.
+
+LCM funktioniert anders. Es behält ein lokales Gedächtnis der Unterhaltung, fasst ältere Teile bei Bedarf zusammen und gibt dem Agenten sichere Möglichkeiten, Details später wieder nachzuschlagen. Das Ziel ist einfach: Lange Sitzungen sollen sich weniger so anfühlen, als würde man nach jedem Kontextlimit neu anfangen, und mehr wie die Arbeit mit jemandem, der seine Notizen noch prüfen kann.
+
+Das soll verbessert werden:
+
+- Bessere Kontinuität bei langen Programmieraufgaben.
+- Weniger versehentliches Vergessen, wenn der Kontext groß wird.
+- Zuverlässigeres Wiederfinden exakter früherer Details.
+- Weniger Fälle, in denen alter Kontext stillschweigend weggeworfen wird.
+
+Der Tokenverbrauch hängt von der Aufgabe ab. Kurze Chats können ungefähr gleich viele Tokens verwenden, oder etwas mehr, weil LCM den aktuellen Kontext frisch hält und im Hintergrund Speicherarbeit erledigen kann. Längere Sitzungen sollten normalerweise weniger Tokens dafür ausgeben, immer wieder alte Chatverläufe im Hauptprompt mitzutragen, aber ein Teil dieser Einsparung kann für Speicherpflege oder Nachschlageaufrufe verwendet werden. In der Praxis optimiert LCM zuerst darauf, sicherer mehr zu behalten, und danach darauf, verschwendete Long-Context-Tokens zu reduzieren.
+
+Dies ist weiterhin eine Vorabversion. Verwende zum Testen von LCM die GitHub-Release-Artefakte aus diesem Repository. Die normalen Kilo-Code-Pakete im Marketplace und auf npm bleiben die Upstream-Releases.
+
+LCM ist inspiriert vom Paper [LCM: Lossless Context Management](https://arxiv.org/abs/2605.04050). Weitere Implementierungsdetails stehen in den [Current-Code-Spezifikationen](specifications/README.md).
+
 Kilo Code ist ein KI-Coding-Agent, der überall dort arbeitet, wo du arbeitest: [VS Code](https://kilo.ai/landing/vs-code), [JetBrains](https://kilo.ai/features/jetbrains-native) und die [CLI](https://kilo.ai/cli). Es ist Open Source mit transparenter Preisgestaltung. Du wählst aus über 500 Modellen, wechselst sie mitten in einer Aufgabe und zahlst den Tarif des Modellanbieters ohne Aufschlag. Zum Start sind keine API-Schlüssel erforderlich.
 
 ### Installation
