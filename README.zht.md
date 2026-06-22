@@ -21,6 +21,27 @@
 
 ---
 
+### KiloCode-LCM 預發佈版
+
+KiloCode-LCM 是 Kilo Code 的修改版本，目標是改善長會話的處理方式。
+
+一般的編碼代理最終會用完聊天歷史的空間。發生這種情況時，它們通常會把較早的對話壓縮成一小段摘要，並丟掉細節。這樣聊天仍可繼續，但代理可能會忘記任務早期的精確指令、檔案、錯誤和決策。
+
+LCM 的做法不同。它會在本機保存對話記憶，在需要時摘要較舊的部分，並給代理安全的方法，讓它之後可以重新查找細節。目標很簡單：長會話不應該像每次到達 context limit 後都重新開始，而應該更像是和一個還能查看自己筆記的人一起工作。
+
+它應該帶來的改善：
+
+- 長時間編碼任務中的連續性更好。
+- context 變大後更少意外遺忘。
+- 更可靠地恢復之前的精確細節。
+- 更少出現舊 context 被悄悄丟棄的情況。
+
+Token 使用量會因任務而異。短聊天可能使用差不多數量的 token，也可能稍多一些，因為 LCM 會保持最近 context 的新鮮度，並可能在背景做記憶維護。較長的會話通常應該減少反覆把舊聊天歷史帶進主要 prompt 所消耗的 token，但節省的一部分可能會用於記憶維護或查找呼叫。實際使用中，可以預期 LCM 首先優化的是更安全地記住更多內容，其次才是減少 long-context token 的浪費。
+
+這仍然是預發佈版。測試 LCM 時，請使用此 repository 的 GitHub Release 產物。普通的 Kilo Code Marketplace 和 npm 套件仍然是 upstream 版本。
+
+LCM 的靈感來自論文 [LCM: Lossless Context Management](https://arxiv.org/abs/2605.04050)。更多實作細節可見 [current-code specifications](specifications/README.md)。
+
 Kilo Code 是一個 AI 編碼代理，可在你工作的任何地方使用：[VS Code](https://kilo.ai/landing/vs-code)、[JetBrains](https://kilo.ai/features/jetbrains-native) 和 [CLI](https://kilo.ai/cli)。它是開源專案，並採用開放定價。你可以從 500 多個模型中選擇，在任務中途切換模型，並按模型供應商的價格付費，沒有加價。開始使用不需要 API 金鑰。
 
 ### 安裝

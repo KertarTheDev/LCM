@@ -21,6 +21,27 @@
 
 ---
 
+### KiloCode-LCM Ön Sürümü
+
+KiloCode-LCM, uzun oturumların ele alınışını iyileştirmek için tasarlanmış değiştirilmiş bir Kilo Code sürümüdür.
+
+Normal kodlama ajanları sonunda sohbet geçmişlerinde yer kalmaması sorunuyla karşılaşır. Bu olduğunda genellikle eski konuşmayı kısa bir özete sıkıştırır ve ayrıntıları atarlar. Bu sohbetin devam etmesini sağlar, ancak ajan daha önceki komutları, dosyaları, hataları ve kararları tam olarak unutabilir.
+
+LCM farklı çalışır. Konuşmanın yerel bir belleğini tutar, gerektiğinde eski bölümleri özetler ve ajana ayrıntıları daha sonra güvenli şekilde tekrar bulma yolları verir. Amaç basit: uzun oturumlar her bağlam sınırından sonra yeniden başlıyormuş gibi değil, notlarına hâlâ bakabilen biriyle çalışıyormuş gibi hissettirmeli.
+
+Bunun iyileştirmesi beklenenler:
+
+- Uzun kodlama görevlerinde daha iyi süreklilik.
+- Bağlam büyüdüğünde daha az yanlışlıkla unutma.
+- Önceki kesin ayrıntıların daha güvenilir şekilde geri alınması.
+- Eski bağlamın sessizce atıldığı durumların azalması.
+
+Token kullanımı göreve göre değişir. Kısa sohbetler yaklaşık aynı sayıda token kullanabilir veya biraz daha fazla kullanabilir; çünkü LCM yakın geçmiş bağlamını taze tutar ve arka planda bellek işi yapabilir. Daha uzun oturumlar genellikle eski sohbet geçmişini ana prompt içinde tekrar tekrar taşımak için daha az token harcamalıdır, ancak bu tasarrufun bir kısmı bellek bakımı veya arama çağrılarına gidebilir. Pratikte LCM'den önce daha güvenli hatırlamayı, sonra da boşa harcanan long-context tokenlarını azaltmayı optimize etmesini bekleyin.
+
+Bu hâlâ bir ön sürümdür. LCM'yi test ederken bu deponun GitHub release artifact'lerini kullanın. Normal Kilo Code Marketplace ve npm paketleri upstream sürümler olarak kalır.
+
+LCM, [LCM: Lossless Context Management](https://arxiv.org/abs/2605.04050) makalesinden ilham almıştır. Daha fazla uygulama ayrıntısı [current-code specifications](specifications/README.md) içinde bulunabilir.
+
 Kilo Code, çalıştığınız her yerde size eşlik eden bir AI kodlama ajanıdır: [VS Code](https://kilo.ai/landing/vs-code), [JetBrains](https://kilo.ai/features/jetbrains-native) ve [CLI](https://kilo.ai/cli). Açık kaynaktır ve açık fiyatlandırma sunar. 500'den fazla model arasından seçim yapabilir, görev sırasında model değiştirebilir ve hiçbir ek ücret olmadan model sağlayıcısının fiyatını ödersiniz. Başlamak için API anahtarı gerekmez.
 
 ### Kurulum

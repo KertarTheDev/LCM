@@ -21,6 +21,27 @@
 
 ---
 
+### KiloCode-LCM-forhåndsutgivelse
+
+KiloCode-LCM er en modifisert versjon av Kilo Code laget for å håndtere lange økter bedre.
+
+Vanlige kodeagenter går til slutt tom for plass i chathistorikken. Når det skjer, presser de som regel eldre samtale sammen til et kort sammendrag og dropper detaljene. Det holder chatten i gang, men kan gjøre at agenten glemmer nøyaktige kommandoer, filer, feil og beslutninger fra tidligere i oppgaven.
+
+LCM fungerer annerledes. Det beholder et lokalt minne av samtalen, oppsummerer eldre deler ved behov og gir agenten trygge måter å slå opp detaljer igjen senere. Målet er enkelt: lange økter skal føles mindre som å starte på nytt etter hver kontekstgrense, og mer som å jobbe med noen som fortsatt kan sjekke notatene sine.
+
+Dette bør forbedre:
+
+- Bedre kontinuitet i lange kodeoppgaver.
+- Mindre tilfeldig glemsel når konteksten blir stor.
+- Mer pålitelig gjenfinning av nøyaktige tidligere detaljer.
+- Færre tilfeller der gammel kontekst stille blir kastet bort.
+
+Tokenbruken vil variere etter oppgave. Korte chatter kan bruke omtrent samme antall tokens, eller litt mer, fordi LCM holder nylig kontekst fersk og kan gjøre minnearbeid i bakgrunnen. Lengre økter bør vanligvis bruke færre tokens på å bære gammel chathistorikk gjentatte ganger i hovedprompten, men noe av besparelsen kan gå til minnevedlikehold eller oppslag. I praksis bør du forvente at LCM først optimaliserer for å huske tryggere, og deretter for å redusere bortkastede long-context-tokens.
+
+Dette er fortsatt en forhåndsutgivelse. Bruk GitHub-releaseartefaktene fra dette repositoriet når du tester LCM. De vanlige Kilo Code-pakkene på Marketplace og npm forblir upstream-utgivelsene.
+
+LCM er inspirert av artikkelen [LCM: Lossless Context Management](https://arxiv.org/abs/2605.04050). Flere implementasjonsdetaljer finnes i [spesifikasjonene for gjeldende kode](specifications/README.md).
+
 Kilo Code er en AI-kodeagent som møter deg overalt du jobber: [VS Code](https://kilo.ai/landing/vs-code), [JetBrains](https://kilo.ai/features/jetbrains-native) og [CLI](https://kilo.ai/cli). Den er åpen kildekode med åpen prising. Du velger blant mer enn 500 modeller, bytter mellom dem midt i en oppgave og betaler modellleverandørens pris uten påslag. Ingen API-nøkler kreves for å starte.
 
 ### Installasjon

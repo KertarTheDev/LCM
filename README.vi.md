@@ -21,6 +21,27 @@
 
 ---
 
+### Bản phát hành thử KiloCode-LCM
+
+KiloCode-LCM là một phiên bản Kilo Code đã được chỉnh sửa để cải thiện cách xử lý các phiên làm việc dài.
+
+Các agent lập trình thông thường cuối cùng sẽ hết chỗ trong lịch sử chat. Khi điều đó xảy ra, chúng thường nén phần hội thoại cũ thành một bản tóm tắt ngắn và bỏ đi chi tiết. Việc này giúp cuộc trò chuyện tiếp tục, nhưng có thể khiến agent quên các lệnh, tệp, lỗi và quyết định chính xác ở phần trước của nhiệm vụ.
+
+LCM hoạt động khác. Nó giữ một bộ nhớ cục bộ của cuộc trò chuyện, tóm tắt các phần cũ khi cần và cung cấp cho agent những cách an toàn để tra cứu lại chi tiết sau đó. Mục tiêu rất đơn giản: các phiên dài không nên có cảm giác như phải bắt đầu lại sau mỗi giới hạn context, mà nên giống như làm việc với một người vẫn có thể xem lại ghi chú của mình.
+
+Những điểm dự kiến được cải thiện:
+
+- Tính liên tục tốt hơn trong các nhiệm vụ lập trình dài.
+- Ít quên ngoài ý muốn hơn khi context trở nên lớn.
+- Khôi phục các chi tiết chính xác trước đó đáng tin cậy hơn.
+- Ít trường hợp context cũ bị âm thầm bỏ đi hơn.
+
+Mức sử dụng token sẽ thay đổi theo nhiệm vụ. Các cuộc chat ngắn có thể dùng số token tương tự, hoặc nhiều hơn một chút, vì LCM giữ context gần đây luôn mới và có thể làm việc bộ nhớ ở nền. Các phiên dài hơn thường sẽ tốn ít token hơn cho việc lặp đi lặp lại lịch sử chat cũ trong prompt chính, nhưng một phần tiết kiệm đó có thể được dùng cho bảo trì bộ nhớ hoặc các lệnh tra cứu. Trên thực tế, hãy kỳ vọng LCM tối ưu trước hết cho việc ghi nhớ an toàn hơn, sau đó mới đến việc giảm token long-context bị lãng phí.
+
+Đây vẫn là bản phát hành thử. Hãy dùng các artifact GitHub Releases từ repository này khi thử nghiệm LCM. Các gói Kilo Code thông thường trên Marketplace và npm vẫn là các bản phát hành upstream.
+
+LCM được truyền cảm hứng từ bài báo [LCM: Lossless Context Management](https://arxiv.org/abs/2605.04050). Chi tiết triển khai thêm có trong [current-code specifications](specifications/README.md).
+
 Kilo Code là một tác nhân lập trình AI đồng hành với bạn ở mọi nơi bạn làm việc: [VS Code](https://kilo.ai/landing/vs-code), [JetBrains](https://kilo.ai/features/jetbrains-native) và [CLI](https://kilo.ai/cli). Dự án là mã nguồn mở với giá minh bạch. Bạn chọn trong hơn 500 mô hình, chuyển đổi giữa chúng giữa chừng một tác vụ và trả theo giá của nhà cung cấp mô hình, không có phụ phí. Không cần API key để bắt đầu.
 
 ### Cài đặt

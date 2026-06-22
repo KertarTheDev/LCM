@@ -21,6 +21,27 @@
 
 ---
 
+### KiloCode-LCM predizdanje
+
+KiloCode-LCM je izmijenjena verzija Kilo Code-a namijenjena boljem rukovanju dugim sesijama.
+
+Obični agenti za kodiranje na kraju ostanu bez prostora u historiji razgovora. Kada se to desi, obično sabiju stariji razgovor u kratak sažetak i odbace detalje. To omogućava nastavak chata, ali agent može zaboraviti tačne komande, fajlove, greške i odluke iz ranijeg dijela zadatka.
+
+LCM radi drugačije. On čuva lokalnu memoriju razgovora, po potrebi sažima starije dijelove i daje agentu sigurne načine da kasnije ponovo pronađe detalje. Cilj je jednostavan: duge sesije trebaju manje ličiti na ponovno pokretanje nakon svakog ograničenja konteksta, a više na rad s nekim ko još uvijek može pogledati svoje bilješke.
+
+Šta bi ovo trebalo poboljšati:
+
+- Bolji kontinuitet u dugim programerskim zadacima.
+- Manje slučajnog zaboravljanja kada kontekst postane velik.
+- Pouzdaniji povrat tačnih ranijih detalja.
+- Manje slučajeva u kojima se stari kontekst tiho odbacuje.
+
+Potrošnja tokena zavisi od zadatka. Kratki chatovi mogu koristiti približno isti broj tokena, ili malo više, jer LCM održava svježi nedavni kontekst i može raditi memorijske zadatke u pozadini. Duže sesije bi obično trebale trošiti manje tokena na stalno nošenje stare historije chata u glavnom promptu, ali dio te uštede može otići na održavanje memorije ili lookup pozive. U praksi očekujte da LCM prvo optimizira sigurnije pamćenje, a zatim smanjenje potrošenih long-context tokena.
+
+Ovo je još uvijek predizdanje. Koristite GitHub release artefakte iz ovog repozitorija kada testirate LCM. Uobičajeni Kilo Code Marketplace i npm paketi ostaju upstream izdanja.
+
+LCM je inspirisan radom [LCM: Lossless Context Management](https://arxiv.org/abs/2605.04050). Više implementacijskih detalja dostupno je u [specifikacijama trenutnog koda](specifications/README.md).
+
 Kilo Code je AI agent za kodiranje koji vas prati svugdje gdje radite: [VS Code](https://kilo.ai/landing/vs-code), [JetBrains](https://kilo.ai/features/jetbrains-native) i [CLI](https://kilo.ai/cli). Open source je i ima otvorene cijene. Birate između više od 500 modela, mijenjate ih usred zadatka i plaćate cijenu pružaoca modela bez dodatne marže. API ključevi nisu potrebni za početak.
 
 ### Instalacija
