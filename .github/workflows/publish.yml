@@ -61,6 +61,12 @@ jobs:
       - name: Install VSIX packager
         run: bun install -g @vscode/vsce
 
+      # kilocode_change start - block alpha artifacts when first prompt render prep is broken
+      - name: First-message prompt smoke
+        working-directory: packages/opencode
+        run: bun run lcm:prompt-first-message
+      # kilocode_change end
+
       - name: Compute LCM alpha version
         id: alpha
         env:
