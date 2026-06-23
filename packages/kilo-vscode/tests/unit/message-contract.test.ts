@@ -18,6 +18,7 @@ const MESSAGES_DIR = path.join(ROOT, "webview-ui/src/types/messages")
 const EXTENSION_MESSAGES_FILE = path.join(MESSAGES_DIR, "extension-messages.ts")
 const WEBVIEW_MESSAGES_FILE = path.join(MESSAGES_DIR, "webview-messages.ts")
 const KILO_PROVIDER_FILE = path.join(ROOT, "src/KiloProvider.ts")
+const LCM_WEBVIEW_FILE = path.join(ROOT, "src/kilo-provider/lcm-webview.ts")
 const KILO_PROVIDER_UTILS_FILE = path.join(ROOT, "src/kilo-provider-utils.ts")
 // Some wire types (partUpdated, partsUpdated) live in a file shared by the
 // extension and webview; the contract checks must include it.
@@ -110,6 +111,23 @@ describe("KiloProvider message handler coverage", () => {
       unrecognized,
       `KiloProvider switch cases not found in any message type definition: ${unrecognized.join(", ")}`,
     ).toEqual([])
+  })
+
+  it("all LCM webview request messages are routed through the LCM transport handler", () => {
+    const providerContent = readFile(KILO_PROVIDER_FILE)
+    const lcmWebviewContent = readFile(LCM_WEBVIEW_FILE)
+    const requiredCases = [
+      "requestLcmSettings",
+      "updateLcmSettings",
+      "cancelLcmMaintenance",
+      "diagnoseLcmDb",
+      "rebuildLcmDb",
+    ]
+    const missing = requiredCases.filter((type) => !lcmWebviewContent.includes(`"${type}"`))
+
+    expect(missing, `LCM webview request types missing from LCM transport routing: ${missing.join(", ")}`).toEqual([])
+    expect(providerContent).toContain("isLcmWebviewRequest(message)")
+    expect(providerContent).toContain("handleLcmWebviewRequest(message")
   })
 })
 

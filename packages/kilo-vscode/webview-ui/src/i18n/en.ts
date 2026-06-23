@@ -84,8 +84,6 @@ export const dict = {
   "revert.banner.redo.all": "Redo All",
   "revert.banner.hint": "Send a new message to make this permanent",
   "revert.disabled.agentBusy": "Wait for agent to finish",
-  "command.session.compact": "Compact session",
-  "command.session.compact.description": "Summarize the session to reduce context size",
   "command.session.fork": "Fork from message",
   "command.session.fork.description": "Create a new session from a previous message",
   "command.session.share": "Share session",
@@ -432,9 +430,6 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "Edit and write permissions will be automatically approved",
   "toast.permissions.autoaccept.off.title": "Stopped auto-accepting edits",
   "toast.permissions.autoaccept.off.description": "Edit and write permissions will require approval",
-
-  "toast.model.none.title": "No model selected",
-  "toast.model.none.description": "Connect a provider to summarize this session",
 
   "toast.file.loadFailed.title": "Failed to load file",
   "toast.file.listFailed.title": "Failed to list files",
@@ -1471,13 +1466,9 @@ export const dict = {
   "settings.checkpoints.enable.title": "Enable Snapshots",
   "settings.checkpoints.enable.description": "Create checkpoints before file edits so you can restore previous states",
 
-  "settings.context.autoCompaction.title": "Auto Compaction",
-  "settings.context.autoCompaction.description": "Automatically compact context before it reaches the limit",
   "settings.context.compactionLimit.title": "Auto Compaction Limit",
   "settings.context.compactionLimit.description":
     "Compact when context reaches this percentage of the model window. Leave blank to use the safety buffer only.",
-  "settings.context.prune.title": "Prune Old Outputs",
-  "settings.context.prune.description": "Remove old tool outputs during compaction",
   "settings.context.watcherPatterns": "File Watcher Ignore Patterns",
   "settings.context.watcherPatterns.description": "Glob patterns for files the watcher should ignore",
 

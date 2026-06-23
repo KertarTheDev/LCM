@@ -48,6 +48,10 @@ import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
 import z from "zod" // kilocode_change - Kilo config compatibility schemas
 // kilocode_change start
+import * as LcmConfig from "@/session/lcm/config"
+import { makeRuntime } from "@/effect/run-service"
+// kilocode_change end
+// kilocode_change start
 import { ZodOverride } from "@opencode-ai/core/effect-zod"
 import { KilocodeConfig } from "../kilocode/config/config"
 import { primaryPaths } from "../kilocode/primary-worktree"
@@ -159,6 +163,13 @@ export type Layout = ConfigLayout.Layout
 // kilocode_change start - indexing configuration
 export const Indexing = KiloIndexingConfig
 export type Indexing = z.infer<typeof Indexing>
+// kilocode_change end
+// kilocode_change start
+const LcmConfigRef = Schema.declare<LcmConfig.PublicConfig>((value): value is LcmConfig.PublicConfig => {
+  return LcmConfig.PublicConfigZod.safeParse(value).success
+}).annotate({
+  [ZodOverride]: LcmConfig.PublicConfigZod,
+})
 // kilocode_change end
 
 const LogLevelRef = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate({
@@ -384,6 +395,11 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  // kilocode_change start
+  lcm: Schema.optional(LcmConfigRef).annotate({
+    description: "LCM public settings and deployment defaults persisted through normal Kilo config storage.",
+  }),
+  // kilocode_change end
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
@@ -432,16 +448,25 @@ type State = {
 
 export interface Interface {
   readonly get: () => Effect.Effect<Info>
+  // kilocode_change start
+  readonly getLocal: () => Effect.Effect<Info>
+  // kilocode_change end
   readonly getGlobal: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
-  readonly update: (config: Info) => Effect.Effect<void>
+  // kilocode_change start
+  readonly update: (config: Info) => Effect.Effect<void, unknown>
+  // kilocode_change end
   // kilocode_change start
   readonly updateGlobal: (
     config: Info,
     options?: { dispose?: boolean },
-  ) => Effect.Effect<{ info: Info; changed: boolean }>
+  // kilocode_change start
+  ) => Effect.Effect<{ info: Info; changed: boolean }> // kilocode_change
   // kilocode_change end
-  readonly invalidate: () => Effect.Effect<void>
+  // kilocode_change end
+  // kilocode_change start
+  readonly invalidate: (wait?: boolean) => Effect.Effect<void>
+  // kilocode_change end
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
   readonly warnings: () => Effect.Effect<Warning[]> // kilocode_change
@@ -1097,6 +1122,13 @@ export const layer = Layer.effect(
       return yield* InstanceState.use(state, (s) => s.config)
     })
 
+    // kilocode_change start
+    const getLocal = Effect.fn("Config.getLocal")(function* () {
+      const dir = yield* InstanceState.directory
+      return yield* loadFile(path.join(dir, "config.json"))
+    })
+
+    // kilocode_change end
     const directories = Effect.fn("Config.directories")(function* () {
       return yield* InstanceState.use(state, (s) => s.directories)
     })
@@ -1141,9 +1173,12 @@ export const layer = Layer.effect(
     })
     // kilocode_change end
 
-    const invalidate = Effect.fn("Config.invalidate")(function* () {
+    // kilocode_change start
+    const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
       yield* invalidateGlobal
+      if (wait) yield* waitForDependencies()
     })
+    // kilocode_change end
 
     // kilocode_change start - add dispose option to skip Instance.disposeAll for permission-only changes
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info, options?: { dispose?: boolean }) {
@@ -1206,6 +1241,9 @@ export const layer = Layer.effect(
 
     return Service.of({
       get,
+      // kilocode_change start
+      getLocal,
+      // kilocode_change end
       getGlobal,
       getConsoleState,
       update,
@@ -1230,3 +1268,47 @@ export const defaultLayer = layer.pipe(
 )
 
 export * as Config from "./config"
+
+// kilocode_change start - keep async wrappers for Kilo callsites during Effect migration
+const { runPromise } = makeRuntime(Service, defaultLayer)
+
+export async function get() {
+  return runPromise((svc) => svc.get())
+}
+
+export async function getLocal() {
+  return runPromise((svc) => svc.getLocal())
+}
+
+export async function getGlobal() {
+  return runPromise((svc) => svc.getGlobal())
+}
+
+export async function getConsoleState() {
+  return runPromise((svc) => svc.getConsoleState())
+}
+
+export async function update(config: Info) {
+  return runPromise((svc) => svc.update(config))
+}
+
+export async function updateGlobal(config: Info, options?: { dispose?: boolean }) {
+  return runPromise((svc) => svc.updateGlobal(config, options))
+}
+
+export async function invalidate(wait = false) {
+  return runPromise((svc) => svc.invalidate(wait))
+}
+
+export async function directories() {
+  return runPromise((svc) => svc.directories())
+}
+
+export async function waitForDependencies() {
+  return runPromise((svc) => svc.waitForDependencies())
+}
+
+export async function warnings() {
+  return runPromise((svc) => svc.warnings())
+}
+// kilocode_change end

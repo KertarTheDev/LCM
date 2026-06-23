@@ -65,6 +65,7 @@ import { slashMatches } from "@/kilocode/cli/cmd/command-display"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { type WorkspaceStatus } from "../workspace-label"
 import { KILO_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
+import { slashEntryMatches, useCommandPalette } from "../../context/command-palette"
 import { useTuiConfig } from "../../context/tui-config"
 
 export type PromptProps = {
@@ -98,6 +99,18 @@ const money = new Intl.NumberFormat("en-US", {
 })
 
 const DRAFT_RETENTION_MIN_CHARS = 20
+
+export function parseSlashCommandInput(inputText: string) {
+  if (!inputText.startsWith("/")) return
+  const firstLineEnd = inputText.indexOf("\n")
+  const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
+  const [commandToken, ...firstLineArgs] = firstLine.split(" ")
+  const name = commandToken.slice(1)
+  if (!name) return
+  const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
+  const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
+  return { name, arguments: args }
+}
 
 function randomIndex(count: number) {
   if (count <= 0) return 0
@@ -156,6 +169,7 @@ export function Prompt(props: PromptProps) {
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
+  const commandPalette = useCommandPalette()
   const agentShortcut = useCommandShortcut("agent.cycle")
   const paletteShortcut = useCommandShortcut("command.palette.show")
   const renderer = useRenderer()
@@ -1043,7 +1057,22 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  function clearPromptInput() {
+    input.extmarks.clear()
+    input.clear()
+    setStore("prompt", { input: "", parts: [] })
+    setStore("extmarkToPartIndex", new Map())
+  }
+
+  function triggerLocalSlash(name: string) {
+    const entry = commandPalette.slashes().find((item) => slashEntryMatches(item, name))
+    if (!entry) return false
+    entry.onSelect()
+    return true
+  }
+
   let submitting = false
+
   async function submit() {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
     // input's native onSubmit racing another dispatch). Without this guard,
@@ -1074,13 +1103,20 @@ export function Prompt(props: PromptProps) {
     if (workspaceCreating()) return false
     if (auto()?.visible) return false
     if (!store.prompt.input) return false
-    const agent = local.agent.current()
-    if (!agent) return false
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
       return true
     }
+
+    const localSlashCommand = store.mode === "shell" ? undefined : parseSlashCommandInput(store.prompt.input)
+    if (localSlashCommand && triggerLocalSlash(localSlashCommand.name)) {
+      clearPromptInput()
+      return true
+    }
+
+    const agent = local.agent.current()
+    if (!agent) return false
     const selectedModel = local.model.current()
     if (!selectedModel) {
       void promptModelWarning()
@@ -1203,22 +1239,15 @@ export function Prompt(props: PromptProps) {
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
-        const firstLine = inputText.split("\n")[0]
-        const command = firstLine.split(" ")[0].slice(1)
-        return sync.data.command.some((x) => slashMatches(x, command)) // kilocode_change
+        const command = parseSlashCommandInput(inputText)
+        return !!command && sync.data.command.some((x) => slashMatches(x, command.name)) // kilocode_change
       })
     ) {
-      // Parse command from first line, preserve multi-line content in arguments
-      const firstLineEnd = inputText.indexOf("\n")
-      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
-      const [command, ...firstLineArgs] = firstLine.split(" ")
-      const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
-      const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
-
+      const command = parseSlashCommandInput(inputText)!
       void sdk.client.session.command({
         sessionID,
-        command: command.slice(1),
-        arguments: args,
+        command: command.name,
+        arguments: command.arguments,
         agent: local.agent.current()?.name ?? "", // kilocode_change
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,

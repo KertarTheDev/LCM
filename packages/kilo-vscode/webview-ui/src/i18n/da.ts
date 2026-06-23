@@ -84,8 +84,6 @@ export const dict = {
   "revert.banner.redo.all": "Gentag alt",
   "revert.banner.hint": "Send en ny besked for at gøre dette permanent",
   "revert.disabled.agentBusy": "Vent på at agenten er færdig",
-  "command.session.compact": "Komprimér session",
-  "command.session.compact.description": "Opsummer sessionen for at reducere kontekststørrelsen",
   "command.session.fork": "Forgren fra besked",
   "command.session.fork.description": "Opret en ny session fra en tidligere besked",
   "command.session.share": "Del session",
@@ -433,9 +431,6 @@ export const dict = {
   "toast.workspace.enabled.description": "Flere worktrees vises nu i sidepanelet",
   "toast.workspace.disabled.title": "Arbejdsområder deaktiveret",
   "toast.workspace.disabled.description": "Kun hoved-worktree vises i sidepanelet",
-
-  "toast.model.none.title": "Ingen model valgt",
-  "toast.model.none.description": "Forbind en udbyder for at opsummere denne session",
 
   "toast.file.loadFailed.title": "Kunne ikke indlæse fil",
 
@@ -1488,13 +1483,9 @@ export const dict = {
     "Forhindr gentagne identiske handlinger. Udløses, når det samme værktøjskald gentages med identisk input.",
   "settings.checkpoints.enable.title": "Aktiver snapshots",
   "settings.checkpoints.enable.description": "Opret kontrolpunkter før filredigeringer",
-  "settings.context.autoCompaction.title": "Automatisk komprimering",
-  "settings.context.autoCompaction.description": "Komprimér automatisk kontekst, før den når grænsen",
   "settings.context.compactionLimit.title": "Grænse for automatisk komprimering",
   "settings.context.compactionLimit.description":
     "Komprimér, når konteksten når denne procentdel af modelvinduet. Lad feltet være tomt for kun at bruge sikkerhedsbufferen.",
-  "settings.context.prune.title": "Fjern gamle output",
-  "settings.context.prune.description": "Fjern gamle værktøjsoutput under komprimering",
   "settings.context.watcherPatterns": "Filvagt-ignormønstre",
   "settings.context.watcherPatterns.description": "Glob-mønstre for filer, som vagten skal ignorere",
 

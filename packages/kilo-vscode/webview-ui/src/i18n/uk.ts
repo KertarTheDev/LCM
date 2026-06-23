@@ -84,8 +84,6 @@ export const dict = {
   "revert.banner.redo.all": "Повторити все",
   "revert.banner.hint": "Надішліть нове повідомлення, щоб зробити це постійним",
   "revert.disabled.agentBusy": "Зачекайте завершення агента",
-  "command.session.compact": "Стиснути сесію",
-  "command.session.compact.description": "Підсумувати сесію для зменшення розміру контексту",
   "command.session.fork": "Розгалужити від повідомлення",
   "command.session.fork.description": "Створити нову сесію від попереднього повідомлення",
   "command.session.share": "Відкрити доступ до сесії",
@@ -436,9 +434,6 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "Дозволи на редагування і запис схвалюватимуться автоматично",
   "toast.permissions.autoaccept.off.title": "Автоматичне прийняття зупинено",
   "toast.permissions.autoaccept.off.description": "Дозволи на редагування і запис потребуватимуть підтвердження",
-
-  "toast.model.none.title": "Модель не вибрано",
-  "toast.model.none.description": "Підключіть провайдера, щоб підсумувати цю сесію",
 
   "toast.file.loadFailed.title": "Не вдалося завантажити файл",
   "toast.file.listFailed.title": "Не вдалося отримати список файлів",
@@ -1450,13 +1445,9 @@ export const dict = {
   "settings.checkpoints.enable.description":
     "Створювати контрольні точки перед редагуванням файлів, щоб мати можливість відновити попередні стани",
 
-  "settings.context.autoCompaction.title": "Автоматичне стиснення",
-  "settings.context.autoCompaction.description": "Автоматично стискати контекст до досягнення ліміту",
   "settings.context.compactionLimit.title": "Ліміт автоматичного стискання",
   "settings.context.compactionLimit.description":
     "Стискати, коли контекст досягає цього відсотка вікна моделі. Залиште порожнім, щоб використовувати лише буфер безпеки.",
-  "settings.context.prune.title": "Очищати старі виводи",
-  "settings.context.prune.description": "Видаляти старі виводи інструментів під час стиснення",
   "settings.context.watcherPatterns": "Шаблони ігнорування спостерігача файлів",
   "settings.context.watcherPatterns.description": "Glob-шаблони для файлів, які спостерігач має ігнорувати",
 

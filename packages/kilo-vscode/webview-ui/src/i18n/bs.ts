@@ -84,8 +84,6 @@ export const dict = {
   "revert.banner.redo.all": "Ponovi Sve",
   "revert.banner.hint": "Pošalji novu poruku da bi ovo postalo trajno",
   "revert.disabled.agentBusy": "Sačekajte da agent završi",
-  "command.session.compact": "Sažmi sesiju",
-  "command.session.compact.description": "Sažmi sesiju kako bi se smanjio kontekst",
   "command.session.fork": "Fork iz poruke",
   "command.session.fork.description": "Kreiraj novu sesiju iz prethodne poruke",
   "command.session.share": "Podijeli sesiju",
@@ -435,9 +433,6 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "Dozvole za izmjene i pisanje biće automatski odobrene",
   "toast.permissions.autoaccept.off.title": "Zaustavljeno automatsko prihvatanje izmjena",
   "toast.permissions.autoaccept.off.description": "Dozvole za izmjene i pisanje zahtijevaće odobrenje",
-
-  "toast.model.none.title": "Nije odabran model",
-  "toast.model.none.description": "Poveži provajdera da sažmeš ovu sesiju",
 
   "toast.file.loadFailed.title": "Neuspjelo učitavanje datoteke",
   "toast.file.listFailed.title": "Neuspješno listanje datoteka",
@@ -1498,13 +1493,9 @@ export const dict = {
     "Sprečavanje ponavljanja identičnih radnji. Pokreće se kada se isti poziv alata ponovi sa identičnim unosom.",
   "settings.checkpoints.enable.title": "Omogući snimke",
   "settings.checkpoints.enable.description": "Kreiraj kontrolne točke prije uređivanja datoteka",
-  "settings.context.autoCompaction.title": "Automatska kompresija",
-  "settings.context.autoCompaction.description": "Automatski komprimiraj kontekst prije nego dostigne limit",
   "settings.context.compactionLimit.title": "Limit automatske kompresije",
   "settings.context.compactionLimit.description":
     "Komprimiraj kada kontekst dostigne ovaj procenat prozora modela. Ostavite prazno da koristite samo sigurnosnu rezervu.",
-  "settings.context.prune.title": "Očisti stare izlaze",
-  "settings.context.prune.description": "Ukloni stare izlaze alata tokom kompresije",
   "settings.context.watcherPatterns": "Uzorci ignoriranja za promatrač datoteka",
   "settings.context.watcherPatterns.description": "Glob uzorci za datoteke koje promatrač treba ignorirati",
 

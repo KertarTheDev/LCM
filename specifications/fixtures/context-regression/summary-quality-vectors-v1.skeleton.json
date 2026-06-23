@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "context-regression-summary-quality-vectors-v1",
+  "implemented": false,
+  "ownerMilestone": "44",
+  "contentSafety": "Vectors use counts, anchor classes, and objective statuses only; raw source and candidate summary text are fixture-owned model-visible inputs outside this report.",
+  "cases": [
+    {
+      "caseID": "large-source-tiny-summary-rejected",
+      "sourceTokens": 20639,
+      "candidateSummaryTokens": 21,
+      "expectedObjectiveStatus": "rejected_tiny",
+      "commitsSummary": false
+    },
+    {
+      "caseID": "large-source-useful-summary-accepted",
+      "sourceTokens": 25905,
+      "acceptedSummaryTokens": 1015,
+      "expectedObjectiveStatus": "provider_accepted",
+      "commitsSummary": true
+    },
+    {
+      "caseID": "source-echo-rejected",
+      "expectedObjectiveStatus": "rejected_source_echo",
+      "commitsSummary": false
+    },
+    {
+      "caseID": "prompt-wrapper-rejected",
+      "expectedObjectiveStatus": "rejected_prompt_wrapper",
+      "commitsSummary": false
+    },
+    {
+      "caseID": "refusal-rejected",
+      "expectedObjectiveStatus": "rejected_refusal",
+      "commitsSummary": false
+    },
+    {
+      "caseID": "anchorless-rejected",
+      "requiredAnchorClasses": ["stable_handle", "file_path", "command", "decision", "unresolved_work"],
+      "expectedObjectiveStatus": "rejected_anchorless",
+      "commitsSummary": false
+    }
+  ]
+}

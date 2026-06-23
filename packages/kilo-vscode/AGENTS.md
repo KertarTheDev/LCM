@@ -84,6 +84,13 @@ bun script/local-bin.ts --force
 
 The script checks for a prebuilt binary in `packages/opencode/dist/`, builds the CLI if needed, and copies it to `bin/kilo`.
 
+For platform evidence, `script/build.ts` can package one VSIX target from matching CLI artifacts:
+
+```bash
+bun script/build.ts --target darwin-arm64
+bun script/build.ts --target darwin-x64
+```
+
 ## Architecture
 
 ### Extension ↔ CLI Backend

@@ -73,6 +73,7 @@ describe("buildExport", () => {
       default_agent: "coder",
       agent: { coder: { mode: "primary", prompt: "Code stuff" } },
       permission: { read: "allow" },
+      lcm: { strategy: "dolt", storage: { warningThresholdBytes: 4_294_967_296 } },
       instructions: ["rule1.md"],
       snapshot: true,
       share: "manual",
@@ -83,6 +84,7 @@ describe("buildExport", () => {
     expect(result.default_agent).toBe("coder")
     expect(result.agent).toEqual({ coder: { mode: "primary", prompt: "Code stuff" } })
     expect(result.permission).toEqual({ read: "allow" })
+    expect(result.lcm).toEqual({ strategy: "dolt", storage: { warningThresholdBytes: 4_294_967_296 } })
     expect(result.instructions).toEqual(["rule1.md"])
     expect(result.snapshot).toBe(true)
     expect(result.share).toBe("manual")
@@ -185,6 +187,17 @@ describe("parseImport", () => {
         "anthropic/claude-sonnet-4": "max",
         "openai/gpt-5": "xhigh",
       })
+    }
+  })
+
+  it("accepts LCM settings imports", () => {
+    const json = JSON.stringify({
+      lcm: { strategy: "dolt", storage: { warningThresholdBytes: 1_073_741_824 } },
+    })
+    const result = parseImport(json)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.config.lcm).toEqual({ strategy: "dolt", storage: { warningThresholdBytes: 1_073_741_824 } })
     }
   })
 
@@ -398,6 +411,7 @@ describe("constants", () => {
     expect(KNOWN_KEYS).toContain("mcp")
     expect(KNOWN_KEYS).toContain("permission")
     expect(KNOWN_KEYS).toContain("model")
+    expect(KNOWN_KEYS).toContain("lcm")
     expect(KNOWN_KEYS).toContain("instructions")
   })
 

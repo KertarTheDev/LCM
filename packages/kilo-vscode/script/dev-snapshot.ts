@@ -34,29 +34,40 @@ for (const dir of ["bin", "dist"]) {
   }
 }
 
-const outDir = join(tmpdir(), "kilo-vscode-snapshots")
+const outDir = process.env.KILO_VSCODE_SNAPSHOT_DIR ?? join(tmpdir(), "kilo-vscode-snapshots")
 mkdirSync(outDir, { recursive: true })
 
+const buildStateDir = join(outDir, ".build-state")
+const buildEnv = {
+  ...process.env,
+  XDG_DATA_HOME: process.env.XDG_DATA_HOME ?? join(buildStateDir, "data"),
+  XDG_CACHE_HOME: process.env.XDG_CACHE_HOME ?? join(buildStateDir, "cache"),
+  XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME ?? join(buildStateDir, "config"),
+  XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? join(buildStateDir, "state"),
+}
+
 console.log("\n📦 Rebuilding SDK...")
-await $`bun run --cwd ../sdk/js build`.cwd(root)
+await $`bun run --cwd ../sdk/js build`.cwd(root).env(buildEnv)
 
 console.log("\n🔧 Preparing CLI binary...")
-await $`bun script/local-bin.ts --force`.cwd(root)
+await $`bun script/local-bin.ts --force`.cwd(root).env(buildEnv)
 
 console.log("\n✅ Type-checking...")
-await $`bun run typecheck`.cwd(root)
+await $`bun run typecheck`.cwd(root).env(buildEnv)
 
 console.log("\n🔍 Linting...")
-await $`bun run lint`.cwd(root)
+await $`bun run lint`.cwd(root).env(buildEnv)
 
 console.log("\n🏗️  Building extension...")
-await $`node ${join(root, "esbuild.js")} --production`.cwd(root)
+await $`node ${join(root, "esbuild.js")} --production`.cwd(root).env(buildEnv)
 
 console.log("\n📦 Packaging VSIX...")
 const vsixPath = join(outDir, `kilo-vscode-snapshot-${sha}-${user}.vsix`)
-await $`bunx vsce package ${snapshotVersion} --no-update-package-json --no-dependencies --skip-license -o ${vsixPath}`.cwd(
-  root,
-)
+await $`bunx vsce package ${snapshotVersion} --no-update-package-json --no-dependencies --skip-license -o ${vsixPath}`
+  .cwd(root)
+  .env(buildEnv)
+
+console.log(`\n✅ Snapshot VSIX: ${vsixPath}`)
 
 if (shouldInstall) {
   const execPath = process.env.VSCODE_EXEC_PATH ?? ""

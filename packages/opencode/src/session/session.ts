@@ -641,15 +641,31 @@ export const layer: Layer.Layer<
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
       const session = yield* get(sessionID)
       try {
-        // `remove` needs to work in all cases, such as broken sessions that
-        // run cleanup without instance state.
+        const kids = yield* children(sessionID) // kilocode_change
+
+        // kilocode_change start - clean LCM family data once before recursive session deletion
+        yield* Effect.tryPromise(async () => {
+          const { LcmRuntime } = await import("./lcm/runtime")
+          await LcmRuntime.handleSessionDeleted({ sessionID, recursive: true })
+        }).pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => log.warn("LCM session cleanup failed", { sessionID, error: String(error) })),
+          ),
+        )
+        // kilocode_change end
+
+        // kilocode_change start
+        // `remove` needs to work in all cases, such as a broken
+        // sessions that run cleanup. In certain cases these will
+        // run without any instance state, so we need to turn off
+        // publishing of events in that case
+        // kilocode_change end
         const hasInstance = yield* InstanceState.directory.pipe(
           Effect.as(true),
           Effect.catchCause(() => Effect.succeed(false)),
         )
 
         if (hasInstance) yield* cancelBackgroundJobs(background, sessionID)
-        const kids = yield* children(sessionID)
         for (const child of kids) {
           yield* remove(child.id)
         }

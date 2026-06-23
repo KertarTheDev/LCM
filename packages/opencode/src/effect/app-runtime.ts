@@ -28,10 +28,16 @@ import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { SessionRunState } from "@/session/run-state"
 import { SessionProcessor } from "@/session/processor"
-import { SessionCompaction } from "@/session/compaction"
 import { SessionRevert } from "@/session/revert"
 import { SessionSummary } from "@/session/summary"
 import { SessionPrompt } from "@/session/prompt"
+// kilocode_change start
+import { Image } from "@/image/image"
+import { SystemPrompt } from "@/session/system"
+import { LcmContext } from "@/session/lcm/context"
+import { LcmDb } from "@/session/lcm/db"
+import { LcmRuntime } from "@/session/lcm/runtime"
+// kilocode_change end
 import { Instruction } from "@/session/instruction"
 import { LLM } from "@/session/llm"
 import { LSP } from "@/lsp/lsp"
@@ -59,6 +65,9 @@ import { DataMigration } from "@/data-migration"
 import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+// kilocode_change start
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+// kilocode_change end
 
 const CoreLayer = Layer.mergeAll(
   Npm.defaultLayer,
@@ -93,10 +102,13 @@ const SessionLayer = Layer.mergeAll(
   RuntimeFlags.defaultLayer,
   SessionRunState.defaultLayer,
   SessionProcessor.defaultLayer,
-  SessionCompaction.defaultLayer,
   SessionRevert.defaultLayer,
   SessionSummary.defaultLayer,
-  SessionPrompt.defaultLayer,
+  // kilocode_change start
+  Image.defaultLayer,
+  SystemPrompt.defaultLayer,
+  LcmDb.defaultLayer,
+  // kilocode_change end
   Instruction.defaultLayer,
   LLM.defaultLayer,
   LSP.defaultLayer,
@@ -122,12 +134,23 @@ const FeatureLayer = Layer.mergeAll(
   SyncEvent.defaultLayer,
   EventV2Bridge.defaultLayer,
   DataMigration.defaultLayer,
+  // kilocode_change start
+  CrossSpawnSpawner.defaultLayer,
+  // kilocode_change end
 )
 
-export const AppLayer = Layer.mergeAll(CoreLayer, SessionLayer, FeatureLayer).pipe(
+// kilocode_change start
+const CoreAppLayer = Layer.mergeAll(CoreLayer, SessionLayer, FeatureLayer).pipe(
   Layer.provideMerge(InstanceLayer.layer),
+)
+
+const LcmAppLayer = LcmRuntime.layer.pipe(Layer.provideMerge(LcmContext.layer), Layer.provideMerge(CoreAppLayer))
+
+export const AppLayer = SessionPrompt.layer.pipe(
+  Layer.provideMerge(LcmAppLayer),
   Layer.provideMerge(Observability.layer),
 )
+// kilocode_change end
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
 type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">

@@ -85,8 +85,6 @@ export const dict = {
   "revert.banner.redo.all": "Tout rétablir",
   "revert.banner.hint": "Envoyez un nouveau message pour rendre ceci permanent",
   "revert.disabled.agentBusy": "Attendre la fin de l'agent",
-  "command.session.compact": "Compacter la session",
-  "command.session.compact.description": "Résumer la session pour réduire la taille du contexte",
   "command.session.fork": "Bifurquer à partir du message",
   "command.session.fork.description": "Créer une nouvelle session à partir d'un message précédent",
   "command.session.share": "Partager la session",
@@ -439,9 +437,6 @@ export const dict = {
   "toast.workspace.enabled.description": "Plusieurs worktrees sont désormais affichés dans la barre latérale",
   "toast.workspace.disabled.title": "Espaces de travail désactivés",
   "toast.workspace.disabled.description": "Seul le worktree principal est affiché dans la barre latérale",
-
-  "toast.model.none.title": "Aucun modèle sélectionné",
-  "toast.model.none.description": "Connectez un fournisseur pour résumer cette session",
 
   "toast.file.loadFailed.title": "Échec du chargement du fichier",
 
@@ -1530,14 +1525,9 @@ export const dict = {
     "Prévenir les actions identiques répétées. Déclenché lorsque le même appel d'outil se répète avec une entrée identique.",
   "settings.checkpoints.enable.title": "Activer les instantanés",
   "settings.checkpoints.enable.description": "Créer des points de contrôle avant les modifications de fichiers",
-  "settings.context.autoCompaction.title": "Compaction automatique",
-  "settings.context.autoCompaction.description":
-    "Compacter automatiquement le contexte avant qu'il n'atteigne la limite",
   "settings.context.compactionLimit.title": "Limite de compactage automatique",
   "settings.context.compactionLimit.description":
     "Compacter lorsque le contexte atteint ce pourcentage de la fenêtre du modèle. Laissez vide pour utiliser uniquement la marge de sécurité.",
-  "settings.context.prune.title": "Élaguer les anciennes sorties",
-  "settings.context.prune.description": "Supprimer les anciennes sorties d'outils pendant la compaction",
   "settings.context.watcherPatterns": "Motifs d'ignorance de l'observateur",
   "settings.context.watcherPatterns.description": "Motifs glob pour les fichiers que l'observateur doit ignorer",
 

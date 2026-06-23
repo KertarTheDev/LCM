@@ -39,6 +39,17 @@ const log = Log.create({ service: "session.processor" })
 
 export type Result = "compact" | "stop" | "continue"
 
+export type Event = LLMEvent // kilocode_change
+
+// kilocode_change start
+export type LcmMaintenanceCheckpoint = {
+  readonly kind: "step_finish" | "tool_result"
+  readonly sessionID: SessionID
+  readonly assistantMessageID: MessageV2.Assistant["id"]
+  readonly toolCallID?: string
+}
+
+// kilocode_change end
 export interface Handle {
   readonly message: MessageV2.Assistant
   readonly updateToolCall: (
@@ -71,6 +82,7 @@ type Input = {
   // kilocode_change start
   telemetry?: ReviewTelemetry
   snapshotInitialization?: "wait"
+  lcmMaintenanceCheckpoint?: (checkpoint: LcmMaintenanceCheckpoint) => Effect.Effect<void>
   // kilocode_change end
 }
 
@@ -155,6 +167,9 @@ export const layer = Layer.effect(
         // kilocode_change end
       }
       let aborted = false
+      // kilocode_change start
+      let suppressContextOverflowErrorEvent = false
+      // kilocode_change end
       const ac = new AbortController() // kilocode_change — abort controller for offline handler
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
 
@@ -171,6 +186,23 @@ export const layer = Layer.effect(
         if (done) yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
       })
 
+      // kilocode_change start
+      // kilocode_change start - let LCM run at finalized tool/step boundaries during long autonomous turns
+      const checkpointLcmMaintenance = Effect.fn("SessionProcessor.checkpointLcmMaintenance")(function* (
+        checkpoint: Omit<LcmMaintenanceCheckpoint, "sessionID" | "assistantMessageID">,
+      ) {
+        if (!input.lcmMaintenanceCheckpoint) return
+        yield* input
+          .lcmMaintenanceCheckpoint({
+            ...checkpoint,
+            sessionID: ctx.sessionID,
+            assistantMessageID: ctx.assistantMessage.id,
+          })
+          .pipe(Effect.ignore)
+      })
+      // kilocode_change end
+
+      // kilocode_change end
       const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
         const call = ctx.toolcalls[toolCallID]
         if (!call) return undefined
@@ -252,16 +284,20 @@ export const layer = Layer.effect(
         },
       ) {
         const match = yield* readToolCall(toolCallID)
-        if (!match || match.part.state.status !== "running") return
+        if (!match) return
+        const state = match.part.state
+        const canReplaceInterruptedError =
+          state.status === "error" && isRecord(state.metadata) && state.metadata.interrupted === true
+        if (state.status !== "running" && !canReplaceInterruptedError) return
         yield* session.updatePart({
           ...match.part,
           state: {
             status: "completed",
-            input: match.part.state.input,
+            input: state.input,
             output: output.output,
             metadata: output.metadata,
             title: output.title,
-            time: { start: match.part.state.time.start, end: Date.now() },
+            time: { start: "time" in state ? state.time.start : Date.now(), end: Date.now() },
             attachments: output.attachments,
           },
         })
@@ -271,6 +307,9 @@ export const layer = Layer.effect(
         }
         // kilocode_change end
         yield* settleToolCall(toolCallID)
+        // kilocode_change start
+        yield* checkpointLcmMaintenance({ kind: "tool_result", toolCallID })
+        // kilocode_change end
       })
 
       const failToolCall = Effect.fn("SessionProcessor.failToolCall")(function* (toolCallID: string, error: unknown) {
@@ -292,10 +331,13 @@ export const layer = Layer.effect(
           error instanceof Question.RejectedError ||
           error instanceof Suggestion.DismissedError
         ) {
-          // kilocode_change end
           ctx.blocked = ctx.shouldBreak
         }
+        // kilocode_change end
         yield* settleToolCall(toolCallID)
+        // kilocode_change start
+        yield* checkpointLcmMaintenance({ kind: "tool_result", toolCallID })
+        // kilocode_change end
         return true
       })
 
@@ -768,24 +810,27 @@ export const layer = Layer.effect(
                 messageID: ctx.assistantMessage.parentID,
               })
               .pipe(Effect.ignore, Effect.forkIn(scope))
+            // kilocode_change start
             if (
               !ctx.assistantMessage.summary &&
-              // kilocode_change start
               isOverflow({
                 cfg: yield* config.get(),
                 tokens: usage.tokens,
                 model: ctx.model,
                 outputTokenMax: flags.outputTokenMax,
               })
-              // kilocode_change end
             ) {
               ctx.needsCompaction = true
-              // kilocode_change start
               ctx.compactionError = new MessageV2.ContextOverflowError({
                 message: "Input exceeds context window of this model",
               }).toObject()
-              // kilocode_change end
             }
+            // kilocode_change end
+            // kilocode_change start - completed tool output checkpoints separately after the tool result is durable
+            if (!ctx.needsCompaction && value.reason !== "tool-calls") {
+              yield* checkpointLcmMaintenance({ kind: "step_finish" })
+            }
+            // kilocode_change end
             return
           }
 
@@ -897,7 +942,11 @@ export const layer = Layer.effect(
 
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),
-          (call) => Deferred.await(call.done).pipe(Effect.timeout("250 millis"), Effect.ignore),
+          (call) =>
+            Deferred.await(call.done).pipe(
+              Effect.timeout(aborted ? "10 seconds" : "250 millis"), // kilocode_change - aborted shell tools may flush truncated output
+              Effect.ignore,
+            ),
           { concurrency: "unbounded" },
         )
 
@@ -907,6 +956,34 @@ export const layer = Layer.effect(
           const part = match.part
           const end = Date.now()
           const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
+          // kilocode_change start - interrupted bash tools can preserve flushed output/truncation metadata
+          if (
+            aborted &&
+            part.tool === "bash" &&
+            typeof metadata.output === "string" &&
+            metadata.output.length > 0
+          ) {
+            const outputPath = typeof metadata.outputPath === "string" ? metadata.outputPath : undefined
+            const output =
+              metadata.truncated === true && outputPath
+                ? `...output truncated...\n\nFull output saved to: ${outputPath}\n\n${metadata.output}`
+                : metadata.output
+            yield* session.updatePart({
+              ...part,
+              state: {
+                status: "completed",
+                input: part.state.input,
+                output,
+                title: "title" in part.state && typeof part.state.title === "string" ? part.state.title : "",
+                metadata: { ...metadata, interrupted: true },
+                time: { start: "time" in part.state ? part.state.time.start : end, end },
+              },
+            })
+            yield* settleToolCall(toolCallID)
+            continue
+          }
+          // kilocode_change end
+          // kilocode_change start - default interrupted-tool fallback still records an interrupted state
           yield* session.updatePart({
             ...part,
             state: {
@@ -917,9 +994,14 @@ export const layer = Layer.effect(
               time: { start: "time" in part.state ? part.state.time.start : end, end },
             },
           })
+          // kilocode_change end
         }
-        ctx.toolcalls = {}
-        ctx.toolmeta = {} // kilocode_change
+        // kilocode_change start - aborted tools may still return final output after cleanup marks them interrupted
+        if (!aborted) {
+          ctx.toolcalls = {}
+          ctx.toolmeta = {}
+        }
+        // kilocode_change end
         KiloSessionProcessor.guardEmptyToolCalls(ctx.assistantMessage, MessageV2.parts(ctx.assistantMessage.id)) // kilocode_change
         ctx.assistantMessage.time.completed = Date.now()
         // kilocode_change start - reconcile cost with any subagent propagation written during tool calls (#6321)
@@ -941,8 +1023,12 @@ export const layer = Layer.effect(
         ctx.compactionError = MessageV2.ContextOverflowError.isInstance(error) ? error : ctx.compactionError
         // kilocode_change end
         if (MessageV2.ContextOverflowError.isInstance(error)) {
-          ctx.needsCompaction = true
-          yield* bus.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+          ctx.needsCompaction = true // kilocode_change
+          // kilocode_change start
+          if (!suppressContextOverflowErrorEvent) {
+            yield* bus.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+          }
+          // kilocode_change end
           return
         }
         if (!ctx.assistantMessage.summary) {
@@ -976,6 +1062,9 @@ export const layer = Layer.effect(
         slog.info("process")
         ctx.needsCompaction = false
         ctx.compactionError = undefined // kilocode_change
+        // kilocode_change start
+        suppressContextOverflowErrorEvent = streamInput.suppressContextOverflowErrorEvent === true
+        // kilocode_change end
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
         return yield* Effect.gen(function* () {

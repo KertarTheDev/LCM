@@ -12,6 +12,8 @@ import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
+import { validateLcmFinalProviderPayload } from "./lcm/provider-protocol"
+import { LcmSafeErrorFailure, type LcmPreparedProviderPayload, type LcmRenderedSpanProviderFamily } from "./lcm/types"
 import { usable } from "./overflow" // kilocode_change
 import { Plugin } from "@/plugin"
 import { Permission } from "@/permission"
@@ -29,6 +31,11 @@ import { SessionExport } from "@/kilocode/session-export"
 import { getActiveOrg } from "@/kilocode/session-export/eligibility"
 import { normalizeUsageForExport, observeFullStreamForExport } from "@/kilocode/session-export/llm"
 // kilocode_change end
+import {
+  defaultLcmProviderCapacityRegistry,
+  lcmProviderCapacityInputFromModel,
+  wrapAsyncIterableWithRelease,
+} from "./lcm/provider-capacity"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LLMAISDK } from "./llm/ai-sdk"
@@ -52,6 +59,15 @@ export type StreamInput = {
   retries?: number
   toolChoice?: "auto" | "required" | "none"
   preflight?: boolean // kilocode_change - enable proactive threshold compaction for normal session turns
+  suppressContextOverflowErrorEvent?: boolean
+  lcmProviderProtocol?: {
+    readonly preparedProviderPayload: LcmPreparedProviderPayload
+    readonly recordFinalProviderValidation: (input: {
+      providerValidatorHash: string
+      providerFamily: LcmRenderedSpanProviderFamily
+      providerTransformOverheadTokenCount: number
+    }) => Promise<void>
+  }
 }
 
 export type StreamRequest = StreamInput & {
@@ -286,7 +302,12 @@ const live: Layer.Layer<
 
       // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
       // either returns a ready LLMEvent stream or a concrete fallback reason.
-      if (flags.experimentalNativeLlm) {
+      if (flags.experimentalNativeLlm && input.lcmProviderProtocol) {
+        l.info("native runtime unavailable; falling back to ai-sdk", {
+          reason: "LCM provider validation requires AI SDK transform",
+        })
+      }
+      if (flags.experimentalNativeLlm && !input.lcmProviderProtocol) {
         const native = LLMNativeRuntime.stream({
           model: input.model,
           provider: item,
@@ -336,87 +357,124 @@ const live: Layer.Layer<
       )
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
-      const result = streamText({
-        // kilocode_change
-        onError(error) {
-          l.error("stream error", {
-            error,
-          })
-        },
-        async experimental_repairToolCall(failed) {
-          const lower = failed.toolCall.toolName.toLowerCase()
-          if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
-            l.info("repairing tool call", {
-              tool: failed.toolCall.toolName,
-              repaired: lower,
+      const requestProviderOptions = ProviderTransform.providerOptions(input.model, prepared.params.options)
+      const capacityLease = yield* Effect.promise(() =>
+        defaultLcmProviderCapacityRegistry.acquire(
+          lcmProviderCapacityInputFromModel({
+            model: input.model,
+            priority: "foreground",
+            provider: item,
+            abortSignal: input.abort,
+          }),
+        ),
+      )
+      try {
+        const result = streamText({
+          // kilocode_change
+          onError(error) {
+            l.error("stream error", {
+              error,
             })
+          },
+          experimental_onToolCallStart() {
+            capacityLease.release()
+          },
+          async experimental_repairToolCall(failed) {
+            const lower = failed.toolCall.toolName.toLowerCase()
+            if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
+              l.info("repairing tool call", {
+                tool: failed.toolCall.toolName,
+                repaired: lower,
+              })
+              return {
+                ...failed.toolCall,
+                toolName: lower,
+              }
+            }
             return {
               ...failed.toolCall,
-              toolName: lower,
+              input: JSON.stringify({
+                tool: failed.toolCall.toolName,
+                error: failed.error.message,
+              }),
+              toolName: "invalid",
             }
-          }
-          return {
-            ...failed.toolCall,
-            input: JSON.stringify({
-              tool: failed.toolCall.toolName,
-              error: failed.error.message,
-            }),
-            toolName: "invalid",
-          }
-        },
-        temperature: prepared.params.temperature,
-        topP: prepared.params.topP,
-        topK: prepared.params.topK,
-        providerOptions: ProviderTransform.providerOptions(input.model, prepared.params.options),
-        activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
-        tools: prepared.tools,
-        toolChoice: input.toolChoice,
-        maxOutputTokens: prepared.params.maxOutputTokens,
-        abortSignal: input.abort,
-        ...KiloLLM.timeout({ options: prepared.params.options, fallback: item.options, log: l }), // kilocode_change
-        headers: prepared.headers,
-        maxRetries: input.retries ?? 0,
-        messages: prepared.messages,
-        model: wrapLanguageModel({
-          model: language,
-          middleware: [
-            {
-              specificationVersion: "v3" as const,
-              async transformParams(args) {
-                if (args.type === "stream") {
-                  // @ts-expect-error
-                  args.params.prompt = ProviderTransform.message(
-                    args.params.prompt,
-                    input.model,
-                    prepared.messageTransformOptions,
-                  )
-                }
-                return args.params
+          },
+          temperature: prepared.params.temperature,
+          topP: prepared.params.topP,
+          topK: prepared.params.topK,
+          providerOptions: requestProviderOptions,
+          activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
+          tools: prepared.tools,
+          toolChoice: input.toolChoice,
+          maxOutputTokens: prepared.params.maxOutputTokens,
+          abortSignal: input.abort,
+          ...KiloLLM.timeout({ options: prepared.params.options, fallback: item.options, log: l }), // kilocode_change
+          headers: prepared.headers,
+          maxRetries: input.retries ?? 0,
+          messages: prepared.messages,
+          model: wrapLanguageModel({
+            model: language,
+            middleware: [
+              {
+                specificationVersion: "v3" as const,
+                async transformParams(args) {
+                  if (args.type === "stream") {
+                    const transformed = ProviderTransform.message(
+                      args.params.prompt as ModelMessage[],
+                      input.model,
+                      prepared.messageTransformOptions,
+                    )
+                    if (input.lcmProviderProtocol) {
+                      const validation = validateLcmFinalProviderPayload({
+                        preparedPayload: input.lcmProviderProtocol.preparedProviderPayload,
+                        transformedMessages: transformed,
+                        model: input.model,
+                        providerOptions: requestProviderOptions,
+                        modelOptions: prepared.messageTransformOptions,
+                      })
+                      if (!validation.ok) throw new LcmSafeErrorFailure(validation.safeError)
+                      await input.lcmProviderProtocol.recordFinalProviderValidation({
+                        providerValidatorHash: validation.finalProviderValidatorHash,
+                        providerFamily: validation.providerFamily,
+                        providerTransformOverheadTokenCount: validation.providerTransformOverheadTokenCount,
+                      })
+                    }
+                    args.params.prompt = transformed as typeof args.params.prompt
+                  }
+                  return args.params
+                },
               },
-            },
-          ],
-        }),
-        // kilocode_change start - disable AI SDK span recording (ai.* / gen_ai.*)
-        experimental_telemetry: { isEnabled: false },
-      })
-      // kilocode_change end
-      // kilocode_change start - capture eligible session export request completion off the stream path
-      if (!exportable) return { type: "ai-sdk" as const, result }
-      return {
-        type: "ai-sdk" as const,
-        result: {
-          fullStream: observeFullStreamForExport(result.fullStream, {
-            sessionId: input.sessionID,
-            rootSessionId: root,
-            parentSessionId: parent,
-            requestId: input.user.id,
-            workspaceKey: instance.directory,
-            started,
-            retries: input.retries ?? 0,
+            ],
           }),
-        },
+          // kilocode_change start - disable AI SDK span recording (ai.* / gen_ai.*)
+          experimental_telemetry: { isEnabled: false },
+        })
+        // kilocode_change end
+        void Promise.resolve(result.text)
+          .catch(() => undefined)
+          .finally(capacityLease.release)
+        // kilocode_change start - capture eligible session export request completion off the stream path
+        const fullStream = exportable
+          ? observeFullStreamForExport(result.fullStream, {
+              sessionId: input.sessionID,
+              rootSessionId: root,
+              parentSessionId: parent,
+              requestId: input.user.id,
+              workspaceKey: instance.directory,
+              started,
+              retries: input.retries ?? 0,
+            })
+          : result.fullStream
+        return {
+          type: "ai-sdk" as const,
+          result: { fullStream: wrapAsyncIterableWithRelease(fullStream, capacityLease.release) },
+        }
+        // kilocode_change end
+      } catch (error) {
+        capacityLease.release()
+        throw error
       }
-      // kilocode_change end
     })
 
     const stream: Interface["stream"] = (input) =>

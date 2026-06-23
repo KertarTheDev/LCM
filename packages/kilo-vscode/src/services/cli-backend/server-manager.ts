@@ -7,6 +7,7 @@ import * as vscode from "vscode"
 import { resolveTreeSitterEnv } from "./cli-resources"
 import { t } from "./i18n"
 import { parseServerPort } from "./server-utils"
+import { debugLog } from "./debug-log"
 
 export interface ServerInstance {
   port: number
@@ -45,22 +46,22 @@ export class ServerManager {
    * Get or start the server instance
    */
   async getServer(): Promise<ServerInstance> {
-    console.log("[Kilo New] ServerManager: 🔍 getServer called")
+    debugLog("[Kilo New] ServerManager: 🔍 getServer called")
     if (this.instance) {
-      console.log("[Kilo New] ServerManager: ♻️ Returning existing instance:", { port: this.instance.port })
+      debugLog("[Kilo New] ServerManager: ♻️ Returning existing instance:", { port: this.instance.port })
       return this.instance
     }
 
     if (this.startupPromise) {
-      console.log("[Kilo New] ServerManager: ⏳ Startup already in progress, waiting...")
+      debugLog("[Kilo New] ServerManager: ⏳ Startup already in progress, waiting...")
       return this.startupPromise
     }
 
-    console.log("[Kilo New] ServerManager: 🚀 Starting new server instance...")
+    debugLog("[Kilo New] ServerManager: 🚀 Starting new server instance...")
     this.startupPromise = this.startServer()
     try {
       this.instance = await this.startupPromise
-      console.log("[Kilo New] ServerManager: ✅ Server started successfully:", { port: this.instance.port })
+      debugLog("[Kilo New] ServerManager: ✅ Server started successfully:", { port: this.instance.port })
       return this.instance
     } finally {
       this.startupPromise = null
@@ -70,8 +71,8 @@ export class ServerManager {
   private async startServer(): Promise<ServerInstance> {
     const password = crypto.randomBytes(32).toString("hex")
     const cliPath = this.getCliPath()
-    console.log("[Kilo New] ServerManager: 📍 CLI path:", cliPath)
-    console.log("[Kilo New] ServerManager: 🔐 Generated password (length):", password.length)
+    debugLog("[Kilo New] ServerManager: 📍 CLI path:", cliPath)
+    debugLog("[Kilo New] ServerManager: 🔐 Generated password (length):", password.length)
 
     // Verify the CLI binary exists
     if (!fs.existsSync(cliPath)) {
@@ -81,11 +82,11 @@ export class ServerManager {
     }
 
     const stat = fs.statSync(cliPath)
-    console.log("[Kilo New] ServerManager: 📄 CLI isFile:", stat.isFile())
-    console.log("[Kilo New] ServerManager: 📄 CLI mode (octal):", (stat.mode & 0o777).toString(8))
+    debugLog("[Kilo New] ServerManager: 📄 CLI isFile:", stat.isFile())
+    debugLog("[Kilo New] ServerManager: 📄 CLI mode (octal):", (stat.mode & 0o777).toString(8))
 
     return new Promise((resolve, reject) => {
-      console.log("[Kilo New] ServerManager: 🎬 Spawning CLI process:", cliPath, ["serve", "--port", "0"])
+      debugLog("[Kilo New] ServerManager: 🎬 Spawning CLI process:", cliPath, ["serve", "--port", "0"])
       const cfg = vscode.workspace.getConfiguration("kilo-code.new")
       const claudeCompat = cfg.get<boolean>("claudeCodeCompat", false)
       // Pin cwd so the CLI doesn't inherit the extension host's cwd ("/" under F5 debug)
@@ -145,19 +146,19 @@ export class ServerManager {
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
       })
-      console.log("[Kilo New] ServerManager: 📦 Process spawned with PID:", serverProcess.pid)
+      debugLog("[Kilo New] ServerManager: 📦 Process spawned with PID:", serverProcess.pid)
 
       let resolved = false
       const stderrLines: string[] = []
 
       serverProcess.stdout?.on("data", (data: Buffer) => {
         const output = data.toString()
-        console.log("[Kilo New] ServerManager: 📥 CLI Server stdout:", output)
+        debugLog("[Kilo New] ServerManager: 📥 CLI Server stdout:", output)
 
         const port = parseServerPort(output)
         if (port !== null && !resolved) {
           resolved = true
-          console.log("[Kilo New] ServerManager: 🎯 Port detected:", port)
+          debugLog("[Kilo New] ServerManager: 🎯 Port detected:", port)
           resolve({ port, password, process: serverProcess })
         }
       })
@@ -176,7 +177,7 @@ export class ServerManager {
       })
 
       serverProcess.on("exit", (code) => {
-        console.log("[Kilo New] ServerManager: 🛑 Process exited with code:", code)
+        debugLog("[Kilo New] ServerManager: 🛑 Process exited with code:", code)
         if (this.instance?.process === serverProcess) {
           this.instance = null
           this.onExit?.(code)
@@ -210,7 +211,7 @@ export class ServerManager {
     // Always use the bundled binary from the extension directory
     const binName = process.platform === "win32" ? "kilo.exe" : "kilo"
     const cliPath = path.join(this.context.extensionPath, "bin", binName)
-    console.log("[Kilo New] ServerManager: 📦 Using CLI path:", cliPath)
+    debugLog("[Kilo New] ServerManager: 📦 Using CLI path:", cliPath)
     return cliPath
   }
 
@@ -242,7 +243,7 @@ export class ServerManager {
     const proc = this.instance.process
     this.instance = null
 
-    console.log("[Kilo New] ServerManager: 🔴 Disposing — sending SIGTERM to process group, PID:", proc.pid)
+    debugLog("[Kilo New] ServerManager: 🔴 Disposing — sending SIGTERM to process group, PID:", proc.pid)
     ServerManager.killProcess(proc, "SIGTERM")
 
     // SIGKILL fallback after 5s. Ensures the process tree dies even if SIGTERM is ignored

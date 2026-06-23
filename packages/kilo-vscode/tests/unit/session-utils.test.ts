@@ -1,9 +1,12 @@
 import { describe, it, expect } from "bun:test"
 import {
   computeStatus,
+  busyStatusMessage,
   calcTotalCost,
+  calcLcmMetricsCostTotal,
   calcContextUsage,
   calcTokenUsage,
+  lcmContextUsageFromMetrics,
   buildFamilyCosts,
   buildFamilyParents,
   buildFamilyParentsFromTools,
@@ -122,6 +125,15 @@ describe("recentSessions", () => {
   })
 })
 
+describe("busyStatusMessage", () => {
+  it("lets explicit busy status messages override assistant placeholder status", () => {
+    expect(busyStatusMessage({ type: "busy", message: "Preparing memory for this response..." })).toBe(
+      "Preparing memory for this response...",
+    )
+    expect(busyStatusMessage({ type: "idle" })).toBeUndefined()
+  })
+})
+
 describe("calcTotalCost", () => {
   it("returns 0 for empty messages", () => {
     expect(calcTotalCost([])).toBe(0)
@@ -147,6 +159,81 @@ describe("calcTotalCost", () => {
   it("handles missing cost as 0", () => {
     const msgs = [{ role: "assistant" }, { role: "assistant", cost: 0.02 }]
     expect(calcTotalCost(msgs)).toBeCloseTo(0.02)
+  })
+})
+
+describe("LCM metrics helpers", () => {
+  const metrics = {
+    conversationID: "conv_m18",
+    lifecycleState: "lcm_active",
+    strategy: "upward",
+    activeTokens: 3000,
+    hardLimit: 12000,
+    softThreshold: 9000,
+    freshTailTokens: 20_000,
+    softBacklogTokens: 0,
+    softBacklogItemCount: 0,
+    freshTailRawTokens: 0,
+    freshTailRawItemCount: 0,
+    unconsumedRawTokens: 0,
+    unconsumedRawItemCount: 0,
+    protectedTailRawTokens: 0,
+    protectedTailRawItemCount: 0,
+    rawLaneTokens: 0,
+    laneTokens: {},
+    contextItemCounts: {},
+    storageBytes: 1024,
+    storageWarningThresholdBytes: 2048,
+    storageWarning: false,
+    memoryMaintenanceCostTotal: 0.1,
+    retrievalCostTotal: 0.02,
+    fileExplorationCostTotal: 0.03,
+    mapCostTotal: 0.04,
+    currency: "USD",
+    updatedAt: "2026-05-01T00:00:00.000Z",
+  } as const
+
+  it("sums LCM cost categories for existing chat cost displays", () => {
+    expect(calcLcmMetricsCostTotal(metrics)).toBeCloseTo(0.19)
+    expect(calcLcmMetricsCostTotal(undefined)).toBe(0)
+  })
+
+  it("derives context usage from LCM active-token metrics", () => {
+    expect(lcmContextUsageFromMetrics(metrics)).toEqual({
+      tokens: 3000,
+      percentage: 25,
+      source: "lcm_active_budget",
+      label: "Memory active budget",
+      limit: 12000,
+      providerContextLimit: undefined,
+      providerOutputLimit: undefined,
+      outputReserve: undefined,
+      systemPromptTokens: undefined,
+      toolSchemaTokens: undefined,
+      tokenCounterMode: undefined,
+      tokenCounterVersion: undefined,
+      freshTailTokens: 20_000,
+      softBacklogTokens: 0,
+      softThreshold: 9000,
+      freshTailRawTokens: 0,
+      freshTailRawItemCount: 0,
+      unconsumedRawTokens: 0,
+      unconsumedRawItemCount: 0,
+      protectedTailRawTokens: 0,
+      protectedTailRawItemCount: undefined,
+      rawLaneTokens: 0,
+      hardFillRatio: 3000 / 12000,
+      rawLaneRatio: 0,
+      softBacklogRatio: 0,
+      budgetStatus: undefined,
+    })
+    expect(lcmContextUsageFromMetrics({ ...metrics, activeTokens: 0 })).toBeUndefined()
+    expect(lcmContextUsageFromMetrics({ ...metrics, hardLimit: 0 })).toMatchObject({
+      tokens: 3000,
+      percentage: null,
+      source: "lcm_active_budget",
+      limit: undefined,
+    })
   })
 })
 
@@ -354,6 +441,70 @@ describe("buildFamilyCosts", () => {
     const sessions = { s1: { parentID: "not-in-family" } }
     const costs = buildFamilyCosts(family, messages, sessions)
     expect(costs.get("s1")).toBeCloseTo(0.07)
+  })
+
+  it("adds LCM maintenance and retrieval costs to existing assistant-message costs", () => {
+    const family = new Set(["s1", "child1"])
+    const messages = {
+      s1: [msg("m1", "assistant", 0.05)],
+      child1: [msg("m2", "assistant", 0.01)],
+    }
+    const costs = buildFamilyCosts(family, messages, { s1: {}, child1: {} }, new Map(), {
+      s1: {
+        conversationID: "conv_m18_root",
+        lifecycleState: "lcm_active",
+        strategy: "upward",
+        activeTokens: 1000,
+        hardLimit: 4000,
+        softThreshold: 3000,
+        freshTailTokens: 20_000,
+        softBacklogTokens: 0,
+        softBacklogItemCount: 0,
+        freshTailRawTokens: 0,
+        freshTailRawItemCount: 0,
+        unconsumedRawTokens: 0,
+        unconsumedRawItemCount: 0,
+        protectedTailRawTokens: 0,
+        protectedTailRawItemCount: 0,
+        rawLaneTokens: 0,
+        laneTokens: {},
+        contextItemCounts: {},
+        storageBytes: 1024,
+        storageWarningThresholdBytes: 2048,
+        storageWarning: false,
+        memoryMaintenanceCostTotal: 0.2,
+        retrievalCostTotal: 0.03,
+        updatedAt: "2026-05-01T00:00:00.000Z",
+      },
+      child1: {
+        conversationID: "conv_m18_child",
+        lifecycleState: "lcm_active",
+        strategy: "upward",
+        activeTokens: 500,
+        hardLimit: 4000,
+        softThreshold: 3000,
+        freshTailTokens: 20_000,
+        softBacklogTokens: 0,
+        softBacklogItemCount: 0,
+        freshTailRawTokens: 0,
+        freshTailRawItemCount: 0,
+        unconsumedRawTokens: 0,
+        unconsumedRawItemCount: 0,
+        protectedTailRawTokens: 0,
+        protectedTailRawItemCount: 0,
+        rawLaneTokens: 0,
+        laneTokens: {},
+        contextItemCounts: {},
+        storageBytes: 1024,
+        storageWarningThresholdBytes: 2048,
+        storageWarning: false,
+        mapCostTotal: 0.04,
+        updatedAt: "2026-05-01T00:00:00.000Z",
+      },
+    })
+
+    expect(costs.get("s1")).toBeCloseTo(0.28)
+    expect(costs.get("child1")).toBeCloseTo(0.05)
   })
 
   it("handles missing messages for a family member", () => {

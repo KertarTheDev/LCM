@@ -88,8 +88,6 @@ export const dict = {
   "revert.banner.redo.all": "모두 다시 실행",
   "revert.banner.hint": "새 메시지를 보내 이를 영구적으로 만드세요",
   "revert.disabled.agentBusy": "에이전트가 완료될 때까지 기다리세요",
-  "command.session.compact": "세션 압축",
-  "command.session.compact.description": "컨텍스트 크기를 줄이기 위해 세션 요약",
   "command.session.fork": "메시지에서 분기",
   "command.session.fork.description": "이전 메시지에서 새 세션 생성",
   "command.session.share": "세션 공유",
@@ -432,9 +430,6 @@ export const dict = {
   "toast.workspace.enabled.description": "이제 사이드바에 여러 작업 트리가 표시됩니다",
   "toast.workspace.disabled.title": "작업 공간 비활성화됨",
   "toast.workspace.disabled.description": "사이드바에 메인 작업 트리만 표시됩니다",
-
-  "toast.model.none.title": "선택된 모델 없음",
-  "toast.model.none.description": "이 세션을 요약하려면 공급자를 연결하세요",
 
   "toast.file.loadFailed.title": "파일 로드 실패",
 
@@ -1468,13 +1463,9 @@ export const dict = {
     "반복되는 동일한 작업 방지. 동일한 입력으로 동일한 도구 호출이 반복될 때 트리거됩니다.",
   "settings.checkpoints.enable.title": "스냅샷 활성화",
   "settings.checkpoints.enable.description": "파일 편집 전 체크포인트를 생성하여 이전 상태를 복원할 수 있습니다",
-  "settings.context.autoCompaction.title": "자동 압축",
-  "settings.context.autoCompaction.description": "컨텍스트가 한도에 도달하기 전에 자동으로 압축",
   "settings.context.compactionLimit.title": "자동 압축 한도",
   "settings.context.compactionLimit.description":
     "컨텍스트가 모델 창의 이 비율에 도달하면 압축합니다. 안전 버퍼만 사용하려면 비워 두세요.",
-  "settings.context.prune.title": "이전 출력 정리",
-  "settings.context.prune.description": "압축 중 이전 도구 출력 제거",
   "settings.context.watcherPatterns": "파일 감시자 무시 패턴",
   "settings.context.watcherPatterns.description": "감시자가 무시해야 할 파일의 글로브 패턴",
 

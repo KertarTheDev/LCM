@@ -104,7 +104,9 @@ export const LspTool = Tool.define(
 
           return {
             title,
-            metadata: { result },
+            // kilocode_change start
+            metadata: { operation: args.operation, resultCount: result.length },
+            // kilocode_change end
             output: result.length === 0 ? `No results found for ${args.operation}` : JSON.stringify(result, null, 2),
           }
         }).pipe(Effect.orDie),

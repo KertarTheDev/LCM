@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "context-regression-maintenance-status-evidence-v1",
+  "implemented": true,
+  "ownerMilestone": "45",
+  "contentSafety": "Evidence rows carry only enum status, phase, reason, and work flags.",
+  "requiredStatuses": [
+    { "status": "scheduled", "phase": "leaf_summary", "reason": "soft_threshold", "workNeeded": true, "workPerformed": false, "blocking": false },
+    { "status": "started", "phase": "leaf_summary", "reason": "soft_threshold", "workNeeded": true, "workPerformed": false, "blocking": false },
+    { "status": "deferred", "phase": "leaf_summary", "reason": "soft_threshold", "workNeeded": true, "workPerformed": false, "blocking": false },
+    { "status": "skipped", "phase": "leaf_summary", "reason": "soft_threshold", "workNeeded": true, "workPerformed": false, "blocking": false },
+    { "status": "completed", "phase": "leaf_summary", "reason": "soft_threshold", "workNeeded": true, "workPerformed": true, "blocking": false },
+    { "status": "canceled", "phase": "leaf_summary", "reason": "soft_threshold", "workNeeded": true, "workPerformed": false, "blocking": false },
+    { "status": "failed", "phase": "leaf_summary", "reason": "soft_threshold", "workNeeded": true, "workPerformed": false, "blocking": false },
+    { "status": "no_op", "phase": "repair", "reason": "repair", "workNeeded": false, "workPerformed": false, "blocking": false },
+    { "status": "started", "phase": "hard_limit", "reason": "hard_limit", "workNeeded": true, "workPerformed": false, "blocking": true },
+    { "status": "completed", "phase": "hard_limit", "reason": "hard_limit", "workNeeded": true, "workPerformed": true, "blocking": true },
+    { "status": "canceled", "phase": "hard_limit", "reason": "hard_limit", "workNeeded": true, "workPerformed": false, "blocking": true },
+    { "status": "failed", "phase": "hard_limit", "reason": "hard_limit", "workNeeded": true, "workPerformed": false, "blocking": true },
+    { "status": "recovery_required", "phase": "hard_limit", "reason": "hard_limit", "workNeeded": true, "workPerformed": false, "blocking": true }
+  ]
+}

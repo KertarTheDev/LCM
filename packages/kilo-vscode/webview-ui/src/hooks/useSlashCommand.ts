@@ -92,14 +92,6 @@ export function useSlashCommand(vscode: VSCodeContext, exclude?: Set<string> | A
       },
     },
     {
-      name: "compact",
-      description: "Summarize and compact the session",
-      hints: ["smol", "condense"],
-      action: () => {
-        window.dispatchEvent(new CustomEvent("compactSession"))
-      },
-    },
-    {
       name: "export",
       description: "Export the current session transcript as Markdown",
       hints: ["markdown", "transcript"],

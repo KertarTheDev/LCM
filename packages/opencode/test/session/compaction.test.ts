@@ -838,21 +838,14 @@ describe("session.compaction.process", () => {
   )
 
   it.instance(
-    "publishes compacted event on continue",
+    // kilocode_change start
+    "does not expose a public compacted event on continue",
+    // kilocode_change end
     Effect.gen(function* () {
-      const bus = yield* Bus.Service
       const ssn = yield* SessionNs.Service
       const session = yield* ssn.create({})
       const msg = yield* createUserMessage(session.id, "hello")
       const msgs = yield* ssn.messages({ sessionID: session.id })
-      const done = yield* Deferred.make<void, Error>()
-      let seen = false
-      const unsub = yield* bus.subscribeCallback(SessionCompaction.Event.Compacted, (evt) => {
-        if (evt.properties.sessionID !== session.id) return
-        seen = true
-        Deferred.doneUnsafe(done, Effect.void)
-      })
-      yield* Effect.addFinalizer(() => Effect.sync(unsub))
 
       const result = yield* SessionCompaction.use.process({
         parentID: msg.id,
@@ -861,9 +854,10 @@ describe("session.compaction.process", () => {
         auto: false,
       })
 
-      yield* Deferred.await(done).pipe(Effect.timeout("500 millis"))
       expect(result).toBe("continue")
-      expect(seen).toBe(true)
+      // kilocode_change start
+      expect((SessionCompaction as { Event?: unknown }).Event).toBeUndefined()
+      // kilocode_change end
     }),
   )
 

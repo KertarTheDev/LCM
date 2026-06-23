@@ -42,6 +42,7 @@ import type {
   SkillInfo,
   ExtensionMessage,
   FileAttachment,
+  LcmMetricsSnapshotMessage,
   SendMessageFailedMessage,
   McpStatusEntry,
   MessageLoadMode,
@@ -50,7 +51,6 @@ import type {
 import { removeSessionPermissions, upsertPermission } from "./permission-queue"
 import {
   computeStatus,
-  calcContextUsage,
   buildFamilyCosts,
   buildFamilyParentsFromTools,
   buildFamilyLabelsFromTools,
@@ -61,6 +61,13 @@ import {
   removeSessionToolPart,
   removeSessionToolPartsForMessage,
   upsertSessionToolPart,
+  lcmContextUsageFromMetrics,
+  busyStatusMessage,
+  isLcmMaintenanceHintExpired,
+  lcmMaintenanceHintFromEvent,
+  lcmMetricKeysFromEvent,
+  lcmMaintenanceHintTtlMs,
+  type LcmMaintenanceHint,
 } from "./session-utils"
 import { Identifier } from "../utils/id"
 import { resolveModelSelection } from "./model-selection"
@@ -79,6 +86,43 @@ const RECENT_LIMIT = 5
 const MESSAGE_PAGE_LIMIT = 80
 
 type MessageMutation = Exclude<MessageLoadMode, "focus"> | "append" | "update"
+
+function lcmPromptFailureTitle(safeError: SendMessageFailedMessage["safeError"] | undefined): string {
+  switch (safeError?.code) {
+    case "db_locked":
+      return "Memory locked"
+    case "db_corrupt":
+    case "db_migration_failed":
+    case "db_unavailable":
+    case "settings_unavailable":
+      return "Memory unavailable"
+    case "recovery_required":
+    case "recovery_failed":
+    case "missing_source":
+    case "stale_source":
+      return "Memory recovery needed"
+    case "hard_limit_unresolved":
+      return "Memory needs attention"
+    case "timeout":
+      return "Memory timed out"
+    case "provider_unavailable":
+    case "provider_capacity_deferred":
+      return "Memory provider unavailable"
+    default:
+      return "Failed to send message"
+  }
+}
+
+function lcmPromptFailureDescription(message: SendMessageFailedMessage): string {
+  const safeMessage = message.safeError?.safeMessage
+  if (!safeMessage) return message.error
+  if (message.safeError?.action === "retry") return `${safeMessage} You can retry after memory is ready.`
+  if (message.safeError?.action === "close_other_owner") return `${safeMessage} Close the other Kilo window and retry.`
+  if (message.safeError?.action === "contact_support") return `${safeMessage} Contact support if this persists.`
+  if (message.safeError?.action === "start_new_thread")
+    return `${safeMessage} Start a new task if you need to continue immediately.`
+  return safeMessage
+}
 
 interface MessagePageState {
   initialLoaded: boolean
@@ -109,6 +153,8 @@ interface SessionStore {
   variantSelections: Record<string, string> // session/agent scoped variant key -> variant name
   recentModels: ModelSelection[]
   favoriteModels: ModelSelection[]
+  lcmMetrics: Record<string, LcmMetricsSnapshotMessage>
+  lcmMaintenanceHints: Record<string, LcmMaintenanceHint>
 }
 
 interface SessionContextValue {
@@ -194,6 +240,8 @@ interface SessionContextValue {
   // Cost and context usage for the current session
   costBreakdown: Accessor<Array<{ label: string; cost: number }>>
   contextUsage: Accessor<ContextUsage | undefined>
+  lcmMetrics: Accessor<LcmMetricsSnapshotMessage | undefined>
+  maintenanceHint: Accessor<LcmMaintenanceHint | undefined>
 
   // Skills loaded from the CLI backend
   skills: Accessor<SkillInfo[]>
@@ -446,6 +494,7 @@ export const SessionProvider: ParentComponent = (props) => {
   // Tracks optimistic messageIDs that haven't been confirmed by the server yet.
   // Prevents handleMessagesLoaded from wiping them when it replaces the array.
   const pendingOptimistic = new Map<string, Set<string>>()
+  const maintenanceHintTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   const startSubmission = (sid: string, messageID: string) => {
     pendingSubmissions.set(messageID, sid)
@@ -500,6 +549,13 @@ export const SessionProvider: ParentComponent = (props) => {
     variantSelections: {},
     recentModels: [],
     favoriteModels: [],
+    lcmMetrics: {},
+    lcmMaintenanceHints: {},
+  })
+
+  onCleanup(() => {
+    for (const timer of maintenanceHintTimers.values()) clearTimeout(timer)
+    maintenanceHintTimers.clear()
   })
 
   // Per-session agent selection
@@ -1011,6 +1067,10 @@ export const SessionProvider: ParentComponent = (props) => {
 
       case "sessionTurnClosed":
         setCloseMap(message.sessionID, message.reason)
+        break
+
+      case "lcmEvent":
+        handleLcmEvent(message.event)
         break
 
       case "todoUpdated":
@@ -1555,7 +1615,9 @@ export const SessionProvider: ParentComponent = (props) => {
         ? { type: "retry", attempt: attempt ?? 0, message: message ?? "", next: next ?? 0 }
         : newStatus === "offline"
           ? { type: "offline", message: message ?? "" }
-          : { type: newStatus }
+          : newStatus === "busy" && message
+            ? { type: "busy", message }
+            : { type: newStatus }
     setStatusMap(sessionID, info)
     // Track busy start time and discard the previous turn's terminal state.
     if (prev.type === "idle" && newStatus !== "idle") {
@@ -1575,6 +1637,63 @@ export const SessionProvider: ParentComponent = (props) => {
       pendingOptimistic.delete(sessionID)
     }
     if (shouldAbort) vscode.postMessage({ type: "abort", sessionID })
+  }
+
+  function clearMaintenanceHint(key: string, expected?: LcmMaintenanceHint) {
+    setStore(
+      "lcmMaintenanceHints",
+      produce((hints) => {
+        const current = hints[key]
+        if (!current) return
+        if (
+          expected &&
+          (current.operationID !== expected.operationID || current.updatedAtMs !== expected.updatedAtMs)
+        ) {
+          return
+        }
+        delete hints[key]
+      }),
+    )
+  }
+
+  function scheduleMaintenanceHintExpiry(key: string, hint: LcmMaintenanceHint) {
+    const existing = maintenanceHintTimers.get(key)
+    if (existing) clearTimeout(existing)
+    const ttlMs = lcmMaintenanceHintTtlMs(hint)
+    if (ttlMs === undefined) return
+    const timer = setTimeout(() => {
+      maintenanceHintTimers.delete(key)
+      clearMaintenanceHint(key, hint)
+    }, ttlMs)
+    maintenanceHintTimers.set(key, timer)
+  }
+
+  function handleLcmEvent(event: Extract<ExtensionMessage, { type: "lcmEvent" }>["event"]) {
+    if (event.type === "lcm.metrics.updated") {
+      for (const key of lcmMetricKeysFromEvent(event)) {
+        setStore("lcmMetrics", key, event.payload)
+      }
+    }
+
+    const hintKey = event.sessionID ?? event.conversationID
+    if (!hintKey) return
+    const current = store.lcmMaintenanceHints[hintKey]
+    const next = lcmMaintenanceHintFromEvent(current, event)
+    if (next === current) return
+
+    const existingTimer = maintenanceHintTimers.get(hintKey)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+      maintenanceHintTimers.delete(hintKey)
+    }
+
+    if (!next) {
+      clearMaintenanceHint(hintKey)
+      return
+    }
+
+    setStore("lcmMaintenanceHints", hintKey, next)
+    scheduleMaintenanceHintExpiry(hintKey, next)
   }
 
   function handlePermissionRequest(permission: PermissionRequest) {
@@ -1711,8 +1830,10 @@ export const SessionProvider: ParentComponent = (props) => {
 
     showToast({
       variant: "error",
-      title: language.t("prompt.toast.promptSendFailed.title") ?? "Failed to send message",
-      description: message.error,
+      title: message.safeError
+        ? lcmPromptFailureTitle(message.safeError)
+        : (language.t("prompt.toast.promptSendFailed.title") ?? "Failed to send message"),
+      description: lcmPromptFailureDescription(message),
     })
 
     if (!message.sessionID && message.draftID) {
@@ -1870,6 +1991,12 @@ export const SessionProvider: ParentComponent = (props) => {
         "todos",
         produce((todos) => {
           delete todos[sessionID]
+        }),
+      )
+      setStore(
+        "lcmMetrics",
+        produce((metrics) => {
+          delete metrics[sessionID]
         }),
       )
       setPages(
@@ -2638,7 +2765,7 @@ export const SessionProvider: ParentComponent = (props) => {
     const msgs: Record<string, Message[]> = {}
     for (const sid of family) msgs[sid] = visible(sid)
     const parents = buildFamilyParentsFromTools(family, (sid) => visibleToolParts(sid, msgs[sid] ?? []))
-    return buildFamilyCosts(family, msgs, store.sessions, parents)
+    return buildFamilyCosts(family, msgs, store.sessions, parents, store.lcmMetrics)
   })
 
   /** Child session labels — only reads store.parts (not message costs). */
@@ -2662,6 +2789,8 @@ export const SessionProvider: ParentComponent = (props) => {
   // Status text derived from last assistant message parts
   const statusText = createMemo<string | undefined>(() => {
     if (status() === "idle") return undefined
+    const explicitStatus = busyStatusMessage(statusInfo())
+    if (explicitStatus) return explicitStatus
     const fallback = language.t("ui.sessionTurn.status.consideringNextSteps")
     const id = currentSessionID()
     const msgs = messages()
@@ -2684,19 +2813,21 @@ export const SessionProvider: ParentComponent = (props) => {
     return fallback
   })
 
+  const lcmMetrics = createMemo<LcmMetricsSnapshotMessage | undefined>(() => {
+    const id = currentSessionID()
+    return id ? store.lcmMetrics[id] : undefined
+  })
+
   const contextUsage = createMemo<ContextUsage | undefined>(() => {
-    const msgs = visibleMessages()
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      const m = msgs[i]
-      if (m.role !== "assistant" || !m.tokens) continue
-      const usage = calcContextUsage(m.tokens, undefined)
-      if (usage.tokens === 0) continue
-      const sel = selected()
-      const model = sel ? provider.findModel(sel) : undefined
-      const limit = model?.limit?.context ?? model?.contextLength
-      return calcContextUsage(m.tokens, limit)
-    }
-    return undefined
+    return lcmContextUsageFromMetrics(lcmMetrics())
+  })
+
+  const maintenanceHint = createMemo<LcmMaintenanceHint | undefined>(() => {
+    const id = currentSessionID()
+    if (!id) return undefined
+    const hint = store.lcmMaintenanceHints[id]
+    if (!hint || isLcmMaintenanceHintExpired(hint)) return undefined
+    return hint
   })
 
   const value: SessionContextValue = {
@@ -2740,6 +2871,8 @@ export const SessionProvider: ParentComponent = (props) => {
     clearModelOverride,
     costBreakdown,
     contextUsage,
+    lcmMetrics,
+    maintenanceHint,
     agents,
     allAgents,
     skills,

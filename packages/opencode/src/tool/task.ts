@@ -10,14 +10,18 @@ import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider" // kilocode_change
+import type { ModelID, ProviderID } from "@/provider/schema" // kilocode_change
 import { KiloTask } from "../kilocode/tool/task" // kilocode_change
 import { KiloCostPropagation } from "../kilocode/session/cost-propagation" // kilocode_change
 import { KiloSessionProcessor } from "../kilocode/session/processor" // kilocode_change
 import { KiloSession } from "../kilocode/session" // kilocode_change
 import { errorMessage } from "@/util/error" // kilocode_change
-import { Cause, Effect, Exit, Schema, Scope } from "effect"
+import { Cause, Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+// kilocode_change start
+import { lcmProviderCapacityInputFromModel, lcmProviderCapacityLane } from "../session/lcm/provider-capacity"
+// kilocode_change end
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -26,6 +30,21 @@ export interface TaskPromptOps {
 }
 
 const id = "task"
+// kilocode_change start
+type TaskMetadata = {
+  parentSessionId: SessionID
+  sessionId: SessionID
+  model: {
+    providerID: ProviderID
+    modelID: ModelID
+    variant?: string
+  }
+  variant: string | undefined
+  background?: boolean
+  jobId?: string
+}
+// kilocode_change end
+
 const BACKGROUND_DESCRIPTION = [
   "",
   "",
@@ -114,6 +133,10 @@ export const TaskTool = Tool.define(
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context,
     ) {
+      // kilocode_change start
+      const lcmRuntimeModule = yield* Effect.promise(() => import("../session/lcm/runtime"))
+      const lcmRuntime = Option.getOrUndefined(yield* Effect.serviceOption(lcmRuntimeModule.LcmRuntime.Service))
+      // kilocode_change end
       const cfg = yield* config.get()
       const runInBackground = params.background === true
       if (runInBackground && !flags.experimentalBackgroundSubagents) {
@@ -201,10 +224,12 @@ export const TaskTool = Tool.define(
       KiloSession.register({ id: nextSession.id, parentID: ctx.sessionID, platform })
       // kilocode_change end
 
+      // kilocode_change start - foreground metadata needs the parent assistant model before child setup
       const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(Effect.orDie)
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
+      // kilocode_change end
 
-      // kilocode_change start — prefer valid subagent overrides, safely inheriting when overrides go stale
+      // kilocode_change start - prefer valid subagent overrides, safely inheriting when overrides go stale
       const selected = yield* KiloTask.resolveModel({
         name: next.name,
         agent: next,
@@ -219,7 +244,7 @@ export const TaskTool = Tool.define(
       const model = selected.model
       const variant = selected.variant
       // kilocode_change end
-      const metadata = {
+      const metadata: TaskMetadata = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
         model,
@@ -227,13 +252,76 @@ export const TaskTool = Tool.define(
         ...(runInBackground ? { background: true } : {}),
       }
 
+      // kilocode_change start - publish parent-visible task metadata before child setup
       yield* ctx.metadata({
         title: params.description,
         metadata,
       })
+      // kilocode_change end
 
+      // kilocode_change start - foreground tasks bridge parent aborts before LCM child setup can wait
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
+      const runCancel = yield* EffectBridge.make()
+      const cancel = ops.cancel(nextSession.id)
+      let abortListenerAttached = false
+      function onAbort() {
+        runCancel.fork(cancel)
+      }
+      const attachAbortListener = Effect.sync(() => {
+        if (runInBackground || abortListenerAttached) return
+        ctx.abort.addEventListener("abort", onAbort)
+        abortListenerAttached = true
+      })
+      const detachAbortListener = Effect.sync(() => {
+        if (!abortListenerAttached) return
+        ctx.abort.removeEventListener("abort", onAbort)
+        abortListenerAttached = false
+      })
+      yield* attachAbortListener
+      // kilocode_change end
+
+      // kilocode_change start
+      const childScope = lcmRuntime
+        ? yield* lcmRuntime
+            .getOrCreateChildConversation({
+              sessionID: nextSession.id,
+              parentSessionID: ctx.sessionID,
+              capabilityClass: "task_child",
+              source: "kilo_task",
+              sourceMessageID: ctx.messageID,
+              ...(ctx.callID ? { sourceToolCallID: ctx.callID } : {}),
+              readCapable: false,
+            })
+            .pipe(Effect.catch((error) => detachAbortListener.pipe(Effect.andThen(Effect.fail(error)))))
+        : undefined
+      const fullModel =
+        lcmRuntime && childScope
+          ? yield* provider.getModel(model.providerID, model.modelID).pipe(
+              Effect.catch(() => Effect.succeed(undefined)),
+              Effect.catchDefect(() => Effect.succeed(undefined)),
+            )
+          : undefined
+      const providerInfo =
+        lcmRuntime && childScope && fullModel
+          ? yield* provider.getProvider(fullModel.providerID).pipe(
+              Effect.catch(() => Effect.succeed(undefined)),
+              Effect.catchDefect(() => Effect.succeed(undefined)),
+            )
+          : undefined
+      const localProviderCapacityLane =
+        lcmRuntime && childScope && fullModel
+          ? lcmProviderCapacityLane(
+              lcmProviderCapacityInputFromModel({
+                model: fullModel,
+                priority: "foreground",
+                ...(providerInfo ? { provider: providerInfo } : {}),
+              }),
+            )
+          : undefined
+      const localProviderCapacityKey =
+        localProviderCapacityLane?.capacityClass === "remote_or_unknown" ? undefined : localProviderCapacityLane?.key
+      // kilocode_change end
 
       const runTask = Effect.fn("TaskTool.runTask")(function* () {
         const parts = yield* ops.resolvePromptParts(params.prompt)
@@ -293,13 +381,14 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(new Error(`Task ${nextSession.id} is already running.`))
       }
 
+      // kilocode_change start - background tasks expose resumable metadata and scoped cost propagation
       if (runInBackground) {
+        yield* detachAbortListener
         const info = yield* background.start({
           id: nextSession.id,
           type: id,
           title: params.description,
           metadata,
-          // kilocode_change start - background tasks propagate only cost accrued by this invocation
           run: Effect.acquireUseRelease(
             KiloCostPropagation.childCost(sessions, nextSession.id),
             () =>
@@ -318,7 +407,6 @@ export const TaskTool = Tool.define(
                 yield* KiloCostPropagation.propagate(sessions, ctx.sessionID, ctx.messageID, costAfter - costBefore)
               }),
           ),
-          // kilocode_change end
         })
 
         return {
@@ -330,52 +418,84 @@ export const TaskTool = Tool.define(
           output: backgroundOutput(nextSession.id),
         }
       }
+      // kilocode_change end
 
-      const runCancel = yield* EffectBridge.make()
-      const cancel = ops.cancel(nextSession.id)
-
-      function onAbort() {
-        runCancel.fork(cancel)
+      // kilocode_change start
+      const acquiredSlot =
+        lcmRuntime && childScope
+          ? yield* lcmRuntime
+              .acquireChildSessionSlot({
+                sessionID: nextSession.id,
+                rootConversationID: childScope.rootConversationID,
+                projectID: childScope.projectID,
+                ...(childScope.workspaceID ? { workspaceID: childScope.workspaceID } : {}),
+                capabilityClass: "task_child",
+                ...(localProviderCapacityKey ? { localProviderCapacityKey } : {}),
+              })
+              .pipe(
+                Effect.match({
+                  onFailure: (safeError) => ({ ok: false as const, safeError }),
+                  onSuccess: (slot) => ({ ok: true as const, slot }),
+                }),
+              )
+          : { ok: true as const, slot: undefined }
+      if (!acquiredSlot.ok) {
+        yield* detachAbortListener
+        return {
+          title: params.description,
+          metadata,
+          output: output(nextSession.id, acquiredSlot.safeError.safeMessage),
+        }
       }
 
+      // kilocode_change end
+      // kilocode_change start - foreground tasks release LCM slots and propagate cost on every exit path
       return yield* Effect.acquireUseRelease(
         // kilocode_change start - snapshot child cost so we propagate only the delta on resume (#6321)
         Effect.gen(function* () {
-          ctx.abort.addEventListener("abort", onAbort)
-          return yield* KiloCostPropagation.childCost(sessions, nextSession.id)
+          // kilocode_change start
+          return {
+            costBefore: yield* KiloCostPropagation.childCost(sessions, nextSession.id),
+            slot: acquiredSlot.slot,
+          }
+          // kilocode_change end
         }),
         // kilocode_change end
         () =>
           Effect.gen(function* () {
             const text = yield* runTask()
+            // kilocode_change start - foreground task result keeps parent-visible LCM metadata
             return {
               title: params.description,
               metadata,
               output: output(nextSession.id, text),
             }
+            // kilocode_change end
           }),
         // kilocode_change start - propagate subagent cost delta to parent on every exit path (#6321)
-        (costBefore, exit) =>
+        (acquired, exit) =>
           Effect.gen(function* () {
             if (Exit.hasInterrupts(exit)) yield* cancel
           }).pipe(
             Effect.ensuring(
               Effect.gen(function* () {
-                ctx.abort.removeEventListener("abort", onAbort)
+                yield* detachAbortListener
+                if (acquired.slot) yield* acquired.slot.release
                 const costAfter = yield* KiloCostPropagation.childCost(sessions, nextSession.id).pipe(
-                  Effect.catchTag("NotFoundError", () => Effect.succeed(costBefore)),
+                  Effect.catchTag("NotFoundError", () => Effect.succeed(acquired.costBefore)),
                 )
                 yield* KiloCostPropagation.propagate(
                   sessions,
                   ctx.sessionID,
                   ctx.messageID,
-                  costAfter - costBefore,
+                  costAfter - acquired.costBefore,
                 ).pipe(Effect.catchTag("NotFoundError", () => Effect.void))
               }),
             ),
           ),
         // kilocode_change end
       )
+      // kilocode_change end
     })
 
     return {

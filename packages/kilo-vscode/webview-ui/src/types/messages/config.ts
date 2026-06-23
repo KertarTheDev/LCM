@@ -33,6 +33,13 @@ export interface CompactionConfig {
   prune?: boolean
 }
 
+export interface LcmConfig {
+  strategy?: "upward" | "dolt"
+  storage?: {
+    warningThresholdBytes?: number
+  }
+}
+
 export interface WatcherConfig {
   ignore?: string[]
 }
@@ -138,6 +145,7 @@ export interface Config {
   formatter?: false | Record<string, unknown>
   lsp?: false | Record<string, unknown>
   compaction?: CompactionConfig
+  lcm?: LcmConfig
   commit_message?: CommitMessageConfig
   tools?: Record<string, boolean>
   auto_collapse_reasoning?: boolean

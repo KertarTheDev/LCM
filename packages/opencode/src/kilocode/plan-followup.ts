@@ -385,8 +385,6 @@ export namespace PlanFollowup {
           const todoList = formatTodos(todos)
 
           // Assemble the user message text with or without a handover section.
-          // The section order is fixed so the initial and final renders stay
-          // aligned; only the handover block grows in between.
           const compose = (handover: string) => {
             const sections = [
               `Plan file: ${file}\nRead this file first and treat it as the source of truth for implementation.`,
@@ -395,32 +393,6 @@ export namespace PlanFollowup {
             if (todoList) sections.push(`## Todo List\n\n${todoList}`)
             return sections.join("\n\n")
           }
-
-          // Inject the plan-file handoff and todos immediately so the new session tab
-          // shows useful content right away. The handover section is appended to this
-          // same part in-place once the slow LLM call resolves below.
-          const msg: MessageV2.User = {
-            id: MessageID.ascending(),
-            sessionID: next.id,
-            role: "user",
-            time: { created: Date.now() },
-            agent: "code",
-            model: code.model,
-          }
-          const pid = PartID.ascending()
-          await PlanFollowupRuntime.session((svc) =>
-            Effect.gen(function* () {
-              yield* svc.updateMessage(msg)
-              yield* svc.updatePart({
-                id: pid,
-                messageID: msg.id,
-                sessionID: next.id,
-                type: "text",
-                text: compose(""),
-                synthetic: false,
-              } satisfies MessageV2.TextPart)
-            }),
-          )
 
           if (todos.length) {
             await PlanFollowupRuntime.todo.update({ sessionID: next.id, todos })
@@ -436,18 +408,13 @@ export namespace PlanFollowup {
             return
           }
 
-          if (handover) {
-            await PlanFollowupRuntime.session((svc) =>
-              svc.updatePart({
-                id: pid,
-                messageID: msg.id,
-                sessionID: next.id,
-                type: "text",
-                text: compose(handover),
-                synthetic: false,
-              } satisfies MessageV2.TextPart),
-            )
-          }
+          await inject({
+            sessionID: next.id,
+            agent: "code",
+            model: code.model,
+            text: compose(handover),
+            synthetic: false,
+          })
           if (ctl.signal.aborted) {
             await idle()
             return

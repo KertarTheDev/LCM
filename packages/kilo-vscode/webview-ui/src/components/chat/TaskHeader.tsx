@@ -1,7 +1,7 @@
 /**
  * TaskHeader component
  * Sticky header above the chat messages showing session title,
- * cost, context usage, and a compact button.
+ * cost and context usage.
  * Also shows todo progress when the session has todos.
  *
  * When expanded, shows the task timeline (colored bars representing
@@ -9,7 +9,6 @@
  */
 
 import { Component, For, Show, createMemo, createSignal, createEffect, onMount, onCleanup } from "solid-js"
-import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { Checkbox } from "@kilocode/kilo-ui/checkbox"
@@ -34,8 +33,6 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
   const title = createMemo(() => session.currentSession()?.title ?? language.t("command.session.new"))
   const canRename = createMemo(() => !props.readonly && !!session.currentSession())
   const hasMessages = createMemo(() => session.messages().length > 0)
-  const busy = createMemo(() => session.status() === "busy")
-  const canCompact = createMemo(() => !busy() && session.visibleMessages().length > 0 && !!session.selected())
 
   const fmt = (n: number) => new Intl.NumberFormat(language.locale(), { style: "currency", currency: "USD" }).format(n)
 
@@ -65,7 +62,45 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
     if (!usage) return undefined
     const tokens = usage.tokens.toLocaleString(language.locale())
     const pct = usage.percentage !== null ? `${usage.percentage}%` : undefined
-    return { tokens, pct }
+    const label = usage.label
+    const detail =
+      usage.source === "lcm_active_budget"
+        ? `${label}: ${tokens} tokens${pct ? ` (${pct} of active budget)` : ""}`
+        : `${tokens} tokens${pct ? ` (${pct} of context)` : ""}`
+    return { tokens, pct, label, detail }
+  })
+
+  const maintenanceHint = createMemo(() => session.maintenanceHint())
+  const maintenanceTooltip = createMemo(() => {
+    const hint = maintenanceHint()
+    if (!hint) return ""
+    const details = [`Status: ${hint.state}`, `Reason: ${hint.reason ?? hint.kind}`]
+    if (hint.operationID) details.push(`Operation: ${hint.operationID}`)
+    if (hint.safeCode) details.push(`Code: ${hint.safeCode}`)
+    if (hint.action) details.push(`Action: ${hint.action}`)
+    if (hint.retryable !== undefined) details.push(`Retryable: ${hint.retryable ? "yes" : "no"}`)
+    if (hint.safeMessage) details.push(`Message: ${hint.safeMessage}`)
+    if (hint.diagnosticCode) details.push(`Diagnostic: ${hint.diagnosticCode}`)
+    if (hint.softBacklogTokens !== undefined && hint.softThreshold !== undefined) {
+      details.push(
+        `Soft backlog: ${hint.softBacklogTokens.toLocaleString(language.locale())} / ${hint.softThreshold.toLocaleString(language.locale())}`,
+      )
+    }
+    if (hint.rawLaneTokens !== undefined && hint.softThreshold !== undefined) {
+      details.push(
+        `Raw lane: ${hint.rawLaneTokens.toLocaleString(language.locale())} / ${hint.softThreshold.toLocaleString(language.locale())}`,
+      )
+    }
+    if (hint.protectedTailRawTokens !== undefined) {
+      details.push(`Protected tail: ${hint.protectedTailRawTokens.toLocaleString(language.locale())}`)
+    }
+    if (hint.rawLaneRatio !== undefined) {
+      details.push(`Raw lane: ${Math.round(hint.rawLaneRatio * 100)}% of threshold`)
+    }
+    if (hint.softBacklogRatio !== undefined) {
+      details.push(`Raw backlog: ${Math.round(hint.softBacklogRatio * 100)}% of threshold`)
+    }
+    return details.join("\n")
   })
 
   const tokens = createMemo(() => calcTokenUsage(session.visibleMessages()))
@@ -185,6 +220,16 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
           </Show>
         </div>
         <div data-slot="task-header-stats">
+          <Show when={maintenanceHint()}>
+            {(hint) => (
+              <Tooltip value={maintenanceTooltip()} placement="bottom">
+                <span data-slot="task-header-maintenance" data-state={hint().state} aria-label={hint().label}>
+                  <span data-slot="task-header-maintenance-dot" />
+                  <span data-slot="task-header-maintenance-label">{hint().label}</span>
+                </span>
+              </Tooltip>
+            )}
+          </Show>
           <Show when={cost()}>
             {(c) => (
               <Tooltip value={costTooltip()} placement="bottom">
@@ -194,25 +239,10 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
           </Show>
           <Show when={context()}>
             {(ctx) => (
-              <Tooltip
-                value={ctx().pct ? `${ctx().tokens} tokens (${ctx().pct} of context)` : `${ctx().tokens} tokens`}
-                placement="bottom"
-              >
+              <Tooltip value={ctx().detail} placement="bottom">
                 <span>{ctx().pct ?? ctx().tokens}</span>
               </Tooltip>
             )}
-          </Show>
-          <Show when={!props.readonly}>
-            <Tooltip value={language.t("command.session.compact")} placement="bottom">
-              <IconButton
-                icon="compress"
-                size="small"
-                variant="ghost"
-                disabled={!canCompact()}
-                onClick={() => session.compact()}
-                aria-label={language.t("command.session.compact")}
-              />
-            </Tooltip>
           </Show>
           <Show when={hasMessages()}>
             <button

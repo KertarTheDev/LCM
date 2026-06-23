@@ -52,7 +52,7 @@ function request(target: ReturnType<typeof app>, dir: string, input: string, ini
 
 describe("agent builder routes", () => {
   test("previews and saves project agent markdown", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
     const body = {
       id: "reviewer",
       scope: "project",
@@ -94,7 +94,7 @@ describe("agent builder routes", () => {
   })
 
   test("saves without a duplicated body id", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
     const saved = await req(tmp.path, "/agent-builder/canonical", {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -112,7 +112,7 @@ describe("agent builder routes", () => {
   })
 
   test("rejects whitespace-only prompts", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
     const preview = await req(tmp.path, "/agent-builder/preview", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -128,7 +128,7 @@ describe("agent builder routes", () => {
 
   for (const value of [false, true]) {
     test.serial(`${value ? "httpapi" : "legacy"} rejects whitespace-only prompts when saving`, async () => {
-      await using tmp = await tmpdir()
+      await using tmp = await tmpdir({ git: true })
       const saved = await request(app(value), tmp.path, "/agent-builder/empty", {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -142,7 +142,7 @@ describe("agent builder routes", () => {
     })
 
     test.serial(`${value ? "httpapi" : "legacy"} rejects invalid route ids`, async () => {
-      await using tmp = await tmpdir()
+      await using tmp = await tmpdir({ git: true })
       const saved = await request(app(value), tmp.path, "/agent-builder/bad:id", {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -163,7 +163,7 @@ describe("agent builder routes", () => {
   // surface until restart. The TUI reacts to `server.instance.disposed` by re-bootstrapping and
   // refetching `app.agents`.
   test("disposes the instance after save so open TUIs hot-reload agents", async () => {
-    await using tmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
 
     const events: GlobalEvent[] = []
     const handler = (event: GlobalEvent) => events.push(event)

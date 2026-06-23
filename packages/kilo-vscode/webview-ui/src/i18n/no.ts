@@ -87,8 +87,6 @@ export const dict = {
   "revert.banner.redo.all": "Gjenta alt",
   "revert.banner.hint": "Send en ny melding for å gjøre dette permanent",
   "revert.disabled.agentBusy": "Vent til agenten er ferdig",
-  "command.session.compact": "Komprimer sesjon",
-  "command.session.compact.description": "Oppsummer sesjonen for å redusere kontekststørrelsen",
   "command.session.fork": "Forgren fra melding",
   "command.session.fork.description": "Opprett en ny sesjon fra en tidligere melding",
   "command.session.share": "Del sesjon",
@@ -436,9 +434,6 @@ export const dict = {
   "toast.workspace.enabled.description": "Flere worktrees vises nå i sidefeltet",
   "toast.workspace.disabled.title": "Arbeidsområder deaktivert",
   "toast.workspace.disabled.description": "Kun hoved-worktree vises i sidefeltet",
-
-  "toast.model.none.title": "Ingen modell valgt",
-  "toast.model.none.description": "Koble til en leverandør for å oppsummere denne sesjonen",
 
   "toast.file.loadFailed.title": "Kunne ikke laste fil",
 
@@ -1486,13 +1481,9 @@ export const dict = {
     "Forhindre gjentatte identiske handlinger. Utløses når det samme verktøyanropet gjentas med identisk inndata.",
   "settings.checkpoints.enable.title": "Aktiver øyeblikksbilder",
   "settings.checkpoints.enable.description": "Opprett kontrollpunkter før filredigeringer",
-  "settings.context.autoCompaction.title": "Automatisk komprimering",
-  "settings.context.autoCompaction.description": "Komprimer automatisk kontekst før den når grensen",
   "settings.context.compactionLimit.title": "Grense for automatisk komprimering",
   "settings.context.compactionLimit.description":
     "Komprimer når konteksten når denne prosentandelen av modellvinduet. La stå tomt for å bare bruke sikkerhetsbufferen.",
-  "settings.context.prune.title": "Fjern gamle utdata",
-  "settings.context.prune.description": "Fjern gamle verktøyutdata under komprimering",
   "settings.context.watcherPatterns": "Filvakt-ignormønstre",
   "settings.context.watcherPatterns.description": "Glob-mønstre for filer som vakten skal ignorere",
 

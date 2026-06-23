@@ -17,6 +17,9 @@ import { SnapshotCommand } from "./snapshot"
 import { AgentCommand } from "./agent"
 import { StartupCommand } from "./startup"
 import { V2Command } from "./v2"
+// kilocode_change start
+import { LcmDbDiagnoseCommand, LcmDbRebuildCommand, LcmDbSmokeCommand } from "./lcm-db"
+// kilocode_change end
 
 export const DebugCommand = cmd({
   command: "debug",
@@ -34,6 +37,11 @@ export const DebugCommand = cmd({
       .command(AgentCommand)
       .command(V2Command)
       .command(InfoCommand)
+      // kilocode_change start
+      .command(LcmDbSmokeCommand)
+      .command(LcmDbDiagnoseCommand)
+      .command(LcmDbRebuildCommand)
+      // kilocode_change end
       .command(PathsCommand)
       .command(WaitCommand)
       .demandCommand(),

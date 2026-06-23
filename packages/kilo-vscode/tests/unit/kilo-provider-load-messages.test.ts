@@ -103,6 +103,9 @@ function createClient(options?: {
         if (options?.deleteDeferred) return options.deleteDeferred.promise
         return { data: {} }
       },
+      lcm: {
+        capabilities: async () => ({ data: { dbReady: true } }),
+      },
     },
     backgroundProcess: {
       stopSession: async (params: { sessionID: string; directory?: string }) => {
@@ -168,9 +171,14 @@ type ProviderInternals = {
   handleDeleteSession: (sid: string) => Promise<void>
 }
 
-function makeProvider(client: ReturnType<typeof createClient>) {
+function makeProvider(
+  client: ReturnType<typeof createClient>,
+  options: { onSessionContextChanged?: (context: { sessionID?: string; directory?: string } | undefined) => void } = {},
+) {
   const connection = createConnection(client)
-  const provider = new KiloProvider({} as never, connection as never)
+  const provider = new KiloProvider({} as never, connection as never, undefined, {
+    onSessionContextChanged: options.onSessionContextChanged,
+  })
   const internal = provider as unknown as ProviderInternals
   internal.connectionState = "connected"
   const sent: unknown[] = []
@@ -549,6 +557,22 @@ describe("KiloProvider.handleLoadMessages / focus mode freshness", () => {
 
     messages.resolve(mkResult([]))
     await Promise.all([s2, s3])
+  })
+
+  it("reports the selected session context before full session metadata refresh", async () => {
+    const client = createClient()
+    const published: Array<{ sessionID?: string; directory?: string } | undefined> = []
+    const { internal, provider } = makeProvider(client, {
+      onSessionContextChanged: (context) => published.push(context),
+    })
+    internal.currentSession = { id: "s1", directory: "/repo/s1" }
+    internal.contextSessionID = "s1"
+    internal.sessionDirectories.set("s2", "/repo/s2")
+
+    await internal.handleLoadMessages("s2")
+
+    expect(provider.getCurrentSessionContext()).toEqual({ sessionID: "s2", directory: "/repo/s2" })
+    expect(published[0]).toEqual({ sessionID: "s2", directory: "/repo/s2" })
   })
 
   it("stops the selected visible session when clearSession runs with stale currentSession", async () => {

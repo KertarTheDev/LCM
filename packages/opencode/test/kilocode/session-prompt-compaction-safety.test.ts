@@ -32,6 +32,7 @@ import { RepositoryCache } from "../../src/reference/repository-cache"
 import { Session } from "../../src/session/session"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Instruction } from "../../src/session/instruction"
+import { LcmRuntime } from "../../src/session/lcm/runtime"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
@@ -171,6 +172,7 @@ function makeHttp() {
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
+      Layer.provide(LcmRuntime.defaultLayer),
       Layer.provide(SessionRevert.defaultLayer),
       Layer.provide(Image.defaultLayer),
       Layer.provide(summary),

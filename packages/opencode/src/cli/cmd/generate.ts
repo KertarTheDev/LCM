@@ -63,5 +63,8 @@ export const GenerateCommand = {
         else resolve()
       })
     })
+    // kilocode_change start
+    process.exit(0)
+    // kilocode_change end
   },
 } satisfies CommandModule<object, Args>

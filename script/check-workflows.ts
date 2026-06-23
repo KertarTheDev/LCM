@@ -41,6 +41,8 @@ const active = new Set([
   "docs-check-links.yml",
   "generate.yml",
   "kilo-auto-close.yml",
+  "lcm-macos-platform-smoke.yml",
+  "lcm-required-checks.yml",
   "nix-eval.yml",
   "nix-hashes.yml",
   "prepare-jetbrains-release.yml",

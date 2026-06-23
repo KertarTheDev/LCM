@@ -6,7 +6,12 @@ import { KiloClawProvider } from "./kiloclaw/KiloClawProvider"
 import { DiffViewerProvider } from "./diff/DiffViewerProvider"
 import { DiffSourceCatalog } from "./diff/sources/catalog"
 import { DiffVirtualProvider } from "./DiffVirtualProvider"
-import { SettingsEditorProvider } from "./SettingsEditorProvider"
+import {
+  SettingsEditorProvider,
+  settingsPanelOpenTab,
+  settingsPanelSessionContext,
+  type SettingsPanelOpenInput,
+} from "./SettingsEditorProvider"
 import { MarketplacePanelProvider } from "./MarketplacePanelProvider"
 import { SubAgentViewerProvider } from "./SubAgentViewerProvider"
 import { EXTENSION_DISPLAY_NAME } from "./constants"
@@ -23,6 +28,7 @@ import { registerToggleAutoApprove } from "./commands/toggle-auto-approve"
 import { registerHeapSnapshot } from "./commands/heap-snapshot"
 import { RemoteStatusService } from "./services/RemoteStatusService"
 import { markWorkspace } from "./util/spotlight"
+import type { KiloProviderSessionContext } from "./kilo-provider/options"
 
 let agentManager: AgentManagerProvider | undefined
 let shuttingDown = false
@@ -66,6 +72,12 @@ export function activate(context: vscode.ExtensionContext) {
   const remoteService = new RemoteStatusService()
   context.subscriptions.push(remoteService)
   connectionService.setRemoteService(remoteService)
+
+  const settingsEditorProvider = new SettingsEditorProvider(context.extensionUri, connectionService, context)
+  settingsEditorProvider.setRemoteService(remoteService)
+  const syncSettingsSessionContext = (sessionContext: KiloProviderSessionContext | undefined) => {
+    settingsEditorProvider.setLatestSessionContext(sessionContext)
+  }
 
   // Re-register browser automation MCP server on CLI backend reconnect, configure telemetry,
   // set remote service client, and reload autocomplete so it picks up the now-available backend connection.
@@ -123,7 +135,9 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   // Create the provider with shared service
-  const provider = new KiloProvider(context.extensionUri, connectionService, context)
+  const provider = new KiloProvider(context.extensionUri, connectionService, context, {
+    onSessionContextChanged: syncSettingsSessionContext,
+  })
   provider.setRemoteService(remoteService)
 
   // Register the webview view provider for the sidebar.
@@ -217,6 +231,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewPanelSerializer("kilo-code.new.TabPanel", {
       deserializeWebviewPanel(panel: vscode.WebviewPanel) {
         const tabProvider = new KiloProvider(context.extensionUri, connectionService, context, {
+          onSessionContextChanged: syncSettingsSessionContext,
           tabTitle: panelTitleHandler(panel),
         })
         tabProvider.setRemoteService(remoteService)
@@ -261,8 +276,6 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(diffVirtualProvider)
 
   // Create standalone editor providers (open in editor area, not sidebar)
-  const settingsEditorProvider = new SettingsEditorProvider(context.extensionUri, connectionService, context)
-  settingsEditorProvider.setRemoteService(remoteService)
   const marketplacePanelProvider = new MarketplacePanelProvider(context.extensionUri, connectionService, context)
   context.subscriptions.push(settingsEditorProvider, marketplacePanelProvider)
 
@@ -314,12 +327,12 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Sidebar menus use wrapper commands so this event measures real title button presses,
   // not programmatic opens, shortcuts, or editor title commands.
-  const track = (button: string, command: string) => {
+  const track = (button: string, command: string, ...args: unknown[]) => {
     TelemetryProxy.capture(TelemetryEventName.TITLE_BUTTON_CLICKED, {
       button,
       surface: "sidebar_title",
     })
-    void vscode.commands.executeCommand(command)
+    void vscode.commands.executeCommand(command, ...args)
   }
 
   // Register toolbar button command handlers
@@ -343,7 +356,7 @@ export function activate(context: vscode.ExtensionContext) {
       track("profile", "kilo-code.new.profileButtonClicked")
     }),
     vscode.commands.registerCommand("kilo-code.new.sidebarTitle.settingsButtonClicked", () => {
-      track("settings", "kilo-code.new.settingsButtonClicked")
+      track("settings", "kilo-code.new.settingsButtonClicked", provider.getCurrentSessionContext())
     }),
     vscode.commands.registerCommand("kilo-code.new.plusButtonClicked", () => {
       const tab = activeTabProvider()
@@ -379,11 +392,20 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("kilo-code.new.profileButtonClicked", () => {
       settingsEditorProvider.openPanel("profile")
     }),
-    vscode.commands.registerCommand("kilo-code.new.settingsButtonClicked", (tab?: string) => {
-      settingsEditorProvider.openPanel("settings", tab)
+    vscode.commands.registerCommand("kilo-code.new.settingsButtonClicked", (input?: SettingsPanelOpenInput) => {
+      const tab = settingsPanelOpenTab(input)
+      const context =
+        settingsPanelSessionContext(input) ??
+        activeTabProvider()?.getCurrentSessionContext() ??
+        provider.getCurrentSessionContext()
+      settingsEditorProvider.openPanel("settings", tab, context)
     }),
     vscode.commands.registerCommand("kilo-code.new.openIndexingSettings", () => {
-      settingsEditorProvider.openPanel("settings", "indexing")
+      settingsEditorProvider.openPanel(
+        "settings",
+        "indexing",
+        activeTabProvider()?.getCurrentSessionContext() ?? provider.getCurrentSessionContext(),
+      )
     }),
     // legacy-migration start
     vscode.commands.registerCommand("kilo-code.new.openMigrationWizard", () => {
@@ -412,6 +434,7 @@ export function activate(context: vscode.ExtensionContext) {
         diffVirtualProvider,
         remoteService,
         autoApprove,
+        syncSettingsSessionContext,
       )
     }),
     vscode.commands.registerCommand(
@@ -557,6 +580,7 @@ async function openKiloInNewTab(
   diffVirtualProvider: DiffVirtualProvider,
   remoteService: RemoteStatusService,
   autoApprove: ReturnType<typeof registerToggleAutoApprove>,
+  onSessionContextChanged: (context: KiloProviderSessionContext | undefined) => void,
 ) {
   const lastCol = Math.max(...vscode.window.visibleTextEditors.map((e) => e.viewColumn || 0), 0)
   const hasVisibleEditors = vscode.window.visibleTextEditors.length > 0
@@ -579,6 +603,7 @@ async function openKiloInNewTab(
   }
 
   const tabProvider = new KiloProvider(context.extensionUri, connectionService, context, {
+    onSessionContextChanged,
     tabTitle: panelTitleHandler(panel),
   })
   tabProvider.setRemoteService(remoteService)

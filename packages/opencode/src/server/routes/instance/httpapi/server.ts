@@ -23,6 +23,9 @@ import { Ripgrep } from "@/file/ripgrep"
 import { Format } from "@/format"
 import { Git } from "@/git" // kilocode_change
 import { RuntimeFlags } from "@/effect/runtime-flags"
+// kilocode_change start
+import { LcmRuntime } from "@/session/lcm/runtime"
+// kilocode_change end
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { Permission } from "@/permission"
@@ -77,6 +80,9 @@ import { experimentalHandlers } from "./handlers/experimental"
 import { fileHandlers } from "./handlers/file"
 import { globalHandlers } from "./handlers/global"
 import { instanceHandlers } from "./handlers/instance"
+// kilocode_change start
+import { lcmHandlers } from "./handlers/lcm"
+// kilocode_change end
 import { mcpHandlers } from "./handlers/mcp"
 import { permissionHandlers } from "./handlers/permission"
 import { projectHandlers } from "./handlers/project"
@@ -145,6 +151,9 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     experimentalHandlers,
     fileHandlers,
     instanceHandlers,
+    // kilocode_change start
+    lcmHandlers,
+    // kilocode_change end
     mcpHandlers,
     projectHandlers,
     ptyHandlers,
@@ -212,6 +221,9 @@ export function createRoutes(
       FileWatcher.defaultLayer,
       Format.defaultLayer,
       Git.defaultLayer, // kilocode_change
+      // kilocode_change start
+      LcmRuntime.defaultLayer,
+      // kilocode_change end
       LSP.defaultLayer,
       Installation.defaultLayer,
       MCP.defaultLayer,

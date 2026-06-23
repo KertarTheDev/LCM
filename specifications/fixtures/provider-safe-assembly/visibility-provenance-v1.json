@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "visibility-provenance-v1",
+  "helperProducerIDs": [
+    "kilo.session.prompt-queue",
+    "kilo.session.prompt",
+    "kilo.editor-context",
+    "opencode.message-v2.renderer",
+    "opencode.provider.media-fallback",
+    "opencode.plugin.transform",
+    "opencode.tool-description-placement"
+  ],
+  "rows": [
+    {
+      "category": "raw_message",
+      "sourceRowsRequired": ["lcm_messages", "lcm_message_parts"],
+      "queuedVisibility": "exclude_when_source_message_hidden",
+      "derivedProvenancePolicy": "not_applicable",
+      "modelVisible": true,
+      "nonModelSurfacePolicy": "hashes_ids_counts_only",
+      "failureMode": "missing_or_hidden_required_source_fails_closed"
+    },
+    {
+      "category": "summary",
+      "sourceRowsRequired": ["lcm_summaries", "lcm_summary_message_edges"],
+      "queuedVisibility": "exclude_or_fail_closed_when_provenance_hidden",
+      "derivedProvenancePolicy": "all_parent_message_edges_must_be_visible_or_nonrequired",
+      "modelVisible": true,
+      "nonModelSurfacePolicy": "summary_text_forbidden",
+      "failureMode": "hidden_required_provenance_fails_closed"
+    },
+    {
+      "category": "archive_stub",
+      "sourceRowsRequired": ["lcm_summaries", "lineage_pointer"],
+      "queuedVisibility": "exclude_or_fail_closed_when_provenance_hidden",
+      "derivedProvenancePolicy": "summary_and_pointer_must_resolve_inside_current_lineage",
+      "modelVisible": true,
+      "nonModelSurfacePolicy": "stub_text_forbidden",
+      "failureMode": "missing_pointer_or_hidden_required_provenance_fails_closed"
+    },
+    {
+      "category": "large_file_marker",
+      "sourceRowsRequired": ["lcm_large_files"],
+      "queuedVisibility": "visible_only_when_linked_source_or_path_authorization_visible",
+      "derivedProvenancePolicy": "file_record_and_boundary_metadata_must_validate",
+      "modelVisible": true,
+      "nonModelSurfacePolicy": "file_bytes_forbidden",
+      "failureMode": "stale_or_unauthorized_file_fails_closed"
+    },
+    {
+      "category": "retrieval_cue",
+      "sourceRowsRequired": ["lcm_context_items.cue_id"],
+      "queuedVisibility": "active_target_only_before_current_user",
+      "derivedProvenancePolicy": "cue_sources_must_be_authorized_before_target_current_user",
+      "modelVisible": true,
+      "nonModelSurfacePolicy": "cue_payload_forbidden",
+      "failureMode": "hidden_or_same_turn_source_fails_closed"
+    },
+    {
+      "category": "target_current_user",
+      "sourceRowsRequired": ["sealed_message_or_trusted_live_prompt_state"],
+      "queuedVisibility": "required_for_current_continuation",
+      "derivedProvenancePolicy": "not_applicable",
+      "modelVisible": true,
+      "nonModelSurfacePolicy": "message_text_forbidden",
+      "failureMode": "missing_source_fails_closed"
+    },
+    {
+      "category": "render_only_prompt_helper",
+      "sourceRowsRequired": ["trusted_lcmRenderOnly_sidecar"],
+      "queuedVisibility": "scoped_to_current_preparation_only",
+      "derivedProvenancePolicy": "producer_must_be_registered",
+      "modelVisible": true,
+      "nonModelSurfacePolicy": "helper_text_forbidden",
+      "failureMode": "unknown_producer_or_missing_cloned_identity_fails_closed"
+    },
+    {
+      "category": "queued_message",
+      "sourceRowsRequired": ["kilo_prompt_queue_scope"],
+      "queuedVisibility": "visible_only_when_scope_includes_message",
+      "derivedProvenancePolicy": "derived_units_with_hidden_queued_provenance_are_excluded_or_fail_closed",
+      "modelVisible": true,
+      "nonModelSurfacePolicy": "queued_text_forbidden",
+      "failureMode": "unprovable_scope_fails_closed_for_required_context"
+    },
+    {
+      "category": "plugin_output",
+      "sourceRowsRequired": ["trusted_plugin_transform_result"],
+      "queuedVisibility": "inherits_input_visibility",
+      "derivedProvenancePolicy": "preserve_source_origin_or_mark_render_only",
+      "modelVisible": true,
+      "nonModelSurfacePolicy": "plugin_output_forbidden",
+      "failureMode": "ambiguous_source_origin_fails_closed"
+    },
+    {
+      "category": "provider_transform_output",
+      "sourceRowsRequired": ["prepared_provider_payload", "provider_transform_hash"],
+      "queuedVisibility": "inherits_prepared_payload_visibility",
+      "derivedProvenancePolicy": "projection_only_after_final_validation",
+      "modelVisible": true,
+      "nonModelSurfacePolicy": "projection_hashes_ids_counts_only",
+      "failureMode": "unvalidated_transform_fails_closed"
+    },
+    {
+      "category": "non_model_evidence",
+      "sourceRowsRequired": [],
+      "queuedVisibility": "not_model_visible",
+      "derivedProvenancePolicy": "content_safe_metadata_only",
+      "modelVisible": false,
+      "nonModelSurfacePolicy": "safe_errors_hashes_ids_counts_status_only",
+      "failureMode": "raw_content_leak_fails_test"
+    }
+  ]
+}

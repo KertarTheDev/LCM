@@ -50,9 +50,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Re
 
 export function referencePath(input: { directory: string; worktree: string; value: string }) {
   if (input.value.startsWith("~/")) return path.join(Global.Path.home, input.value.slice(2))
-  return path.isAbsolute(input.value)
-    ? input.value
-    : path.resolve(input.worktree === "/" ? input.directory : input.worktree, input.value)
+  // kilocode_change - config-local references should not escape to a parent git worktree
+  return path.isAbsolute(input.value) ? input.value : path.resolve(input.directory, input.value)
 }
 
 function resolveGit(

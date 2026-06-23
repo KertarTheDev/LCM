@@ -17,6 +17,9 @@ const SRC_DIR = path.join(ROOT, "src")
 const EXTENSION_FILE = path.join(ROOT, "src/extension.ts")
 const KILO_PROVIDER_FILE = path.join(ROOT, "src/KiloProvider.ts")
 const VSCODE_HOST_FILE = path.join(ROOT, "src/agent-manager/vscode-host.ts")
+const CLI_BACKEND_DIR = path.join(ROOT, "src/services/cli-backend")
+const LCM_PREWARM_FILE = path.join(ROOT, "src/kilo-provider/lcm-prewarm.ts")
+const EXTENSION_MESSAGES_FILE = path.join(ROOT, "webview-ui/src/types/messages/extension-messages.ts")
 
 function sliceBlock(source: string, start: number): string {
   const open = source.indexOf("{", start)
@@ -125,6 +128,47 @@ describe("Extension — package.json command sync", () => {
       mac: "cmd+shift+r",
       when: "activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel'",
     })
+  })
+})
+
+describe("Extension — backend logging hygiene", () => {
+  it("keeps routine CLI backend logs behind debugLog", () => {
+    const offenders: string[] = []
+    for (const entry of fs.readdirSync(CLI_BACKEND_DIR, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".ts") || entry.name === "debug-log.ts") continue
+      const full = path.join(CLI_BACKEND_DIR, entry.name)
+      const text = fs.readFileSync(full, "utf-8")
+      if (text.includes("console.log(")) offenders.push(entry.name)
+    }
+
+    expect(offenders, "Use debugLog() for routine CLI backend logs; keep console.warn/error for real issues.").toEqual(
+      [],
+    )
+  })
+})
+
+describe("Extension — LCM prewarm", () => {
+  it("prewarms session-scoped LCM health through the SDK capabilities route", () => {
+    const providerText = fs.readFileSync(KILO_PROVIDER_FILE, "utf-8")
+    const prewarmText = fs.readFileSync(LCM_PREWARM_FILE, "utf-8")
+
+    expect(providerText).toContain("prewarmLcmSession")
+    expect(providerText).toContain("LcmPrewarmer")
+    expect(prewarmText).toContain("session.lcm")
+    expect(prewarmText).toContain(".capabilities({")
+    expect(prewarmText).toContain("ensureReady")
+  })
+
+  it("keeps prompt sends independent from advisory LCM prewarm failures", () => {
+    const providerText = fs.readFileSync(KILO_PROVIDER_FILE, "utf-8")
+    const prewarmText = fs.readFileSync(LCM_PREWARM_FILE, "utf-8")
+    const extensionMessagesText = fs.readFileSync(EXTENSION_MESSAGES_FILE, "utf-8")
+
+    expect(providerText).toContain('this.prewarmLcmSession(resolved.sid, "promptSend", resolved.dir)')
+    expect(providerText).not.toContain("ensureLcmPromptReady")
+    expect(providerText).not.toContain("isLcmPromptReadinessError")
+    expect(prewarmText).not.toContain("LcmPromptReadinessError")
+    expect(extensionMessagesText).toContain("safeError?: LcmSafeError")
   })
 })
 

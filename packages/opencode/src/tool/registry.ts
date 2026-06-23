@@ -33,6 +33,17 @@ import { Flag } from "@opencode-ai/core/flag/flag" // kilocode_change
 import { RepositoryCache } from "@/reference/repository-cache"
 import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
+// kilocode_change start
+import { LcmDescribeTool } from "./lcm-describe"
+import { LcmExpandTool } from "./lcm-expand"
+import { LcmExpandQueryTool } from "./lcm-expand-query"
+import { LcmGrepTool } from "./lcm-grep"
+import { AgenticMapTool } from "./agentic-map"
+import { LcmMapCancelTool } from "./lcm-map-cancel"
+import { LcmMapStatusTool } from "./lcm-map-status"
+import { LcmReadTool } from "./lcm-read"
+import { LlmMapTool } from "./llm-map"
+// kilocode_change end
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "@opencode-ai/core/util/glob"
@@ -73,9 +84,36 @@ export function webSearchEnabled(
 type TaskDef = Tool.InferDef<typeof TaskTool>
 type ReadDef = Tool.InferDef<typeof ReadTool>
 
+// kilocode_change start
+const LCM_CANONICAL_TOOL_IDS: ReadonlySet<string> = new Set([
+  LcmGrepTool.id,
+  LcmDescribeTool.id,
+  LcmExpandTool.id,
+  LcmExpandQueryTool.id,
+  LcmReadTool.id,
+  LlmMapTool.id,
+  AgenticMapTool.id,
+  LcmMapStatusTool.id,
+  LcmMapCancelTool.id,
+])
+
+// kilocode_change end
 type State = {
   custom: Tool.Def[]
   builtin: Tool.Def[]
+  // kilocode_change start
+  lcm: {
+    grep: Tool.InferDef<typeof LcmGrepTool>
+    describe: Tool.InferDef<typeof LcmDescribeTool>
+    expand: Tool.InferDef<typeof LcmExpandTool>
+    expandQuery: Tool.InferDef<typeof LcmExpandQueryTool>
+    read: Tool.InferDef<typeof LcmReadTool>
+    llmMap: Tool.InferDef<typeof LlmMapTool>
+    agenticMap: Tool.InferDef<typeof AgenticMapTool>
+    mapStatus: Tool.InferDef<typeof LcmMapStatusTool>
+    mapCancel: Tool.InferDef<typeof LcmMapCancelTool>
+  }
+  // kilocode_change end
   task: TaskDef
   read: ReadDef
 }
@@ -146,6 +184,17 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    // kilocode_change start
+    const lcmgrep = yield* LcmGrepTool
+    const lcmdescribe = yield* LcmDescribeTool
+    const lcmexpand = yield* LcmExpandTool
+    const lcmexpandquery = yield* LcmExpandQueryTool
+    const lcmread = yield* LcmReadTool
+    const llmmap = yield* LlmMapTool
+    const agenticmap = yield* AgenticMapTool
+    const lcmmapstatus = yield* LcmMapStatusTool
+    const lcmmapcancel = yield* LcmMapCancelTool
+    // kilocode_change end
     const agent = yield* Agent.Service
     // kilocode_change start
     const suggesttool = yield* SuggestTool
@@ -198,7 +247,16 @@ export const layer: Layer.Layer<
                   metadata: {
                     ...metadata,
                     truncated: out.truncated,
-                    ...(out.truncated && { outputPath: out.outputPath }),
+                    // kilocode_change start
+                    ...(out.truncated
+                      ? {
+                          outputPath: out.outputPath,
+                          outputByteCount: out.outputByteCount,
+                          outputSha256: out.outputSha256,
+                          outputSidecarVersion: out.outputSidecarVersion,
+                        }
+                      : {}),
+                    // kilocode_change end
                   },
                 }
               }).pipe(
@@ -264,6 +322,17 @@ export const layer: Layer.Layer<
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
           suggest: Tool.init(suggesttool), // kilocode_change
+          // kilocode_change start
+          lcmgrep: Tool.init(lcmgrep),
+          lcmdescribe: Tool.init(lcmdescribe),
+          lcmexpand: Tool.init(lcmexpand),
+          lcmexpandquery: Tool.init(lcmexpandquery),
+          lcmread: Tool.init(lcmread),
+          llmmap: Tool.init(llmmap),
+          agenticmap: Tool.init(agenticmap),
+          lcmmapstatus: Tool.init(lcmmapstatus),
+          lcmmapcancel: Tool.init(lcmmapcancel),
+          // kilocode_change end
         })
 
         // kilocode_change start
@@ -298,9 +367,33 @@ export const layer: Layer.Layer<
               ...(["cli", "vscode"].includes(flags.client) ? [tool.suggest] : []),
               ...KiloToolRegistry.extra(kilo, cfg),
               ...(flags.experimentalLspTool ? [tool.lsp] : []),
+              // kilocode_change start
+              tool.lcmgrep,
+              tool.lcmdescribe,
+              tool.lcmexpand,
+              tool.lcmexpandquery,
+              tool.lcmread,
+              tool.llmmap,
+              tool.agenticmap,
+              tool.lcmmapstatus,
+              tool.lcmmapcancel,
+              // kilocode_change end
             ],
             kilo,
           ),
+          // kilocode_change end
+          // kilocode_change start
+          lcm: {
+            grep: tool.lcmgrep,
+            describe: tool.lcmdescribe,
+            expand: tool.lcmexpand,
+            expandQuery: tool.lcmexpandquery,
+            read: tool.lcmread,
+            llmMap: tool.llmmap,
+            agenticMap: tool.agenticmap,
+            mapStatus: tool.lcmmapstatus,
+            mapCancel: tool.lcmmapcancel,
+          },
           // kilocode_change end
           task: tool.task,
           read: tool.read,
@@ -377,7 +470,11 @@ export const layer: Layer.Layer<
             parameters: tool.parameters,
             jsonSchema: tool.jsonSchema,
           }
-          yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
+          // kilocode_change start
+          if (!LCM_CANONICAL_TOOL_IDS.has(tool.id)) {
+            yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
+          }
+          // kilocode_change end
           const jsonSchema =
             output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
               ? output.jsonSchema

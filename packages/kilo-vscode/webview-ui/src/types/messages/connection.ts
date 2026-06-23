@@ -7,7 +7,7 @@ export type SessionStatus = "idle" | "busy" | "retry" | "offline"
 // Rich status info for retry countdown and future extensions
 export type SessionStatusInfo =
   | { type: "idle" }
-  | { type: "busy" }
+  | { type: "busy"; message?: string }
   | { type: "retry"; attempt: number; message: string; next: number }
   | { type: "offline"; message: string }
 

@@ -84,8 +84,6 @@ export const dict = {
   "revert.banner.redo.all": "Alles opnieuw uitvoeren",
   "revert.banner.hint": "Stuur een nieuw bericht om dit definitief te maken",
   "revert.disabled.agentBusy": "Wacht tot de agent klaar is",
-  "command.session.compact": "Sessie comprimeren",
-  "command.session.compact.description": "De sessie samenvatten om de contextgrootte te verkleinen",
   "command.session.fork": "Afsplitsen van bericht",
   "command.session.fork.description": "Een nieuwe sessie aanmaken vanaf een eerder bericht",
   "command.session.share": "Sessie delen",
@@ -436,9 +434,6 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "Bewerk- en schrijfrechten worden automatisch goedgekeurd",
   "toast.permissions.autoaccept.off.title": "Automatisch accepteren van bewerkingen gestopt",
   "toast.permissions.autoaccept.off.description": "Voor bewerk- en schrijfrechten is goedkeuring vereist",
-
-  "toast.model.none.title": "Geen model geselecteerd",
-  "toast.model.none.description": "Verbind een provider om deze sessie samen te vatten",
 
   "toast.file.loadFailed.title": "Bestand laden mislukt",
   "toast.file.listFailed.title": "Bestanden weergeven mislukt",
@@ -1463,13 +1458,9 @@ export const dict = {
   "settings.checkpoints.enable.description":
     "Maak checkpoints aan voor het bewerken van bestanden zodat je eerdere staten kunt herstellen",
 
-  "settings.context.autoCompaction.title": "Automatische Compactie",
-  "settings.context.autoCompaction.description": "Context automatisch compacteren voordat deze de limiet bereikt",
   "settings.context.compactionLimit.title": "Limiet voor automatisch compacteren",
   "settings.context.compactionLimit.description":
     "Compacteer wanneer de context dit percentage van het modelvenster bereikt. Laat leeg om alleen de veiligheidsbuffer te gebruiken.",
-  "settings.context.prune.title": "Oude Uitvoer Opschonen",
-  "settings.context.prune.description": "Verwijder oude tool uitvoer tijdens compactie",
   "settings.context.watcherPatterns": "File Watcher Negeer Patronen",
   "settings.context.watcherPatterns.description": "Glob-patronen voor bestanden die de watcher moet negeren",
 

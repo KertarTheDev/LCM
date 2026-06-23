@@ -162,12 +162,134 @@ describe("sanitizeCustomProviderConfig", () => {
     })
   })
 
-  it("rejects unknown fields", () => {
+  it("preserves explicit model limits and xhigh reasoning variants", () => {
+    const result = sanitizeCustomProviderConfig({
+      name: "Local Provider",
+      options: { baseURL: "http://127.0.0.1:11434/v1" },
+      models: {
+        "qwen-local": {
+          name: "Qwen Local",
+          limit: { context: 100000, input: 90000, output: 20000 },
+          variants: {
+            deep: { reasoningEffort: "xhigh" },
+          },
+        },
+      },
+    })
+
+    expect(result).toEqual({
+      value: {
+        npm: "@ai-sdk/openai-compatible",
+        name: "Local Provider",
+        options: { baseURL: "http://127.0.0.1:11434/v1" },
+        models: {
+          "qwen-local": {
+            name: "Qwen Local",
+            limit: { context: 100000, input: 90000, output: 20000 },
+            variants: {
+              deep: { reasoningEffort: "xhigh" },
+            },
+          },
+        },
+      },
+    })
+  })
+
+  it("preserves core provider and model settings used by custom integrations while stripping secret options", () => {
+    const result = sanitizeCustomProviderConfig({
+      api: "openai-compatible",
+      npm: "malicious-package",
+      name: "Ollama",
+      env: ["OLLAMA_API_KEY", "OLLAMA_FALLBACK_KEY"],
+      id: "ollama",
+      whitelist: ["qwen"],
+      blacklist: ["old"],
+      options: {
+        apiKey: "{env:OLLAMA_API_KEY}",
+        api_key: "sk-should-not-persist",
+        accessToken: "token-should-not-persist",
+        baseURL: "http://127.0.0.1:11434/v1",
+        timeout: false,
+        chunkTimeout: 120000,
+        setCacheKey: true,
+        providerSpecificOption: { keep: true },
+      },
+      models: {
+        "qwen3:32b": {
+          id: "qwen3:32b",
+          name: "Qwen 3 32B",
+          family: "qwen3",
+          release_date: "2025-04-29",
+          attachment: true,
+          reasoning: true,
+          temperature: true,
+          tool_call: true,
+          interleaved: { field: "reasoning_details" },
+          cost: { input: 0, output: 0 },
+          modalities: { input: ["text", "image"], output: ["text"] },
+          experimental: true,
+          status: "beta",
+          provider: { npm: "@ai-sdk/openai-compatible", api: "ollama" },
+          options: { num_ctx: 100000 },
+          headers: { " X-Ollama ": " local " },
+          limit: { context: 100000, output: 20000 },
+          variants: {
+            local: { disabled: false, reasoningEffort: "xhigh", nativeOllamaOption: "preserve" },
+          },
+        },
+      },
+    })
+
+    expect(result).toEqual({
+      value: {
+        npm: "@ai-sdk/openai-compatible",
+        api: "openai-compatible",
+        name: "Ollama",
+        env: ["OLLAMA_API_KEY", "OLLAMA_FALLBACK_KEY"],
+        id: "ollama",
+        whitelist: ["qwen"],
+        blacklist: ["old"],
+        options: {
+          timeout: false,
+          chunkTimeout: 120000,
+          setCacheKey: true,
+          providerSpecificOption: { keep: true },
+          baseURL: "http://127.0.0.1:11434/v1",
+        },
+        models: {
+          "qwen3:32b": {
+            attachment: true,
+            reasoning: true,
+            temperature: true,
+            tool_call: true,
+            interleaved: { field: "reasoning_details" },
+            cost: { input: 0, output: 0 },
+            modalities: { input: ["text", "image"], output: ["text"] },
+            experimental: true,
+            status: "beta",
+            options: { num_ctx: 100000 },
+            name: "Qwen 3 32B",
+            id: "qwen3:32b",
+            family: "qwen3",
+            release_date: "2025-04-29",
+            provider: { npm: "@ai-sdk/openai-compatible", api: "ollama" },
+            headers: { "X-Ollama": "local" },
+            limit: { context: 100000, output: 20000 },
+            variants: {
+              local: { disabled: false, reasoningEffort: "xhigh", nativeOllamaOption: "preserve" },
+            },
+          },
+        },
+      },
+    })
+  })
+
+  it("rejects unknown top-level fields", () => {
     const result = sanitizeCustomProviderConfig({
       name: "Bad Provider",
+      mcpServer: "https://malicious.example",
       options: {
         baseURL: "https://example.com/v1",
-        mcpServer: "https://malicious.example",
       },
       models: { "model-1": { name: "Model One" } },
     })

@@ -84,8 +84,6 @@ export const dict = {
   "revert.banner.redo.all": "إعادة الكل",
   "revert.banner.hint": "أرسل رسالة جديدة لجعل هذا دائمًا",
   "revert.disabled.agentBusy": "انتظر انتهاء الوكيل",
-  "command.session.compact": "ضغط الجلسة",
-  "command.session.compact.description": "تلخيص الجلسة لتقليل حجم السياق",
   "command.session.fork": "تشعب من الرسالة",
   "command.session.fork.description": "إنشاء جلسة جديدة من رسالة سابقة",
   "command.session.share": "مشاركة الجلسة",
@@ -429,9 +427,6 @@ export const dict = {
   "toast.workspace.enabled.description": "الآن يتم عرض عدة worktrees في الشريط الجانبي",
   "toast.workspace.disabled.title": "تم تعطيل مساحات العمل",
   "toast.workspace.disabled.description": "يتم عرض worktree الرئيسي فقط في الشريط الجانبي",
-
-  "toast.model.none.title": "لم يتم تحديد نموذج",
-  "toast.model.none.description": "قم بتوصيل موفر لتلخيص هذه الجلسة",
 
   "toast.file.loadFailed.title": "فشل تحميل الملف",
 
@@ -1459,13 +1454,9 @@ export const dict = {
     "منع الإجراءات المتطابقة المتكررة. يتم تشغيله عندما يتكرر نفس استدعاء الأداة بمدخلات متطابقة.",
   "settings.checkpoints.enable.title": "تمكين اللقطات",
   "settings.checkpoints.enable.description": "إنشاء نقاط فحص قبل تحرير الملفات",
-  "settings.context.autoCompaction.title": "ضغط تلقائي",
-  "settings.context.autoCompaction.description": "ضغط السياق تلقائياً قبل أن يصل إلى الحد",
   "settings.context.compactionLimit.title": "حد الضغط التلقائي",
   "settings.context.compactionLimit.description":
     "اضغط عندما يصل السياق إلى هذه النسبة المئوية من نافذة النموذج. اتركه فارغاً لاستخدام هامش الأمان فقط.",
-  "settings.context.prune.title": "تقليم المخرجات القديمة",
-  "settings.context.prune.description": "إزالة مخرجات الأدوات القديمة أثناء الضغط",
   "settings.context.watcherPatterns": "أنماط تجاهل مراقب الملفات",
   "settings.context.watcherPatterns.description": "أنماط glob للملفات التي يجب على المراقب تجاهلها",
 

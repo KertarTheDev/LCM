@@ -1,4 +1,14 @@
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@kilocode/sdk/v2/client"
+import type {
+  Event,
+  LcmDbDiagnoseReport,
+  LcmDbRebuildReport,
+  LcmMaintenanceResult,
+  LcmPromptExportReport,
+  LcmSafeError,
+  LcmSettingsState,
+  ProviderAuthAuthorization,
+  ProviderAuthMethod,
+} from "@kilocode/sdk/v2/client"
 import type { DiffSourceCapabilities, DiffSourceDescriptor } from "../../../../src/diff/sources/types"
 import type { PartBatch, PartRemove, PartUpdate } from "../../../../src/shared/stream-messages"
 import type { SessionMode } from "../../context/worktree-mode"
@@ -75,6 +85,10 @@ export interface WorkspaceDirectoryChangedMessage {
   directory: string
 }
 
+export interface LcmMemoryContextChangedMessage {
+  type: "lcmMemoryContextChanged"
+}
+
 export interface LanguageChangedMessage {
   type: "languageChanged"
   locale: string
@@ -98,6 +112,7 @@ export interface ErrorMessage {
 export interface SendMessageFailedMessage {
   type: "sendMessageFailed"
   error: string
+  safeError?: LcmSafeError
   text: string
   sessionID?: string
   draftID?: string
@@ -133,6 +148,35 @@ export interface SessionErrorMessage {
   sessionID?: string
   error?: { name: string; data?: Record<string, unknown> }
 }
+
+export type LcmEventEnvelopeMessage = Extract<Event, { type: `lcm.${string}` }>["properties"]
+export type LcmMetricsSnapshotMessage = Extract<Event, { type: "lcm.metrics.updated" }>["properties"]["payload"]
+
+export interface LcmEventMessage {
+  type: "lcmEvent"
+  event: LcmEventEnvelopeMessage
+}
+
+export type LcmWebviewResultMessage<TType extends string, TBody> =
+  | {
+      type: `${TType}.result`
+      requestID: string
+      ok: true
+      body: TBody
+    }
+  | {
+      type: `${TType}.result`
+      requestID: string
+      ok: false
+      error: LcmSafeError
+    }
+
+export type RequestLcmSettingsResultMessage = LcmWebviewResultMessage<"requestLcmSettings", LcmSettingsState>
+export type UpdateLcmSettingsResultMessage = LcmWebviewResultMessage<"updateLcmSettings", LcmSettingsState>
+export type CancelLcmMaintenanceResultMessage = LcmWebviewResultMessage<"cancelLcmMaintenance", LcmMaintenanceResult>
+export type DiagnoseLcmDbResultMessage = LcmWebviewResultMessage<"diagnoseLcmDb", LcmDbDiagnoseReport>
+export type RebuildLcmDbResultMessage = LcmWebviewResultMessage<"rebuildLcmDb", LcmDbRebuildReport>
+export type ExportLcmPromptsResultMessage = LcmWebviewResultMessage<"exportLcmPrompts", LcmPromptExportReport>
 
 export interface PermissionRequestMessage {
   type: "permissionRequest"
@@ -929,7 +973,7 @@ export interface ProviderActionErrorMessage {
 export interface CustomProviderModelsFetchedMessage {
   type: "customProviderModelsFetched"
   requestId: string
-  models?: Array<{ id: string; name: string }>
+  models?: Array<{ id: string; name: string; contextLimit?: number; outputLimit?: number }>
   error?: string
   /** True when error was HTTP 401/403 — hints the user to check their API key */
   auth?: boolean
@@ -972,6 +1016,13 @@ export type ExtensionMessage =
   | SessionStatusMessage
   | SessionTurnClosedMessage
   | SessionErrorMessage
+  | LcmEventMessage
+  | RequestLcmSettingsResultMessage
+  | UpdateLcmSettingsResultMessage
+  | CancelLcmMaintenanceResultMessage
+  | DiagnoseLcmDbResultMessage
+  | RebuildLcmDbResultMessage
+  | ExportLcmPromptsResultMessage
   | PermissionRequestMessage
   | PermissionResolvedMessage
   | PermissionErrorMessage
@@ -1055,6 +1106,7 @@ export type ExtensionMessage =
   | AgentManagerExternalWorktreesMessage
   | AgentManagerImportResultMessage
   | WorkspaceDirectoryChangedMessage
+  | LcmMemoryContextChangedMessage
   | AgentManagerWorktreeDiffMessage
   | AgentManagerWorktreeDiffFileMessage
   | AgentManagerWorktreeDiffLoadingMessage

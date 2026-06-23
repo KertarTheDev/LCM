@@ -88,8 +88,6 @@ export const dict = {
   "revert.banner.redo.all": "Alle wiederholen",
   "revert.banner.hint": "Sende eine neue Nachricht, um dies dauerhaft zu machen",
   "revert.disabled.agentBusy": "Warten bis der Agent fertig ist",
-  "command.session.compact": "Sitzung komprimieren",
-  "command.session.compact.description": "Sitzung zusammenfassen, um die Kontextgröße zu reduzieren",
   "command.session.fork": "Von Nachricht abzweigen",
   "command.session.fork.description": "Neue Sitzung aus einer früheren Nachricht erstellen",
   "command.session.share": "Sitzung teilen",
@@ -438,9 +436,6 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "Bearbeitungs- und Schreibrechte werden automatisch genehmigt",
   "toast.permissions.autoaccept.off.title": "Automatische Annahme von Änderungen gestoppt",
   "toast.permissions.autoaccept.off.description": "Bearbeitungs- und Schreibrechte erfordern Genehmigung",
-
-  "toast.model.none.title": "Kein Modell ausgewählt",
-  "toast.model.none.description": "Verbinden Sie einen Anbieter, um diese Sitzung zusammenzufassen",
 
   "toast.file.loadFailed.title": "Datei konnte nicht geladen werden",
 
@@ -1519,13 +1514,9 @@ export const dict = {
   "settings.checkpoints.enable.title": "Snapshots aktivieren",
   "settings.checkpoints.enable.description":
     "Prüfpunkte vor Dateibearbeitungen erstellen, um vorherige Zustände wiederherstellen zu können",
-  "settings.context.autoCompaction.title": "Automatische Komprimierung",
-  "settings.context.autoCompaction.description": "Kontext automatisch komprimieren, bevor er das Limit erreicht",
   "settings.context.compactionLimit.title": "Limit für automatische Komprimierung",
   "settings.context.compactionLimit.description":
     "Komprimieren, wenn der Kontext diesen Prozentsatz des Modellfensters erreicht. Leer lassen, um nur den Sicherheitspuffer zu verwenden.",
-  "settings.context.prune.title": "Alte Ausgaben bereinigen",
-  "settings.context.prune.description": "Alte Werkzeugausgaben während der Komprimierung entfernen",
   "settings.context.watcherPatterns": "Datei-Watcher-Ignorierungsmuster",
   "settings.context.watcherPatterns.description": "Glob-Muster für Dateien, die der Watcher ignorieren soll",
 

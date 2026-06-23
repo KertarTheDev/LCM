@@ -1,0 +1,37 @@
+{
+  "id": "closure-message-v2-current-shape-v1",
+  "generatedFrom": {
+    "repository": "kilocode-lcm",
+    "sourceFile": "packages/opencode/src/session/message-v2.ts",
+    "inspection": "TypeScript LSP symbols plus source review",
+    "date": "2026-04-30"
+  },
+  "taxonomy": {
+    "roles": ["user", "assistant"],
+    "partKinds": [
+      "text",
+      "reasoning",
+      "file",
+      "tool",
+      "step-start",
+      "step-finish",
+      "snapshot",
+      "patch",
+      "agent",
+      "retry",
+      "compaction",
+      "subtask"
+    ],
+    "toolStates": ["pending", "running", "completed", "error"],
+    "terminalToolStates": ["completed", "error"],
+    "fileSourceKinds": ["file", "symbol", "resource"],
+    "partRenderFlags": ["ignored", "synthetic", "compatibility"]
+  },
+  "currentShapeNotes": {
+    "durablePartIDAvailability": "All current persisted MessageV2 parts extend PartBase and carry id, sessionID, and messageID; derived source_part_key remains required for imports or future rows without a durable part ID.",
+    "rendererFlags": "Current persisted schemas expose ignored and synthetic only on text parts. No persisted compatibility flag exists in current MessageV2; milestone 06 stores false when absent and keeps the column/key bit for future compatibility rows.",
+    "providerMediaBytePersistence": "File parts persist url, mime, filename, and optional source metadata. Tool completed attachments are FilePart records. Data URLs may contain provider-media bytes inline until milestone 16 introduces large-file-backed source rows.",
+    "interruptedToolOutputShape": "Errored tool parts may render output-available when state.metadata.interrupted is true and state.metadata.output is a string; milestone 06 stores that value as tool_output_text and also stores tool_error_text.",
+    "unmappedRendererAffectingFields": "No additional current persisted role, part-kind, tool-state, file-source, or renderer flag discriminator was found beyond the taxonomy above. Dynamic prompt injections remain render-only and are not immutable source rows."
+  }
+}

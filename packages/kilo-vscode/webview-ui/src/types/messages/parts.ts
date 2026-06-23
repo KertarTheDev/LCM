@@ -1,15 +1,24 @@
 // Tool state for tool parts
+export type ToolMetadata = Record<string, unknown>
+export type ToolTime = {
+  start: number
+  end?: number
+  compacted?: number
+}
+
 export type ToolState =
-  | { status: "pending"; input: Record<string, unknown> }
-  | { status: "running"; input: Record<string, unknown>; title?: string }
+  | { status: "pending"; input: Record<string, unknown>; raw?: string; metadata?: ToolMetadata; time?: ToolTime }
+  | { status: "running"; input: Record<string, unknown>; title?: string; metadata?: ToolMetadata; time?: ToolTime }
   | {
       status: "completed"
       input: Record<string, unknown>
       output: string
       title: string
-      metadata?: Record<string, unknown>
+      metadata?: ToolMetadata
+      time?: ToolTime
+      attachments?: FilePart[]
     }
-  | { status: "error"; input: Record<string, unknown>; error: string }
+  | { status: "error"; input: Record<string, unknown>; error: string; metadata?: ToolMetadata; time?: ToolTime }
 
 // Base part interface - all parts have these fields
 export interface BasePart {
@@ -47,8 +56,10 @@ export interface FilePart extends BasePart {
 
 export interface ToolPart extends BasePart {
   type: "tool"
+  callID?: string
   tool: string
   state: ToolState
+  metadata?: ToolMetadata
 }
 
 export interface ReasoningPart extends BasePart {
@@ -97,10 +108,34 @@ export interface TokenUsage {
   cache?: { read: number; write: number }
 }
 
-// Context usage derived from the last assistant message's tokens
+// Context usage derived from LCM metrics or the last assistant message's tokens.
 export interface ContextUsage {
   tokens: number
   percentage: number | null
+  source: "lcm_active_budget" | "provider_context"
+  label: string
+  limit?: number
+  providerContextLimit?: number
+  providerOutputLimit?: number
+  outputReserve?: number
+  systemPromptTokens?: number
+  toolSchemaTokens?: number
+  tokenCounterMode?: string
+  tokenCounterVersion?: string
+  freshTailTokens?: number
+  softBacklogTokens?: number
+  softThreshold?: number
+  freshTailRawTokens?: number
+  freshTailRawItemCount?: number
+  unconsumedRawTokens?: number
+  unconsumedRawItemCount?: number
+  protectedTailRawTokens?: number
+  protectedTailRawItemCount?: number
+  rawLaneTokens?: number
+  hardFillRatio?: number | null
+  rawLaneRatio?: number | null
+  softBacklogRatio?: number | null
+  budgetStatus?: "budgeted" | "unavailable" | "provider_limit_fallback"
 }
 
 export interface FileAttachment {

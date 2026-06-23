@@ -9,6 +9,9 @@ import { ExperimentalApi } from "./groups/experimental"
 import { FileApi } from "./groups/file"
 import { GlobalApi } from "./groups/global"
 import { InstanceApi } from "./groups/instance"
+// kilocode_change start
+import { LcmApi } from "./groups/lcm"
+// kilocode_change end
 import { McpApi } from "./groups/mcp"
 import { PermissionApi } from "./groups/permission"
 import { ProjectApi } from "./groups/project"
@@ -53,6 +56,9 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(ExperimentalApi)
   .addHttpApi(FileApi)
   .addHttpApi(InstanceApi)
+  // kilocode_change start
+  .addHttpApi(LcmApi)
+  // kilocode_change end
   .addHttpApi(McpApi)
   .addHttpApi(ProjectApi)
   .addHttpApi(PtyApi)

@@ -644,32 +644,6 @@ export function Session() {
       },
     },
     {
-      title: "Compact session",
-      value: "session.compact",
-      category: "Session",
-      slash: {
-        name: "compact",
-        aliases: ["summarize"],
-      },
-      run: () => {
-        const selectedModel = local.model.current()
-        if (!selectedModel) {
-          toast.show({
-            variant: "warning",
-            message: "Connect a provider to summarize this session",
-            duration: 3000,
-          })
-          return
-        }
-        void sdk.client.session.summarize({
-          sessionID: route.sessionID,
-          modelID: selectedModel.modelID,
-          providerID: selectedModel.providerID,
-        })
-        dialog.clear()
-      },
-    },
-    {
       title: "Unshare session",
       value: "session.unshare",
       category: "Session",

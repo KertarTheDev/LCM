@@ -465,6 +465,9 @@ type SyncEvent =
 
 type StreamEvent = Event | SyncEvent
 
+type SdkSessionStatus = Extract<Event, { type: "session.status" }>["properties"]["status"]
+type SdkSessionStatusType = SdkSessionStatus["type"]
+
 export type WebviewMessage =
   | PartUpdate
   | PartBatch
@@ -477,7 +480,15 @@ export type WebviewMessage =
       type: "messageCreated"
       message: Record<string, unknown>
     }
-  | { type: "sessionStatus"; sessionID: string; status: string; attempt?: number; message?: string; next?: number }
+  | {
+      type: "sessionStatus"
+      sessionID: string
+      status: SdkSessionStatusType
+      attempt?: number
+      message?: string
+      next?: number
+    }
+  | { type: "lcmEvent"; event: Extract<Event, { type: `lcm.${string}` }>["properties"] }
   | { type: "sessionTurnClosed"; sessionID: string; reason: "completed" | "error" | "interrupted" }
   | {
       type: "permissionRequest"
@@ -554,59 +565,95 @@ function mapPartEvent(event: PartEvent, sessionID: string | undefined): WebviewM
   }
 }
 
-export function mapSSEEventToWebviewMessage(event: StreamEvent, sessionID: string | undefined): WebviewMessage {
-  if (event.type === "sync") {
-    switch (event.name) {
-      case "message.updated.1": {
-        const info = event.data.info
-        return {
-          type: "messageCreated",
-          message: {
-            ...info,
-            createdAt: new Date(info.time.created).toISOString(),
-          },
-        }
+function isLcmEvent(event: Event): event is Extract<Event, { type: `lcm.${string}` }> {
+  return event.type.startsWith("lcm.")
+}
+
+function mapSessionStatusEvent(event: Extract<Event, { type: "session.status" }>): WebviewMessage {
+  const info = event.properties.status
+  const base = {
+    type: "sessionStatus" as const,
+    sessionID: event.properties.sessionID,
+    status: info.type,
+  }
+
+  switch (info.type) {
+    case "retry":
+      return {
+        ...base,
+        attempt: info.attempt,
+        message: info.message,
+        next: info.next,
       }
-      case "message.removed.1":
-        return {
-          type: "messageRemoved",
-          sessionID: event.data.sessionID,
-          messageID: event.data.messageID,
-        }
-      case "message.part.updated.1":
-      case "message.part.removed.1":
-        return mapPartEvent(event, sessionID)
-      case "session.created.1":
-        return {
-          type: "sessionCreated",
-          session: sessionToWebview(event.data.info),
-        }
-      case "session.updated.1":
-        return null
-      case "session.deleted.1":
-        return {
-          type: "sessionDeleted",
-          sessionID: event.data.sessionID,
-        }
+    case "offline":
+      return {
+        ...base,
+        message: info.message,
+      }
+    case "busy":
+      return info.message ? { ...base, message: info.message } : base
+    case "idle":
+      return base
+  }
+
+  return {
+    ...base,
+  }
+}
+
+function mapSyncEventToWebviewMessage(event: SyncEvent, sessionID: string | undefined): WebviewMessage {
+  switch (event.name) {
+    case "message.updated.1": {
+      const info = event.data.info
+      return {
+        type: "messageCreated",
+        message: {
+          ...info,
+          createdAt: new Date(info.time.created).toISOString(),
+        },
+      }
+    }
+    case "message.removed.1":
+      return {
+        type: "messageRemoved",
+        sessionID: event.data.sessionID,
+        messageID: event.data.messageID,
+      }
+    case "message.part.updated.1":
+    case "message.part.removed.1":
+      return mapPartEvent(event, sessionID)
+    case "session.created.1":
+      return {
+        type: "sessionCreated",
+        session: sessionToWebview(event.data.info),
+      }
+    case "session.updated.1":
+      return null
+    case "session.deleted.1":
+      return {
+        type: "sessionDeleted",
+        sessionID: event.data.sessionID,
+      }
+  }
+
+  return null
+}
+
+function mapEventToWebviewMessage(event: Event, sessionID: string | undefined): WebviewMessage {
+  if (event.type === "message.part.delta") {
+    return mapPartEvent(event, sessionID)
+  }
+
+  if (isLcmEvent(event)) {
+    return {
+      type: "lcmEvent",
+      event: event.properties,
     }
   }
-  if (event.type === "message.part.delta") return mapPartEvent(event, sessionID)
+
   switch (event.type) {
     case "session.status": {
-      const info = event.properties.status
-      const status = info.type
-      const extra =
-        info.type === "retry"
-          ? { attempt: info.attempt, message: info.message, next: info.next }
-          : info.type === "offline"
-            ? { message: info.message }
-            : {}
-      return {
-        type: "sessionStatus" as const,
-        sessionID: event.properties.sessionID,
-        status,
-        ...extra,
-      }
+      return mapSessionStatusEvent(event)
     }
     case "session.turn.close":
       return {
@@ -691,6 +738,11 @@ export function mapSSEEventToWebviewMessage(event: StreamEvent, sessionID: strin
   }
 }
 
+export function mapSSEEventToWebviewMessage(event: StreamEvent, sessionID: string | undefined): WebviewMessage {
+  if (event.type === "sync") return mapSyncEventToWebviewMessage(event, sessionID)
+  return mapEventToWebviewMessage(event, sessionID)
+}
+
 export function mapCloudSessionMessageToWebviewMessage(message: CloudSessionMessage) {
   return {
     id: message.info.id,
@@ -712,11 +764,14 @@ export function mapCloudSessionMessageToWebviewMessage(message: CloudSessionMess
  * When expectedProjectID is undefined (not yet resolved), nothing is filtered.
  */
 export function isEventFromForeignProject(event: StreamEvent, expectedProjectID: string | undefined): boolean {
-  if (!expectedProjectID || event.type !== "sync") return false
-  if (event.name === "session.created.1" || event.name === "session.deleted.1") {
-    return event.data.info.projectID !== expectedProjectID
+  if (!expectedProjectID) return false
+  if (event.type === "sync") {
+    if (event.name === "session.created.1" || event.name === "session.deleted.1") {
+      return event.data.info.projectID !== expectedProjectID
+    }
+    if (event.name !== "session.updated.1") return false
+    const project = event.data.info.projectID
+    return project !== undefined && project !== expectedProjectID
   }
-  if (event.name !== "session.updated.1") return false
-  const project = event.data.info.projectID
-  return project !== undefined && project !== expectedProjectID
+  return false
 }

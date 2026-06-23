@@ -25,7 +25,13 @@ if (!existsSync(cliDistDir)) {
   throw new Error(`CLI dist directory not found: ${cliDistDir}`)
 }
 
-const targets = [
+type TargetConfig = {
+  target: string
+  cliDir: string
+  binary: string
+}
+
+const allTargets: TargetConfig[] = [
   { target: "linux-x64", cliDir: "@kilocode/cli-linux-x64", binary: "kilo" },
   { target: "linux-arm64", cliDir: "@kilocode/cli-linux-arm64", binary: "kilo" },
   { target: "alpine-x64", cliDir: "@kilocode/cli-linux-x64-musl", binary: "kilo" },
@@ -36,9 +42,58 @@ const targets = [
   { target: "win32-arm64", cliDir: "@kilocode/cli-windows-arm64", binary: "kilo.exe" },
 ]
 
+function selectedTargetNames() {
+  const names: string[] = []
+  for (let i = 2; i < process.argv.length; i++) {
+    const arg = process.argv[i]
+    if (arg === "--target") {
+      const value = process.argv[i + 1]
+      if (!value || value.startsWith("-")) {
+        throw new Error("--target requires a VSIX target name")
+      }
+      names.push(value)
+      i++
+      continue
+    }
+    if (arg.startsWith("--target=")) {
+      const value = arg.slice("--target=".length)
+      if (!value) {
+        throw new Error("--target requires a VSIX target name")
+      }
+      names.push(value)
+    }
+  }
+  return [...new Set(names)]
+}
+
+const requestedTargets = selectedTargetNames()
+const targets =
+  requestedTargets.length === 0 ? allTargets : allTargets.filter((config) => requestedTargets.includes(config.target))
+
+const missingTargets = requestedTargets.filter((target) => !allTargets.some((config) => config.target === target))
+if (missingTargets.length > 0) {
+  throw new Error(
+    `Unknown VSIX target(s): ${missingTargets.join(", ")}. Valid targets: ${allTargets
+      .map((config) => config.target)
+      .join(", ")}`,
+  )
+}
+
+if (requestedTargets.length > 0) {
+  console.log(`Building selected VSIX target(s): ${targets.map((config) => config.target).join(", ")}`)
+}
+
 const binDir = join(import.meta.dir, "..", "bin")
 const distDir = join(import.meta.dir, "..", "dist")
 const outDir = join(import.meta.dir, "..", "out")
+const buildStateDir = process.env.KILO_VSCODE_BUILD_STATE_DIR ?? join(outDir, ".build-state")
+const buildEnv = {
+  ...process.env,
+  XDG_DATA_HOME: process.env.XDG_DATA_HOME ?? join(buildStateDir, "data"),
+  XDG_CACHE_HOME: process.env.XDG_CACHE_HOME ?? join(buildStateDir, "cache"),
+  XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME ?? join(buildStateDir, "config"),
+  XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? join(buildStateDir, "state"),
+}
 
 console.log("\n🧹 Cleaning up directories...")
 for (const dir of [binDir, distDir, outDir]) {
@@ -52,12 +107,12 @@ mkdirSync(outDir, { recursive: true })
 mkdirSync(distDir, { recursive: true })
 
 console.log("\n🔄 Rebuilding SDK types (ensures dist/ is in sync with server API)...")
-await $`bun run --cwd ${join(import.meta.dir, "..", "..", "sdk", "js")} build`
+await $`bun run --cwd ${join(import.meta.dir, "..", "..", "sdk", "js")} build`.env(buildEnv)
 
 console.log("\n📦 Compiling extension...")
-await $`bun run check-types`
-await $`bun run lint`
-await $`node ${join(import.meta.dir, "..", "esbuild.js")} --production`
+await $`bun run check-types`.env(buildEnv)
+await $`bun run lint`.env(buildEnv)
+await $`node ${join(import.meta.dir, "..", "esbuild.js")} --production`.env(buildEnv)
 
 for (const config of targets) {
   console.log(`\n🎯 Processing target: ${config.target}`)
@@ -91,8 +146,8 @@ for (const config of targets) {
   const vsixPath = join(outDir, `kilo-vscode-${config.target}.vsix`)
   const args = ["--no-dependencies", "--skip-license", "--target", config.target, "-o", vsixPath]
   if (prerelease) args.push("--pre-release")
-  await $`vsce package ${args}`.env({
-    ...process.env,
+  await $`bunx vsce package ${args}`.env({
+    ...buildEnv,
     npm_config_ignore_scripts: "true",
   })
   console.log(`  ✅ Created ${vsixPath}`)

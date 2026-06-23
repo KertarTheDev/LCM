@@ -1188,11 +1188,11 @@ describe("plan follow-up", () => {
       expect(createdAt!).toBeLessThan(handoverResolvedAt!)
     }))
 
-  test("ask - injects plan-file message before generateHandover resolves on Start new session", () =>
+  test("ask - waits for final handover before writing follow-up user message", () =>
     withInstance(async () => {
-      // Regression guard: the plan-file handoff must appear in the new session tab
-      // immediately after the tab switch without waiting for the slow handover LLM
-      // call. The handover is then appended to the same part in-place.
+      // Regression guard: session.created must still fire immediately for the
+      // VS Code pending-followup gate, but LCM source content is immutable once
+      // synced. Do not write a user part that will later be mutated in-place.
       const seeded = await seed({ text: "1. Build" })
 
       let followup: SessionID | undefined
@@ -1247,41 +1247,23 @@ describe("plan follow-up", () => {
         answers: [[PlanFollowup.ANSWER_NEW_SESSION]],
       })
 
-      // Poll until the plan text lands. Handover is still pending because
-      // deferred has not resolved yet.
       for (let i = 0; i < 100; i++) {
-        if (followup) {
-          const msgs = await store.messages({ sessionID: followup })
-          const user = msgs.find((m) => m.info.role === "user")
-          const part = user?.parts.find((p) => p.type === "text")
-          if (part?.type === "text" && part.text.includes("Read this file first")) break
-        }
+        if (followup) break
         await Bun.sleep(10)
       }
 
       expect(followup).toBeDefined()
       if (!followup) return
       const initial = await store.messages({ sessionID: followup })
-      const initialUser = initial.find((m) => m.info.role === "user")
-      const initialPart = initialUser?.parts.find((p) => p.type === "text")
-      expect(initialPart?.type).toBe("text")
-      if (initialPart?.type !== "text") return
-      expect(initialPart.text).toContain("Plan file:")
-      expect(initialPart.text).toContain("Read this file first and treat it as the source of truth for implementation.")
-      expect(initialPart.text).not.toContain("Implement the following plan:")
-      expect(initialPart.text).not.toContain("1. Build")
-      // Handover is still deferred — must not be present yet.
-      expect(initialPart.text).not.toContain("## Handover from Planning Session")
+      expect(initial).toHaveLength(0)
 
       deferred.resolve("## Discoveries\n\nexample")
       await expect(pending).resolves.toBe("break")
 
-      // Same part ID updated in-place — handover section now present.
       const final = await store.messages({ sessionID: followup })
       const finalUser = final.find((m) => m.info.role === "user")
       const finalPart = finalUser?.parts.find((p) => p.type === "text")
       if (finalPart?.type !== "text") return
-      expect(finalPart.id).toBe(initialPart.id)
       expect(finalPart.text).toContain("Read this file first and treat it as the source of truth for implementation.")
       expect(finalPart.text).not.toContain("Implement the following plan:")
       expect(finalPart.text).toContain("## Handover from Planning Session")

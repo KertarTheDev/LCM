@@ -6,7 +6,12 @@ import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
-import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { Command } from "@/command" // kilocode_change
+import { disposeAllInstances, TestInstance } from "../fixture/fixture" // kilocode_change
+// kilocode_change start
+import { LCM_MAP_TOOL_DESCRIPTIONS } from "../../src/session/lcm/map"
+import { LCM_RETRIEVAL_TOOL_DESCRIPTIONS } from "../../src/session/lcm/retrieval"
+// kilocode_change end
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -34,7 +39,6 @@ import { ProviderID, ModelID } from "@/provider/schema"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Command } from "@/command" // kilocode_change
 
 const node = CrossSpawnSpawner.defaultLayer
 const configLayer = TestConfig.layer({
@@ -46,11 +50,40 @@ type RegistryLayerOptions = {
   plugin?: Layer.Layer<Plugin.Service>
 }
 
+// kilocode_change start
+const pluginLayer = (
+  onTrigger?: (name: string, input: unknown, output: unknown) => void,
+): Layer.Layer<Plugin.Service> =>
+  Layer.succeed(
+    Plugin.Service,
+    Plugin.Service.of({
+      trigger: ((name, input, output) =>
+        Effect.sync(() => {
+          onTrigger?.(String(name), input, output)
+          return output
+        })) as Plugin.Interface["trigger"],
+      list: () => Effect.succeed([]),
+      init: () => Effect.void,
+    }),
+  )
+
+const defaultPluginLayer = pluginLayer()
+const mutationPluginLayer = pluginLayer((name, input, output) => {
+  if (name !== "tool.definition") return
+  const toolID = typeof input === "object" && input !== null && "toolID" in input ? String(input.toolID) : ""
+  if (typeof output !== "object" || output === null || !("description" in output)) return
+  const mutable = output as { description: string }
+  if (toolID === "lcm_grep") mutable.description = "mutated retrieval description"
+  if (toolID === "agentic_map") mutable.description = "mutated map description"
+  if (toolID === "bash") mutable.description = "mutated bash description"
+})
+// kilocode_change end
+
 const registryLayer = (opts: RegistryLayerOptions = {}) =>
   ToolRegistry.layer
     .pipe(
       Layer.provide(configLayer),
-      Layer.provide(opts.plugin ?? Plugin.defaultLayer),
+      Layer.provide(opts.plugin ?? defaultPluginLayer), // kilocode_change
       Layer.provide(Question.defaultLayer),
       Layer.provide(Todo.defaultLayer),
       Layer.provide(Skill.defaultLayer),
@@ -106,12 +139,62 @@ const scout = testEffect(
 const withBrokenPlugin = testEffect(
   Layer.mergeAll(registryLayer({ plugin: brokenPluginLayer }), node, Agent.defaultLayer),
 )
+// kilocode_change start
+const vscode = testEffect(Layer.mergeAll(registryLayer({ flags: { client: "vscode" } }), node, Agent.defaultLayer))
+const desktop = testEffect(Layer.mergeAll(registryLayer({ flags: { client: "desktop" } }), node, Agent.defaultLayer))
+const mutated = testEffect(Layer.mergeAll(registryLayer({ plugin: mutationPluginLayer }), node, Agent.defaultLayer))
+
+const ref = {
+  providerID: ProviderID.make("test"),
+  modelID: ModelID.make("test-model"),
+}
+// kilocode_change end
 
 afterEach(async () => {
   await disposeAllInstances()
 })
 
 describe("tool.registry", () => {
+  // kilocode_change start
+  it.instance("always registers plan_exit", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).toContain("plan_exit")
+    }),
+  )
+
+  it.instance("registers suggest for cli by default", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).toContain("suggest")
+    }),
+  )
+
+  vscode.instance("registers suggest for vscode", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).toContain("suggest")
+      expect(ids).toContain("plan_exit")
+    }),
+  )
+
+  desktop.instance("hides suggest outside cli and vscode", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).not.toContain("suggest")
+      expect(ids).toContain("plan_exit")
+    }),
+  )
+
+  // kilocode_change end
   it.instance("hides repo research tools unless experimental", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
@@ -560,4 +643,25 @@ describe("tool.registry", () => {
       expect(ids).toContain("cowsay")
     }),
   )
+  // kilocode_change start
+
+  mutated.instance("does not allow plugins to mutate canonical LCM tool definitions", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const tools = yield* registry.tools({
+        ...ref,
+        agent: {
+          name: "build",
+          mode: "primary",
+          permission: [],
+          options: {},
+        } as never,
+      })
+      const byID = new Map(tools.map((tool) => [tool.id, tool.description]))
+      expect(byID.get("lcm_grep")).toBe(LCM_RETRIEVAL_TOOL_DESCRIPTIONS.lcm_grep)
+      expect(byID.get("agentic_map")).toBe(LCM_MAP_TOOL_DESCRIPTIONS.agentic_map)
+      expect(byID.get("bash")).toContain("mutated bash description")
+    }),
+  )
+  // kilocode_change end
 })

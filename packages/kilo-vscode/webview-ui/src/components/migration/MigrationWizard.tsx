@@ -798,6 +798,7 @@ const MigrationWizard: Component<MigrationWizardProps> = (props) => {
                     <div class="desc">
                       {language.t("migration.migrate.sessionsDetected", { count: String(sessions().length) })}
                     </div>
+                    <div class="desc">{language.t("migration.migrate.chatHistoryDesc")}</div>
                     <Show when={migrateSessions() && phase() !== "selecting" && sessionProgress()}>
                       <Show
                         when={sessionProgress()?.phase === "summary"}

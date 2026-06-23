@@ -88,8 +88,6 @@ export const dict = {
   "revert.banner.redo.all": "全部重做",
   "revert.banner.hint": "发送新消息以使此更改永久生效",
   "revert.disabled.agentBusy": "等待智能体完成",
-  "command.session.compact": "精简会话",
-  "command.session.compact.description": "总结会话以减少上下文大小",
   "command.session.fork": "从消息分叉",
   "command.session.fork.description": "从之前的消息创建新会话",
   "command.session.share": "分享会话",
@@ -429,9 +427,6 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "编辑和写入权限将自动获批",
   "toast.permissions.autoaccept.off.title": "已停止自动接受编辑",
   "toast.permissions.autoaccept.off.description": "编辑和写入权限将需要手动批准",
-
-  "toast.model.none.title": "未选择模型",
-  "toast.model.none.description": "请先连接提供商以总结此会话",
 
   "toast.file.loadFailed.title": "加载文件失败",
 
@@ -1432,12 +1427,8 @@ export const dict = {
   "settings.autoApprove.tool.doom_loop": "防止重复相同操作。当相同的工具调用以相同的输入重复时触发。",
   "settings.checkpoints.enable.title": "启用快照",
   "settings.checkpoints.enable.description": "在文件编辑前创建检查点，以便恢复之前的状态",
-  "settings.context.autoCompaction.title": "自动压缩",
-  "settings.context.autoCompaction.description": "在上下文达到限制前自动压缩",
   "settings.context.compactionLimit.title": "自动压缩限制",
   "settings.context.compactionLimit.description": "当上下文达到模型窗口的此百分比时进行压缩。留空则仅使用安全缓冲区。",
-  "settings.context.prune.title": "修剪旧输出",
-  "settings.context.prune.description": "压缩期间移除旧的工具输出",
   "settings.context.watcherPatterns": "文件监视器忽略模式",
   "settings.context.watcherPatterns.description": "监视器应忽略的文件的 glob 模式",
 

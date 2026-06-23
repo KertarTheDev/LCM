@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "provider-safe-report-schemas-v1",
+  "statusEnum": ["passed", "failed", "blocked"],
+  "blockedRequires": ["safeError", "notes"],
+  "familyAdaptation": {
+    "reportSchemaVersion": "lcm-family-adaptation-audit-v1",
+    "arrayField": "providerSafeChecks",
+    "idField": "checkID",
+    "requiredIDs": [
+      "provider-safe.render-unit-assembly",
+      "provider-safe.target-current-user-dedup",
+      "provider-safe.post-transform-validation",
+      "provider-safe.request-snapshot-cleanup",
+      "provider-safe.cue-lifecycle",
+      "provider-safe.snapshot-v2-repair",
+      "provider-safe.missing-tool-result-regression"
+    ],
+    "allowedFields": ["checkID", "status", "command", "artifactPath", "runtimePath", "evidencePath", "safeError", "notes"]
+  },
+  "releaseScenario": {
+    "reportSchemaVersion": "release-scenario-script-v1",
+    "arrayField": "providerSafeSteps",
+    "idField": "stepID",
+    "requiredIDs": [
+      "provider-safe.assembly-validation",
+      "provider-safe.final-provider-validation",
+      "provider-safe.request-snapshot-cleanup",
+      "provider-safe.cue-lifecycle",
+      "provider-safe.snapshot-v2-repair",
+      "provider-safe.missing-tool-result-regression"
+    ],
+    "allowedFields": ["stepID", "status", "command", "artifactPath", "runtimePath", "evidencePath", "safeError", "notes"]
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "context-regression-long-tool-output-cases-v1",
+  "implemented": true,
+  "ownerMilestone": "45",
+  "contentSafety": "Cases store only terminal state labels, counts, hashes, and booleans; raw build logs and terminal output bytes are forbidden in report output.",
+  "minimumPayload": "greater_than_configured_large_payload_threshold",
+  "cases": [
+    {
+      "caseID": "completed-large-tool-output",
+      "terminalToolOutputCase": "completed",
+      "expectedContentStorageKind": "lcm_file",
+      "sealedToolOutputPersisted": true,
+      "nextTurnContinued": true
+    },
+    {
+      "caseID": "terminal-tool-error-large-bytes",
+      "terminalToolOutputCase": "terminal_error",
+      "expectedContentStorageKind": "lcm_file",
+      "sealedToolOutputPersisted": true,
+      "nextTurnContinued": true
+    },
+    {
+      "caseID": "interrupted-error-output-large-bytes",
+      "terminalToolOutputCase": "interrupted_error_output",
+      "metadataInterrupted": true,
+      "metadataOutputIsString": true,
+      "expectedContentStorageKind": "lcm_file",
+      "sealedToolOutputPersisted": true,
+      "nextTurnContinued": true
+    },
+    {
+      "caseID": "object-shaped-internal-error-normalized",
+      "objectErrorNormalized": true,
+      "unknownErrorObjectStringObserved": false,
+      "normalizedObjectErrorDiagnosticCode": "content-safe-static-code"
+    }
+  ]
+}

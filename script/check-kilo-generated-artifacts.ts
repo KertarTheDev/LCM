@@ -4,10 +4,11 @@
 /**
  * Guards generated Kilo config dependency artifacts.
  *
- * Kilo loads project config from .kilo/ and .kilocode/ and installs
- * @kilocode/plugin there at runtime. npm writes package.json, lockfiles,
- * .gitignore, and node_modules as generated local state. These paths must stay
- * untracked so background installs do not create recurring branch diffs.
+ * Kilo loads project config from .kilo/, .kilocode/, and .opencode/ and
+ * installs @kilocode/plugin there at runtime. npm writes package.json,
+ * lockfiles, .gitignore, and node_modules as generated local state. These paths
+ * must stay untracked so background installs do not create recurring branch
+ * diffs.
  */
 
 import { spawnSync } from "node:child_process"
@@ -27,6 +28,12 @@ const paths = [
   ".kilocode/bun.lock",
   ".kilocode/yarn.lock",
   ".kilocode/node_modules",
+  ".opencode/package.json",
+  ".opencode/package-lock.json",
+  ".opencode/pnpm-lock.yaml",
+  ".opencode/bun.lock",
+  ".opencode/yarn.lock",
+  ".opencode/node_modules",
 ]
 
 const git = spawnSync("git", ["ls-files", "-z", "--", ...paths], { encoding: "utf8" })
@@ -46,6 +53,6 @@ if (bad.length === 0) {
 console.error("Generated Kilo config dependency artifacts are tracked:")
 for (const file of bad) console.error(`  ${file}`)
 console.error("")
-console.error("These files are created by runtime dependency installs in .kilo/ and .kilocode/.")
+console.error("These files are created by runtime dependency installs in .kilo/, .kilocode/, and .opencode/.")
 console.error("Remove them from git and keep them ignored.")
 process.exit(1)

@@ -20,7 +20,7 @@ import { Skill } from "@/skill"
 
 // kilocode_change start
 import SOUL from "../kilocode/soul.txt"
-import type { EditorContext } from "../kilocode/editor-context"
+import type { EditorContext, RenderTimeInput } from "../kilocode/editor-context"
 import { KilocodeSystemPrompt } from "../kilocode/system-prompt"
 import { isLing } from "../kilocode/model-match"
 // kilocode_change end
@@ -80,7 +80,11 @@ export function provider(model: Provider.Model) {
 }
 
 export interface Interface {
-  readonly environment: (model: Provider.Model, editorContext?: EditorContext) => Effect.Effect<string[]> // kilocode_change
+  readonly environment: (
+    model: Provider.Model,
+    editorContext?: EditorContext,
+    input?: RenderTimeInput,
+  ) => Effect.Effect<string[]> // kilocode_change
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
 }
 
@@ -96,9 +100,10 @@ export const layer = Layer.effect(
       environment: Effect.fn("SystemPrompt.environment")(function* (
         model: Provider.Model,
         editorContext?: EditorContext,
+        input?: RenderTimeInput,
       ) {
         const ctx = yield* InstanceState.context
-        return KilocodeSystemPrompt.environment({ ctx, model, editor: editorContext })
+        return KilocodeSystemPrompt.environment({ ctx, model, editor: editorContext, time: input })
       }),
       // kilocode_change end
 

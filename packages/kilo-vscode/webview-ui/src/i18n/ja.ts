@@ -84,8 +84,6 @@ export const dict = {
   "revert.banner.redo.all": "すべてやり直し",
   "revert.banner.hint": "新しいメッセージを送信してこれを永続させてください",
   "revert.disabled.agentBusy": "エージェントの完了を待ってください",
-  "command.session.compact": "セッションを圧縮",
-  "command.session.compact.description": "セッションを要約してコンテキストサイズを削減",
   "command.session.fork": "メッセージからフォーク",
   "command.session.fork.description": "以前のメッセージから新しいセッションを作成",
   "command.session.share": "セッションを共有",
@@ -430,9 +428,6 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "編集と書き込みの権限は自動的に承認されます",
   "toast.permissions.autoaccept.off.title": "編集の自動承認を停止しました",
   "toast.permissions.autoaccept.off.description": "編集と書き込みの権限には承認が必要です",
-
-  "toast.model.none.title": "モデルが選択されていません",
-  "toast.model.none.description": "このセッションを要約するにはプロバイダーを接続してください",
 
   "toast.file.loadFailed.title": "ファイルの読み込みに失敗しました",
 
@@ -1483,13 +1478,9 @@ export const dict = {
     "繰り返し同一のアクションを防止。同じツール呼び出しが同一の入力で繰り返されたときにトリガーされます。",
   "settings.checkpoints.enable.title": "スナップショットを有効にする",
   "settings.checkpoints.enable.description": "ファイル編集前にチェックポイントを作成して以前の状態を復元可能にする",
-  "settings.context.autoCompaction.title": "自動圧縮",
-  "settings.context.autoCompaction.description": "コンテキストが上限に達する前に自動的に圧縮",
   "settings.context.compactionLimit.title": "自動圧縮の上限",
   "settings.context.compactionLimit.description":
     "コンテキストがモデルウィンドウのこの割合に達したら圧縮します。安全バッファーのみを使用するには空欄のままにしてください。",
-  "settings.context.prune.title": "古い出力を削除",
-  "settings.context.prune.description": "圧縮時に古いツール出力を削除",
   "settings.context.watcherPatterns": "ファイルウォッチャー無視パターン",
   "settings.context.watcherPatterns.description": "ウォッチャーが無視すべきファイルのglobパターン",
 

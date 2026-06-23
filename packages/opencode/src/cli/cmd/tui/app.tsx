@@ -38,6 +38,9 @@ import { DialogModel } from "@tui/component/dialog-model"
 import { useConnected } from "@tui/component/use-connected"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
+// kilocode_change start
+import { DialogLcmSettings } from "@tui/component/dialog-lcm-settings"
+// kilocode_change end
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogHeadlessLink } from "@/kilocode/cli/cmd/tui/component/dialog-headless-link" // kilocode_change
@@ -786,6 +789,20 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         },
         category: "System",
       },
+      // kilocode_change start
+      {
+        name: "lcm.settings",
+        title: "Memory settings",
+        slashName: "memory",
+        slashAliases: ["lcm", "lcm-settings"],
+        run: () => {
+          dialog.replace(() => (
+            <DialogLcmSettings sessionID={route.data.type === "session" ? route.data.sessionID : undefined} />
+          ))
+        },
+        category: "System",
+      },
+      // kilocode_change end
       {
         name: "theme.switch_mode",
         title: mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",

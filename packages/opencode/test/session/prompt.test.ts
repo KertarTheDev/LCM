@@ -5,9 +5,14 @@ import { expect, spyOn } from "bun:test"
 import { Telemetry } from "@kilocode/kilo-telemetry"
 // kilocode_change end
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import * as Stream from "effect/Stream"
+// kilocode_change start
+import nodeFs from "fs/promises"
+// kilocode_change end
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
+import { LLMEvent, Usage } from "@opencode-ai/llm"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { Bus } from "../../src/bus"
@@ -36,6 +41,9 @@ import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
+// kilocode_change start
+import { LcmRuntime } from "../../src/session/lcm/runtime"
+// kilocode_change end
 import { Suggestion } from "../../src/kilocode/suggestion" // kilocode_change - accept suggestion in telemetry test
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
@@ -49,6 +57,7 @@ import { Truncate } from "@/tool/truncate"
 import * as Log from "@opencode-ai/core/util/log"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import * as Database from "../../src/storage/db"
+import { Storage } from "../../src/storage/storage"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 import { Reference } from "../../src/reference/reference"
@@ -59,6 +68,7 @@ import { reply, TestLLMServer } from "../lib/llm-server"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { jsonSchema, tool } from "ai"
 
 void Log.init({ print: false })
 
@@ -75,6 +85,8 @@ const ref = {
   providerID: ProviderID.make("test"),
   modelID: ModelID.make("test-model"),
 }
+
+const basicUsage = () => new Usage({ inputTokens: 1, outputTokens: 1, totalTokens: 2 })
 
 function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
   return Effect.acquireUseRelease(
@@ -113,26 +125,46 @@ function errorTool(parts: MessageV2.Part[]) {
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
 }
 
-const mcp = Layer.succeed(
+const mcpService = {
+  status: () => Effect.succeed({}),
+  clients: () => Effect.succeed({}),
+  tools: () => Effect.succeed({}),
+  prompts: () => Effect.succeed({}),
+  resources: () => Effect.succeed({}),
+  add: () => Effect.succeed({ status: { status: "disabled" as const } }),
+  connect: () => Effect.void,
+  disconnect: () => Effect.void,
+  getPrompt: () => Effect.succeed(undefined),
+  readResource: () => Effect.succeed(undefined),
+  startAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+  authenticate: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+  finishAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+  removeAuth: () => Effect.void,
+  supportsOAuth: () => Effect.succeed(false),
+  hasStoredTokens: () => Effect.succeed(false),
+  getAuthStatus: () => Effect.succeed("not_authenticated" as const),
+} satisfies MCP.Interface
+
+const mcp = Layer.succeed(MCP.Service, MCP.Service.of(mcpService))
+const mcpWithSchema = Layer.succeed(
   MCP.Service,
   MCP.Service.of({
-    status: () => Effect.succeed({}),
-    clients: () => Effect.succeed({}),
-    tools: () => Effect.succeed({}),
-    prompts: () => Effect.succeed({}),
-    resources: () => Effect.succeed({}),
-    add: () => Effect.succeed({ status: { status: "disabled" as const } }),
-    connect: () => Effect.void,
-    disconnect: () => Effect.void,
-    getPrompt: () => Effect.succeed(undefined),
-    readResource: () => Effect.succeed(undefined),
-    startAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
-    authenticate: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
-    finishAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
-    removeAuth: () => Effect.void,
-    supportsOAuth: () => Effect.succeed(false),
-    hasStoredTokens: () => Effect.succeed(false),
-    getAuthStatus: () => Effect.succeed("not_authenticated" as const),
+    ...mcpService,
+    tools: () =>
+      Effect.succeed({
+        mcp_echo: tool({
+          description: "Echo a test value",
+          inputSchema: jsonSchema({
+            type: "object",
+            properties: {
+              value: { type: "string" },
+            },
+            required: ["value"],
+            additionalProperties: false,
+          }),
+          execute: async () => ({ output: "ok" }),
+        }),
+      }),
   }),
 )
 
@@ -168,11 +200,15 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-function makePrompt(input?: { processor?: "blocking" }) {
+function makePrompt(input?: {
+  processor?: "blocking"
+  llm?: Layer.Layer<LLM.Service>
+  mcp?: Layer.Layer<MCP.Service>
+}) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
-    LLM.defaultLayer,
+    input?.llm ?? LLM.defaultLayer,
     Env.defaultLayer,
     AgentSvc.defaultLayer,
     Command.defaultLayer,
@@ -181,7 +217,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Config.defaultLayer,
     ProviderSvc.defaultLayer,
     lsp,
-    mcp,
+    input?.mcp ?? mcp,
     AppFileSystem.defaultLayer,
     BackgroundJob.defaultLayer,
     status,
@@ -223,31 +259,60 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(Image.defaultLayer),
     Layer.provide(Reference.defaultLayer),
+    Layer.provide(LcmRuntime.defaultLayer), // kilocode_change
     Layer.provide(summary),
     Layer.provideMerge(run),
     Layer.provideMerge(compact),
     Layer.provideMerge(proc),
     Layer.provideMerge(registry),
     Layer.provideMerge(trunc),
+    Layer.provideMerge(question), // kilocode_change - SessionPrompt now dismisses questions via its service dependency
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(SystemPrompt.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(deps),
+    Layer.provide(Storage.defaultLayer), // kilocode_change
     Layer.provide(summary),
   )
 }
 
-function makeHttp(input?: { processor?: "blocking" }) {
+function makeHttp(input?: {
+  processor?: "blocking"
+  llm?: Layer.Layer<LLM.Service>
+  mcp?: Layer.Layer<MCP.Service>
+}) {
   return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
 }
 
-function makeHttpNoLLMServer(input?: { processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: {
+  processor?: "blocking"
+  llm?: Layer.Layer<LLM.Service>
+  mcp?: Layer.Layer<MCP.Service>
+}) {
   return makePrompt(input)
 }
 
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const firstMessageSmokeInputs: LLM.StreamInput[] = []
+const firstMessageSmokeLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: (input) => {
+      firstMessageSmokeInputs.push(input)
+      return Stream.make(
+        LLMEvent.textStart({ id: "txt-0" }),
+        LLMEvent.textDelta({ id: "txt-0", text: "plan response" }),
+        LLMEvent.textEnd({ id: "txt-0" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop", usage: basicUsage() }),
+        LLMEvent.finish({ reason: "stop", usage: basicUsage() }),
+      )
+    },
+  }),
+)
+const firstMessageSmoke = testEffect(makeHttpNoLLMServer({ llm: firstMessageSmokeLLM }))
+const firstMessageMcpSmoke = testEffect(makeHttpNoLLMServer({ llm: firstMessageSmokeLLM, mcp: mcpWithSchema }))
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
 
@@ -649,6 +714,71 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+// kilocode_change start
+noLLMServer.instance(
+  "keeps supported oversized image file URLs as image attachments",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Large image file" })
+      const data = "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA"
+      const filepath = path.join(dir, "threshold-image.webp")
+      yield* Effect.promise(() => Bun.write(filepath, Buffer.from(data, "base64")))
+
+      const result = yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          {
+            type: "file",
+            mime: "image/webp",
+            filename: "threshold-image.webp",
+            url: pathToFileURL(filepath).href,
+          },
+        ],
+      })
+      const saved = yield* sessions.messages({ sessionID: chat.id })
+      const savedParts = saved.flatMap((message) => message.parts)
+
+      expect(
+        savedParts.some(
+          (part) => part.type === "text" && part.text.includes("Read output stored as an LCM file marker"),
+        ),
+      ).toBe(false)
+      expect(savedParts.some((part) => part.type === "text" && part.text.includes("Read tool failed to admit"))).toBe(
+        false,
+      )
+      expect(
+        result.parts.some(
+          (part) => part.type === "file" && part.mime.startsWith("image/") && part.url.startsWith("data:image/"),
+        ),
+      ).toBe(true)
+    }),
+  {
+    git: true,
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              limit: { context: 32, output: 8 },
+            },
+          },
+        },
+      },
+    },
+  },
+  30_000,
+)
+
+// kilocode_change end
 noLLMServer.instance(
   "leaves non-image data parts untouched",
   () =>
@@ -670,7 +800,6 @@ noLLMServer.instance(
     }),
   { config: cfg },
 )
-// kilocode_change end
 
 noLLMServer.instance(
   "prompt emits v2 prompted and synthetic events",
@@ -739,6 +868,64 @@ it.instance("static loop returns assistant text through local provider", () =>
     expect(yield* llm.pending).toBe(0)
   }),
 )
+
+// kilocode_change start - first plan prompt must enter LCM render prep without runtime reference errors
+firstMessageSmoke.instance("first plan prompt reaches LLM with LCM render-only reminders", () =>
+  Effect.gen(function* () {
+    firstMessageSmokeInputs.length = 0
+    const { directory: dir } = yield* TestInstance
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    yield* writeConfig(dir, cfg)
+
+    const session = yield* sessions.create({
+      title: "First plan prompt",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "plan",
+      noReply: true,
+      parts: [{ type: "text", text: "Plan the first-message fix" }],
+    })
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+    expect(result.info.role).toBe("assistant")
+    expect(result.parts.some((part) => part.type === "text" && part.text === "plan response")).toBe(true)
+    expect(firstMessageSmokeInputs).toHaveLength(1)
+    expect(JSON.stringify(firstMessageSmokeInputs[0]?.messages)).toContain("## Plan File")
+  }),
+)
+
+firstMessageMcpSmoke.instance("first prompt resolves MCP tool schemas before LLM", () =>
+  Effect.gen(function* () {
+    firstMessageSmokeInputs.length = 0
+    const { directory: dir } = yield* TestInstance
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    yield* writeConfig(dir, cfg)
+
+    const session = yield* sessions.create({
+      title: "First prompt MCP schema",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "Use the available tools if needed" }],
+    })
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+    expect(result.info.role).toBe("assistant")
+    expect(result.parts.some((part) => part.type === "text" && part.text === "plan response")).toBe(true)
+    expect(firstMessageSmokeInputs).toHaveLength(1)
+    expect(firstMessageSmokeInputs[0]?.tools).toHaveProperty("mcp_echo")
+  }),
+)
+// kilocode_change end
 
 it.instance("static loop consumes queued replies across turns", () =>
   Effect.gen(function* () {
@@ -942,6 +1129,7 @@ it.instance(
           if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
         }),
         "timed out waiting for running subtask metadata",
+        "30 seconds", // kilocode_change - LCM child scope setup can initialize storage before metadata is observable
       )
 
       if (tool.state.status !== "running") return
@@ -949,10 +1137,18 @@ it.instance(
       expect(tool.state.title).toBeDefined()
       expect(tool.state.metadata?.model).toBeDefined()
 
-      yield* prompt.cancel(chat.id)
-      yield* Fiber.await(fiber)
+      yield* awaitWithTimeout(
+        prompt.cancel(chat.id),
+        "timed out cancelling running subtask",
+        "10 seconds",
+      ) // kilocode_change - cancellation should not wait forever on LCM child setup
+      yield* awaitWithTimeout(
+        Fiber.await(fiber),
+        "timed out awaiting cancelled running subtask",
+        "10 seconds",
+      ) // kilocode_change - parent fiber should settle after bounded subtask cancellation
     }),
-  5_000,
+  60_000, // kilocode_change - LCM child scope setup can exceed the default VPS test budget
 )
 
 it.instance(
@@ -960,6 +1156,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const { llm } = yield* useServerConfig(providerCfg)
+      const gate = yield* Deferred.make<void>()
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const chat = yield* sessions.create({
@@ -971,7 +1168,8 @@ it.instance(
         prompt: "look into the cache key path",
         subagent_type: "general",
       })
-      yield* llm.hang
+      yield* llm.push(reply().wait(deferredAsPromise(gate)).text("child done").stop())
+      yield* llm.text("parent done")
       yield* user(chat.id, "hello")
 
       const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
@@ -986,6 +1184,7 @@ it.instance(
           if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
         }),
         "timed out waiting for running task metadata",
+        "30 seconds", // kilocode_change - LCM child scope setup can initialize storage before metadata is observable
       )
 
       if (tool.state.status !== "running") return
@@ -993,10 +1192,10 @@ it.instance(
       expect(tool.state.title).toBe("inspect bug")
       expect(tool.state.metadata?.model).toBeDefined()
 
-      yield* prompt.cancel(chat.id)
+      yield* Deferred.succeed(gate, void 0)
       yield* Fiber.await(fiber)
     }),
-  10_000,
+  60_000, // kilocode_change - LCM child scope setup can exceed the default VPS test budget
 )
 
 // kilocode_change start - child task failures stay tool errors so the parent can recover
@@ -1040,7 +1239,7 @@ it.instance(
       expect(hits).toHaveLength(3)
       expect(JSON.stringify(hits.at(-1)?.body)).toContain("child prompt failed")
     }),
-  10_000,
+  60_000, // kilocode_change - LCM parent and child preflight can exceed the old non-LCM budget
 )
 // kilocode_change end
 
@@ -1068,7 +1267,7 @@ it.instance(
       expect((yield* status.get(chat.id)).type).toBe("idle")
     }),
   // kilocode_change end
-  10_000, // kilocode_change
+  30_000, // kilocode_change - LCM busy/idle transition includes async storage finalization
 )
 
 // Cancel semantics
@@ -1096,7 +1295,7 @@ it.instance(
         expect(exit.value.info.role).toBe("assistant")
       }
     }),
-  10_000, // kilocode_change - Windows CI can take longer to cancel the live loop
+  30_000, // kilocode_change - LCM cancellation also waits for async storage finalizers
 )
 
 // kilocode_change start
@@ -1124,7 +1323,7 @@ unix(
         }
       }
     }),
-  3_000,
+  30_000, // kilocode_change - LCM cancellation also waits for async storage finalizers
 )
 
 raceNoLLMServer.instance(
@@ -1213,7 +1412,7 @@ raceNoLLMServer.instance(
       }
     }),
   { config: cfg },
-  3_000,
+  30_000, // kilocode_change - LCM finalization can initialize storage before processor creation settles
 )
 
 noLLMServer.instance(
@@ -1239,7 +1438,11 @@ noLLMServer.instance(
       yield* addSubtask(chat.id, msg.id)
 
       const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* awaitWithTimeout(Deferred.await(ready), "timed out waiting for task tool to start", "10 seconds")
+      yield* awaitWithTimeout(
+        Deferred.await(ready),
+        "timed out waiting for task tool to start",
+        "30 seconds",
+      ) // kilocode_change - LCM child setup can run before the mocked task body starts
       yield* prompt.cancel(chat.id)
 
       const exit = yield* Fiber.await(fiber)
@@ -1260,7 +1463,7 @@ noLLMServer.instance(
       expect(taskMsg.info.finish).toBeDefined()
     }),
   { config: cfg },
-  30_000,
+  90_000, // kilocode_change - LCM bash cancellation can wait for output persistence before final truncation
 )
 
 // kilocode_change start - handleSubtask propagates child session cost to wrapper (#6321)
@@ -1356,7 +1559,7 @@ it.instance(
       expect((yield* status.get(chat.id)).type).toBe("idle")
       expect((yield* status.get(childID)).type).toBe("idle")
     }),
-  10_000,
+  30_000, // kilocode_change - LCM child cancellation waits for parent and child scope cleanup
 )
 
 it.instance(
@@ -1367,16 +1570,29 @@ it.instance(
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const chat = yield* sessions.create({ title: "Pinned" })
-      yield* llm.hang
+      const gate = yield* Deferred.make<void>()
+      yield* llm.push(reply().wait(deferredAsPromise(gate)).text("cancel released").stop())
       yield* user(chat.id, "hello")
 
       const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* llm.wait(1)
+      yield* awaitWithTimeout(llm.wait(1), "timed out waiting for first queued-cancel LLM call", "30 seconds")
       const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* Effect.yieldNow // kilocode_change - let the queued caller join without a wall-clock race
+      for (let i = 0; i < 20; i++) yield* Effect.yieldNow // kilocode_change - let the queued caller reach the runner
 
-      yield* prompt.cancel(chat.id)
-      const [exitA, exitB] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+      const cancelFiber = yield* prompt.cancel(chat.id).pipe(Effect.exit, Effect.forkChild)
+      yield* Effect.yieldNow // kilocode_change - let cancellation reach the active runner before releasing the provider
+      yield* Deferred.succeed(gate, void 0)
+      const cancelExit = yield* awaitWithTimeout(
+        Fiber.await(cancelFiber),
+        "timed out cancelling queued callers",
+        "30 seconds",
+      ) // kilocode_change - cancellation should finish before queued loop fibers are awaited
+      expect(Exit.isSuccess(cancelExit)).toBe(true)
+      const [exitA, exitB] = yield* awaitWithTimeout(
+        Effect.all([Fiber.await(a), Fiber.await(b)]),
+        "timed out awaiting queued loop callers",
+        "30 seconds",
+      ) // kilocode_change - queued loop callers should resolve after cancellation finalization
       expect(Exit.isSuccess(exitA)).toBe(true)
       expect(Exit.isSuccess(exitB)).toBe(true)
       if (Exit.isSuccess(exitA) && Exit.isSuccess(exitB)) {
@@ -1384,7 +1600,7 @@ it.instance(
       }
     }),
   { git: true },
-  10_000, // kilocode_change - Windows CI can take longer to cancel queued live loops
+  60_000, // kilocode_change - LCM queued cancellation waits for active-run storage finalizers
 )
 
 // Queue semantics
@@ -1500,7 +1716,7 @@ it.instance(
       expect(inputs).toHaveLength(2)
       expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("second")
     }),
-  3_000,
+  30_000, // kilocode_change - LCM prompt queuing does async storage work before the second turn is visible
 )
 
 it.instance(
@@ -1529,7 +1745,7 @@ it.instance(
       yield* prompt.cancel(chat.id)
       yield* Fiber.await(fiber)
     }),
-  10_000, // kilocode_change
+  30_000, // kilocode_change - LCM active-loop cancellation waits for async storage finalizers
 )
 
 noLLMServer.instance("assertNotBusy succeeds when idle", () =>
@@ -1569,7 +1785,7 @@ it.instance(
       yield* prompt.cancel(chat.id)
       yield* Fiber.await(fiber)
     }),
-  10_000, // kilocode_change - Windows CI can take longer to enter and cancel the live loop
+  30_000, // kilocode_change - LCM active-loop cancellation waits for async storage finalizers
 )
 
 unixNoLLMServer(
@@ -1640,7 +1856,7 @@ unixNoLLMServer(
       }),
     ),
   { config: { ...cfg, shell: "bash" } },
-  30_000,
+  60_000, // kilocode_change - LCM bash cancellation can wait for output persistence before final truncation
 )
 
 unixNoLLMServer(
@@ -1915,7 +2131,7 @@ unixNoLLMServer(
       }),
     ),
   { git: true, config: cfg },
-  30_000,
+  60_000, // kilocode_change - LCM shell cancellation can wait for persisted tool cleanup
 )
 
 unixNoLLMServer(
@@ -1959,7 +2175,7 @@ unixNoLLMServer(
       }),
     ),
   { git: true, config: cfg },
-  30_000,
+  60_000, // kilocode_change - LCM shell cancellation can wait for persisted tool cleanup
 )
 
 unix(
@@ -2021,7 +2237,7 @@ unix(
       expect(tool.state.output).not.toContain("Tool execution aborted")
     }),
   { git: true },
-  30_000,
+  90_000, // kilocode_change - LCM bash cancellation can wait for output persistence before final truncation
 )
 
 unixNoLLMServer(
@@ -2034,21 +2250,33 @@ unixNoLLMServer(
       yield* waitForBusy(chat.id)
 
       const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* Effect.yieldNow // kilocode_change - give the queued loop a scheduler turn before cancelling
+      for (let i = 0; i < 20; i++) yield* Effect.yieldNow // kilocode_change - let the queued loop reach the runner
 
-      yield* prompt.cancel(chat.id)
+      yield* awaitWithTimeout(
+        prompt.cancel(chat.id),
+        "timed out cancelling shell with queued loop",
+        "30 seconds",
+      ) // kilocode_change - shell cancellation should settle before queued loop fibers are awaited
 
-      const exit = yield* Fiber.await(loop)
+      const exit = yield* awaitWithTimeout(
+        Fiber.await(loop),
+        "timed out awaiting loop queued behind shell",
+        "30 seconds",
+      ) // kilocode_change - queued loop should resolve after shell cancellation
       expect(Exit.isSuccess(exit)).toBe(true)
       if (Exit.isSuccess(exit)) {
         const tool = completedTool(exit.value.parts)
         expect(tool?.state.output).toContain("User aborted the command")
       }
 
-      yield* Fiber.await(sh)
+      yield* awaitWithTimeout(
+        Fiber.await(sh),
+        "timed out awaiting cancelled shell",
+        "30 seconds",
+      ) // kilocode_change - shell fiber should settle after cancellation
     }),
   { git: true, config: cfg },
-  30_000,
+  60_000, // kilocode_change - LCM shell cancellation can wait for persisted tool cleanup
 )
 
 unixNoLLMServer(
@@ -2074,7 +2302,7 @@ unixNoLLMServer(
       }),
     ),
   { git: true, config: cfg },
-  30_000,
+  60_000, // kilocode_change - LCM shell cancellation can wait for persisted tool cleanup
 )
 
 // Abort signal propagation tests for inline tool execution
@@ -2206,6 +2434,50 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+// kilocode_change start
+noLLMServer.instance(
+  "preserves large external text prompt attachments on the read path",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const external = path.join(path.dirname(dir), `${path.basename(dir)}-external.txt`)
+      yield* Effect.addFinalizer(() => Effect.promise(() => nodeFs.rm(external, { force: true })))
+      yield* Effect.promise(() => Bun.write(external, ["EXTERNAL_PROMPT_CONTENT", "X".repeat(120_000)].join("\n")))
+
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          {
+            type: "file",
+            mime: "text/plain",
+            url: pathToFileURL(external).href,
+            filename: "external.txt",
+          },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+      const text = msg.parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n")
+
+      expect(text).toContain("EXTERNAL_PROMPT_CONTENT")
+      expect(text).not.toContain("Read tool failed to admit")
+      expect(text).not.toContain("Read output stored as an LCM file marker")
+
+      yield* sessions.remove(session.id)
+    }).pipe(Effect.scoped),
+  { git: true, config: cfg },
+  30_000,
+)
+
+// kilocode_change end
 noLLMServer.instance(
   "keeps stored part order stable when file resolution is async",
   () =>
@@ -2508,7 +2780,7 @@ it.instance(
         expect(last.info.error?.name).toBe("MessageAbortedError")
       }
     }),
-  10_000, // kilocode_change
+  30_000, // kilocode_change - LCM mid-stream cancellation waits for async storage finalizers
 )
 
 // Agent variant
@@ -2648,6 +2920,7 @@ it.instance(
           Effect.map((items) => items.find((item) => item.sessionID === chat.id)),
         ),
         "timed out waiting for suggestion request",
+        "30 seconds",
       )
 
       yield* Effect.promise(() => Suggestion.accept({ requestID: request.id, index: 0 }))

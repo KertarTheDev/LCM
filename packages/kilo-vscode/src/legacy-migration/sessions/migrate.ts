@@ -76,6 +76,7 @@ export async function migrate(
     progress({ phase: "preparing" })
     const payload = await parseSession(source.id, source.dir, source.item, undefined, key)
     progress({ phase: "storing" })
+    // Legacy history imports as normal Kilo session data; LCM proves and prepares memory when the session continues.
     const project = await client.kilocode.sessionImport.project(payload.project, { throwOnError: true })
     const projectID = project.data?.id ?? payload.project.id
     const session = await client.kilocode.sessionImport.session(

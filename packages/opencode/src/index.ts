@@ -41,6 +41,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
 import { isRecord } from "@/util/record"
 import { KiloCli } from "@/kilocode/cli/setup" // kilocode_change
+import { Telemetry } from "@kilocode/kilo-telemetry" // kilocode_change
 
 const processMetadata = ensureProcessMetadata("main")
 
@@ -68,6 +69,25 @@ function show(out: string) {
   process.stderr.write(out)
 }
 
+// kilocode_change start
+const TELEMETRY_SHUTDOWN_TIMEOUT_MS = 2_000
+
+async function shutdownTelemetryWithTimeout() {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+  const result = await Promise.race([
+    Telemetry.shutdown().then(() => "complete" as const),
+    new Promise<"timeout">((resolve) => {
+      timeoutHandle = setTimeout(() => resolve("timeout"), TELEMETRY_SHUTDOWN_TIMEOUT_MS)
+      timeoutHandle.unref?.()
+    }),
+  ])
+  if (timeoutHandle) clearTimeout(timeoutHandle)
+  if (result === "timeout") {
+    Log.Default.warn("telemetry shutdown timed out", { timeoutMs: TELEMETRY_SHUTDOWN_TIMEOUT_MS })
+  }
+}
+
+// kilocode_change end
 let cli = yargs(args) // kilocode_change
   .parserConfiguration({ "populate--": true })
   .scriptName("kilo") // kilocode_change

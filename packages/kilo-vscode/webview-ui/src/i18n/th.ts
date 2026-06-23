@@ -84,8 +84,6 @@ export const dict = {
   "revert.banner.redo.all": "ทำซ้ำทั้งหมด",
   "revert.banner.hint": "ส่งข้อความใหม่เพื่อทำให้การเปลี่ยนแปลงนี้ถาวร",
   "revert.disabled.agentBusy": "รอให้เอเจนต์ทำงานเสร็จ",
-  "command.session.compact": "บีบอัดเซสชัน",
-  "command.session.compact.description": "สรุปเซสชันเพื่อลดขนาดบริบท",
   "command.session.fork": "แตกแขนงจากข้อความ",
   "command.session.fork.description": "สร้างเซสชันใหม่จากข้อความก่อนหน้า",
   "command.session.share": "แชร์เซสชัน",
@@ -431,9 +429,6 @@ export const dict = {
   "toast.workspace.enabled.description": "ตอนนี้จะแสดง worktree หลายรายการในแถบด้านข้าง",
   "toast.workspace.disabled.title": "ปิดใช้งานพื้นที่ทำงานแล้ว",
   "toast.workspace.disabled.description": "จะแสดงเฉพาะ worktree หลักในแถบด้านข้าง",
-
-  "toast.model.none.title": "ไม่ได้เลือกโมเดล",
-  "toast.model.none.description": "เชื่อมต่อผู้ให้บริการเพื่อสรุปเซสชันนี้",
 
   "toast.file.loadFailed.title": "ไม่สามารถโหลดไฟล์",
   "toast.file.listFailed.title": "ไม่สามารถแสดงรายการไฟล์",
@@ -1466,13 +1461,9 @@ export const dict = {
     "ป้องกันการกระทำที่ซ้ำกัน ถูกเรียกเมื่อเครื่องมือเดิมถูกเรียกซ้ำด้วยข้อมูลนำเข้าที่เหมือนกัน",
   "settings.checkpoints.enable.title": "เปิดใช้งานสแนปชอต",
   "settings.checkpoints.enable.description": "สร้างจุดตรวจก่อนแก้ไขไฟล์",
-  "settings.context.autoCompaction.title": "การบีบอัดอัตโนมัติ",
-  "settings.context.autoCompaction.description": "บีบอัดบริบทอัตโนมัติก่อนถึงขีดจำกัด",
   "settings.context.compactionLimit.title": "ขีดจำกัดการบีบอัดอัตโนมัติ",
   "settings.context.compactionLimit.description":
     "บีบอัดเมื่อบริบทถึงเปอร์เซ็นต์นี้ของหน้าต่างโมเดล เว้นว่างไว้เพื่อใช้เฉพาะบัฟเฟอร์ความปลอดภัย",
-  "settings.context.prune.title": "ตัดผลลัพธ์เก่า",
-  "settings.context.prune.description": "ลบผลลัพธ์เครื่องมือเก่าระหว่างการบีบอัด",
   "settings.context.watcherPatterns": "รูปแบบการละเว้นตัวเฝ้าดูไฟล์",
   "settings.context.watcherPatterns.description": "รูปแบบ glob สำหรับไฟล์ที่ตัวเฝ้าดูควรละเว้น",
 

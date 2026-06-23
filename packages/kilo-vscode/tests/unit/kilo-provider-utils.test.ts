@@ -458,6 +458,39 @@ describe("mapSSEEventToWebviewMessage", () => {
     expect(msg).toEqual({ type: "sessionTurnClosed", sessionID: "sess-1", reason: "interrupted" })
   })
 
+  it("maps session.status busy with message", () => {
+    const event: EventSessionStatus = {
+      type: "session.status",
+      properties: {
+        sessionID: "sess-1",
+        status: { type: "busy", message: "Preparing memory for this response..." },
+      },
+    }
+    const msg = mapSSEEventToWebviewMessage(event, "sess-1")
+    expect(msg?.type).toBe("sessionStatus")
+    if (msg?.type === "sessionStatus") {
+      expect(msg.status).toBe("busy")
+      expect(msg.message).toBe("Preparing memory for this response...")
+    }
+  })
+
+  it("maps session.status offline message without exposing request id", () => {
+    const event: EventSessionStatus = {
+      type: "session.status",
+      properties: {
+        sessionID: "sess-1",
+        status: { type: "offline", requestID: "request-1", message: "Waiting for network..." },
+      },
+    }
+    const msg = mapSSEEventToWebviewMessage(event, "sess-1")
+    expect(msg?.type).toBe("sessionStatus")
+    if (msg?.type === "sessionStatus") {
+      expect(msg.status).toBe("offline")
+      expect(msg.message).toBe("Waiting for network...")
+      expect("requestID" in msg).toBe(false)
+    }
+  })
+
   it("maps permission.asked to permissionRequest", () => {
     const event: EventPermissionAsked = {
       type: "permission.asked",

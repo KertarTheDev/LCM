@@ -84,8 +84,6 @@ export const dict = {
   "revert.banner.redo.all": "Повторить всё",
   "revert.banner.hint": "Отправьте новое сообщение, чтобы сделать это постоянным",
   "revert.disabled.agentBusy": "Дождитесь завершения агента",
-  "command.session.compact": "Сжать сессию",
-  "command.session.compact.description": "Сократить сессию для уменьшения размера контекста",
   "command.session.fork": "Создать ответвление",
   "command.session.fork.description": "Создать новую сессию из сообщения",
   "command.session.share": "Поделиться сессией",
@@ -433,9 +431,6 @@ export const dict = {
   "toast.workspace.enabled.description": "В боковой панели теперь отображаются несколько рабочих деревьев",
   "toast.workspace.disabled.title": "Рабочие пространства отключены",
   "toast.workspace.disabled.description": "В боковой панели отображается только главное рабочее дерево",
-
-  "toast.model.none.title": "Модель не выбрана",
-  "toast.model.none.description": "Подключите провайдера для суммаризации сессии",
 
   "toast.file.loadFailed.title": "Не удалось загрузить файл",
 
@@ -1496,13 +1491,9 @@ export const dict = {
     "Предотвращение повторных идентичных действий. Срабатывает, когда один и тот же вызов инструмента повторяется с идентичными входными данными.",
   "settings.checkpoints.enable.title": "Включить снимки",
   "settings.checkpoints.enable.description": "Создавать контрольные точки перед редактированием файлов",
-  "settings.context.autoCompaction.title": "Автоматическое сжатие",
-  "settings.context.autoCompaction.description": "Автоматически сжимать контекст до достижения лимита",
   "settings.context.compactionLimit.title": "Лимит автоматического сжатия",
   "settings.context.compactionLimit.description":
     "Сжимать, когда контекст достигает этого процента окна модели. Оставьте пустым, чтобы использовать только буфер безопасности.",
-  "settings.context.prune.title": "Очистить старые выходные данные",
-  "settings.context.prune.description": "Удалить старые выходные данные инструментов при сжатии",
   "settings.context.watcherPatterns": "Шаблоны игнорирования наблюдателя файлов",
   "settings.context.watcherPatterns.description": "Glob-шаблоны для файлов, которые наблюдатель должен игнорировать",
 

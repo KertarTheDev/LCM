@@ -12,6 +12,14 @@ import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
 import { Schema, Struct } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+// kilocode_change start
+import {
+  LCM_SAFE_ACTIONS,
+  LCM_SAFE_ERROR_CODES,
+  LCM_SAFE_MESSAGE_TEMPLATES,
+  type LcmSafeMessageTemplateKey,
+} from "@/session/lcm/types"
+// kilocode_change end
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import {
@@ -78,6 +86,229 @@ export const ViewedPayload = Schema.Struct({
 })
 // kilocode_change end
 
+// kilocode_change start
+const LcmSafeParamValue = Schema.Union([Schema.String, Schema.Number, Schema.Boolean])
+export const LcmSafeErrorSchema = Schema.Struct({
+  code: Schema.Literals(LCM_SAFE_ERROR_CODES),
+  templateKey: Schema.Literals(
+    Object.keys(LCM_SAFE_MESSAGE_TEMPLATES) as [LcmSafeMessageTemplateKey, ...LcmSafeMessageTemplateKey[]],
+  ),
+  safeParams: Schema.Record(Schema.String, LcmSafeParamValue),
+  safeMessage: Schema.String,
+  action: Schema.optional(Schema.Literals(LCM_SAFE_ACTIONS)),
+  retryable: Schema.Boolean,
+  operationID: Schema.optional(Schema.String),
+  conversationID: Schema.optional(Schema.String),
+  summaryID: Schema.optional(Schema.String),
+  fileID: Schema.optional(Schema.String),
+  diagnosticCode: Schema.optional(Schema.String),
+}).annotate({ identifier: "LcmSafeError" })
+export const LcmRouteErrorResponseSchema = Schema.Struct({
+  ok: Schema.Literal(false),
+  error: LcmSafeErrorSchema,
+}).annotate({ identifier: "LcmRouteErrorResponse" })
+export class LcmBadRequestError extends Schema.ErrorClass<LcmBadRequestError>("LcmBadRequestError")(
+  LcmRouteErrorResponseSchema.fields,
+  { httpApiStatus: 400 },
+) {}
+export class LcmForbiddenError extends Schema.ErrorClass<LcmForbiddenError>("LcmForbiddenError")(
+  LcmRouteErrorResponseSchema.fields,
+  { httpApiStatus: 403 },
+) {}
+export class LcmNotFoundError extends Schema.ErrorClass<LcmNotFoundError>("LcmNotFoundError")(
+  LcmRouteErrorResponseSchema.fields,
+  { httpApiStatus: 404 },
+) {}
+export class LcmConflictError extends Schema.ErrorClass<LcmConflictError>("LcmConflictError")(
+  LcmRouteErrorResponseSchema.fields,
+  { httpApiStatus: 409 },
+) {}
+export class LcmServiceUnavailableError extends Schema.ErrorClass<LcmServiceUnavailableError>(
+  "LcmServiceUnavailableError",
+)(LcmRouteErrorResponseSchema.fields, { httpApiStatus: 503 }) {}
+export class LcmTimeoutError extends Schema.ErrorClass<LcmTimeoutError>("LcmTimeoutError")(
+  LcmRouteErrorResponseSchema.fields,
+  { httpApiStatus: 504 },
+) {}
+export const LcmRouteErrors = [
+  LcmBadRequestError,
+  LcmForbiddenError,
+  LcmNotFoundError,
+  LcmConflictError,
+  LcmServiceUnavailableError,
+  LcmTimeoutError,
+]
+
+export const LcmDbStatusSchema = Schema.Struct({
+  status: Schema.Literals([
+    "uninitialized",
+    "starting",
+    "ready",
+    "migrating",
+    "locked",
+    "corrupt",
+    "unavailable",
+    "closed",
+  ]),
+  dataDir: Schema.String,
+  schemaVersion: Schema.optional(Schema.Number),
+  ownerID: Schema.optional(Schema.String),
+  startedAt: Schema.optional(Schema.String),
+  queue: Schema.optional(
+    Schema.Struct({
+      foregroundQueued: Schema.Number,
+      backgroundQueued: Schema.Number,
+      foregroundLimit: Schema.Number,
+      backgroundLimit: Schema.Number,
+      active: Schema.Boolean,
+      activeLane: Schema.optional(Schema.Literals(["foreground", "background"])),
+      activePurpose: Schema.optional(
+        Schema.Literals([
+          "startup",
+          "migration",
+          "sync",
+          "assembly",
+          "token_budget",
+          "maintenance",
+          "retrieval",
+          "large_file",
+          "map",
+          "cleanup",
+          "smoke",
+          "debug_support",
+        ]),
+      ),
+      rejected: Schema.Number,
+      canceled: Schema.Number,
+      timedOut: Schema.Number,
+    }),
+  ),
+  safeError: Schema.optional(LcmSafeErrorSchema),
+}).annotate({ identifier: "LcmDbStatus" })
+
+export const LcmCapabilitiesSchema = Schema.Struct({
+  sessionID: SessionID,
+  conversationID: Schema.optional(Schema.String),
+  lifecycleState: Schema.Literals([
+    "passive_synced",
+    "lcm_active",
+    "legacy_read_only",
+    "recovery_required",
+    "recovery_failed",
+    "db_unavailable",
+  ]),
+  strategy: Schema.Literals(["upward", "dolt"]),
+  dbReady: Schema.Boolean,
+  lcmActive: Schema.Boolean,
+  canAssemble: Schema.Boolean,
+  canMaintain: Schema.Boolean,
+  canRetrieve: Schema.Boolean,
+  dbStatus: Schema.optional(LcmDbStatusSchema),
+  safeError: Schema.optional(LcmSafeErrorSchema),
+}).annotate({ identifier: "LcmCapabilities" })
+
+export const LcmSettingsStateSchema = Schema.Struct({
+  strategy: Schema.Literals(["upward", "dolt"]),
+  freshTailTokens: Schema.Number,
+  storageWarningThresholdBytes: Schema.Number,
+  storageBytes: Schema.Number,
+  storageWarning: Schema.Boolean,
+  effectiveScope: Schema.Struct({
+    kind: Schema.Literals(["workspace", "project", "default"]),
+    projectID: Schema.optional(Schema.String),
+    workspaceID: Schema.optional(Schema.String),
+  }),
+  lifecycleState: Schema.optional(LcmCapabilitiesSchema.fields.lifecycleState),
+  dbStatus: Schema.optional(LcmDbStatusSchema),
+  safeError: Schema.optional(LcmSafeErrorSchema),
+  memoryMaintenanceCostTotal: Schema.optional(Schema.Number),
+  retrievalCostTotal: Schema.optional(Schema.Number),
+  fileExplorationCostTotal: Schema.optional(Schema.Number),
+  mapCostTotal: Schema.optional(Schema.Number),
+}).annotate({ identifier: "LcmSettingsState" })
+
+const LcmUpdateSettingsInputFields = Schema.Struct({
+  sessionID: Schema.optional(SessionID),
+  projectID: Schema.optional(Schema.String),
+  workspaceID: Schema.optional(Schema.String),
+  strategy: Schema.optional(Schema.Literals(["upward", "dolt"])),
+  freshTailTokens: Schema.optional(Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))),
+  storageWarningThresholdBytes: Schema.optional(Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))),
+})
+export const LcmUpdateSettingsInput = Schema.StructWithRest(LcmUpdateSettingsInputFields, [
+  Schema.Record(Schema.String, Schema.Unknown),
+]).annotate({ identifier: "LcmUpdateSettingsInput" })
+
+export const LcmMaintenanceResultSchema = Schema.Struct({
+  conversationID: Schema.String,
+  operationID: Schema.String,
+  workNeeded: Schema.Boolean,
+  workPerformed: Schema.Boolean,
+  blocking: Schema.Boolean,
+  reason: Schema.Literals(["manual", "soft_threshold", "hard_limit", "repair"]),
+  beforeTokens: Schema.optional(Schema.Number),
+  afterTokens: Schema.optional(Schema.Number),
+  summariesCreated: Schema.Number,
+  contextItemsReplaced: Schema.Number,
+  status: Schema.Literals([
+    "healthy",
+    "scheduled",
+    "completed",
+    "no_op",
+    "deferred",
+    "skipped",
+    "failed",
+    "canceled",
+    "recovery_required",
+  ]),
+  safeMessage: Schema.optional(Schema.String),
+  safeError: Schema.optional(LcmSafeErrorSchema),
+}).annotate({ identifier: "LcmMaintenanceResult" })
+
+export const LcmCancelMaintenanceInput = Schema.Struct({
+  reason: Schema.optional(Schema.Literal("user")),
+}).annotate({ identifier: "LcmCancelMaintenanceInput" })
+
+const LcmDbDiagnosticCheckSchema = Schema.Struct({
+  name: Schema.String,
+  status: Schema.Literals(["passed", "failed", "skipped"]),
+  code: Schema.optional(LcmSafeErrorSchema.fields.code),
+}).annotate({ identifier: "LcmDbDiagnosticCheck" })
+export const LcmDbDiagnoseReportSchema = Schema.Struct({
+  operationID: Schema.String,
+  dataDir: Schema.String,
+  status: LcmDbStatusSchema.fields.status,
+  schemaVersion: Schema.optional(Schema.Number),
+  checks: Schema.Array(LcmDbDiagnosticCheckSchema),
+  safeErrors: Schema.Array(LcmSafeErrorSchema),
+  quarantineRecommended: Schema.Boolean,
+}).annotate({ identifier: "LcmDbDiagnoseReport" })
+const LcmDbRebuildInputFields = Schema.Struct({
+  dryRun: Schema.optional(Schema.Boolean),
+})
+export const LcmDbRebuildInput = LcmDbRebuildInputFields.annotate({ identifier: "LcmDbRebuildInput" })
+export const LcmDbRebuildReportSchema = Schema.Struct({
+  operationID: Schema.String,
+  dataDir: Schema.String,
+  dryRun: Schema.Boolean,
+  status: Schema.Literals(["would_rebuild", "rebuilt", "partial", "failed"]),
+  quarantinedDataDir: Schema.optional(Schema.String),
+  rebuiltConversations: Schema.Number,
+  readOnlyConversations: Schema.Number,
+  skippedConversations: Schema.Number,
+  failedConversations: Schema.Number,
+  safeErrors: Schema.Array(LcmSafeErrorSchema),
+}).annotate({ identifier: "LcmDbRebuildReport" })
+export const LcmPromptExportReportSchema = Schema.Struct({
+  operationID: Schema.String,
+  sessionID: Schema.String,
+  conversationID: Schema.String,
+  exportDir: Schema.String,
+  fileCount: Schema.Number,
+  warnings: Schema.Array(Schema.String),
+}).annotate({ identifier: "LcmPromptExportReport" })
+
+// kilocode_change end
 export const SessionPaths = {
   list: root,
   status: `${root}/status`,
@@ -93,8 +324,16 @@ export const SessionPaths = {
   fork: `${root}/:sessionID/fork`,
   abort: `${root}/:sessionID/abort`,
   share: `${root}/:sessionID/share`,
+  // kilocode_change start
   init: `${root}/:sessionID/init`,
   summarize: `${root}/:sessionID/summarize`,
+  lcmCapabilities: `${root}/:sessionID/lcm/capabilities`,
+  lcmSettings: `${root}/:sessionID/lcm/settings`,
+  lcmMaintenanceCancel: `${root}/:sessionID/lcm/maintenance/cancel`,
+  lcmDbDiagnose: `${root}/:sessionID/lcm/db/diagnose`,
+  lcmDbRebuild: `${root}/:sessionID/lcm/db/rebuild`,
+  lcmPromptsExport: `${root}/:sessionID/lcm/prompts/export`,
+  // kilocode_change end
   prompt: `${root}/:sessionID/message`,
   promptAsync: `${root}/:sessionID/prompt_async`,
   command: `${root}/:sessionID/command`,
@@ -304,19 +543,112 @@ export const SessionApi = HttpApi.make("session")
             description: "Remove the shareable link for a session, making it private again.",
           }),
         ),
+        // kilocode_change start
         HttpApiEndpoint.post("summarize", SessionPaths.summarize, {
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
           payload: SummarizePayload,
           success: described(Schema.Boolean, "Summarized session"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: LcmRouteErrors,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.summarize",
             summary: "Summarize session",
-            description: "Generate a concise summary of the session using AI compaction to preserve key information.",
+            description: "Run LCM-owned memory maintenance for the session without legacy lossy compaction.",
           }),
         ),
+        // kilocode_change end
+        // kilocode_change start
+        HttpApiEndpoint.get("lcmCapabilities", SessionPaths.lcmCapabilities, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(LcmCapabilitiesSchema, "LCM capabilities"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.capabilities",
+            summary: "Get LCM capabilities",
+            description: "Get content-safe LCM lifecycle and capability state for a session.",
+          }),
+        ),
+        HttpApiEndpoint.get("lcmSettingsGet", SessionPaths.lcmSettings, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(LcmSettingsStateSchema, "LCM settings state"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.settings.get",
+            summary: "Get LCM settings",
+            description: "Get effective LCM settings for the session's trusted project or workspace scope.",
+          }),
+        ),
+        HttpApiEndpoint.patch("lcmSettingsUpdate", SessionPaths.lcmSettings, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: LcmUpdateSettingsInput,
+          success: described(LcmSettingsStateSchema, "Updated LCM settings state"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.settings.update",
+            summary: "Update LCM settings",
+            description: "Update user-writable LCM settings for the session's workspace or project scope.",
+          }),
+        ),
+        HttpApiEndpoint.post("lcmMaintenanceCancel", SessionPaths.lcmMaintenanceCancel, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: [HttpApiSchema.NoContent, LcmCancelMaintenanceInput],
+          success: described(LcmMaintenanceResultSchema, "LCM maintenance cancellation result"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.maintenance.cancel",
+            summary: "Cancel queued LCM maintenance",
+            description: "Cancel a queued background LCM maintenance retry for the trusted session conversation.",
+          }),
+        ),
+        HttpApiEndpoint.post("lcmDbDiagnose", SessionPaths.lcmDbDiagnose, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(LcmDbDiagnoseReportSchema, "LCM database diagnosis report"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.db.diagnose",
+            summary: "Diagnose LCM database",
+            description: "Run a content-safe, read-only LCM database diagnosis for the trusted session family.",
+          }),
+        ),
+        HttpApiEndpoint.post("lcmDbRebuild", SessionPaths.lcmDbRebuild, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: [HttpApiSchema.NoContent, LcmDbRebuildInput],
+          success: described(LcmDbRebuildReportSchema, "LCM database rebuild report"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.db.rebuild",
+            summary: "Rebuild LCM database",
+            description:
+              "Run a content-safe LCM database rebuild preview or apply-mode repair for the trusted session family.",
+          }),
+        ),
+        HttpApiEndpoint.post("lcmPromptsExport", SessionPaths.lcmPromptsExport, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(LcmPromptExportReportSchema, "LCM prompt export report"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.prompts.export",
+            summary: "Export LCM prompts",
+            description:
+              "Write Markdown debug files for reconstructed LCM model prompts and active context for the trusted session.",
+          }),
+        ),
+        // kilocode_change end
         HttpApiEndpoint.post("prompt", SessionPaths.prompt, {
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,

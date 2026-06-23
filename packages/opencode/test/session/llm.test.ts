@@ -673,6 +673,53 @@ function createChatStream(text: string) {
   })
 }
 
+// kilocode_change start
+function createToolCallStream(input: { toolName: string; toolCallID: string }) {
+  const payload =
+    [
+      `data: ${JSON.stringify({
+        id: "chatcmpl-tool",
+        object: "chat.completion.chunk",
+        choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }],
+      })}`,
+      `data: ${JSON.stringify({
+        id: "chatcmpl-tool",
+        object: "chat.completion.chunk",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: input.toolCallID,
+                  type: "function",
+                  function: { name: input.toolName, arguments: "{}" },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      })}`,
+      `data: ${JSON.stringify({
+        id: "chatcmpl-tool",
+        object: "chat.completion.chunk",
+        choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+      })}`,
+      "data: [DONE]",
+    ].join("\n\n") + "\n\n"
+
+  const encoder = new TextEncoder()
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(payload))
+      controller.close()
+    },
+  })
+}
+
+// kilocode_change end
 const MODELS_FIXTURE = JSON.parse(
   await Bun.file(path.join(import.meta.dir, "../tool/fixtures/models-api.json")).text(),
 ) as Record<string, ModelsDev.Provider>
@@ -809,6 +856,119 @@ describe("session.llm.stream", () => {
   )
 
   const alibabaQwenFixture = { providerID: "alibaba", modelID: "qwen-plus" }
+
+  // kilocode_change start
+  it.instance(
+    "releases local provider capacity before executing local tools",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(alibabaQwenFixture.providerID, alibabaQwenFixture.modelID)
+        const parentRequest = waitRequest(
+          "/chat/completions",
+          new Response(createToolCallStream({ toolName: "nested", toolCallID: "call-nested" }), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+        const nestedRequest = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Nested complete"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderID.make(alibabaQwenFixture.providerID),
+          ModelID.make(fixture.model.id),
+        )
+        const ctx = yield* InstanceRef
+        if (!ctx) return yield* Effect.die("InstanceRef not provided")
+        const llm = yield* LLM.Service
+        const sessionID = SessionID.make("session-test-local-capacity-parent")
+        const nestedSessionID = SessionID.make("session-test-local-capacity-nested")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.ascending(),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+        const nestedUser = {
+          ...user,
+          id: MessageID.ascending(),
+          sessionID: nestedSessionID,
+        } satisfies MessageV2.User
+
+        let nestedCompleted = false
+        yield* Effect.promise(() =>
+          Promise.race([
+            Effect.runPromise(
+              llm
+                .stream({
+                  user,
+                  sessionID,
+                  model: resolved,
+                  agent,
+                  system: ["You are a helpful assistant."],
+                  messages: [{ role: "user", content: "Use the nested tool." }],
+                  tools: {
+                    nested: tool({
+                      description: "Run nested local model work",
+                      inputSchema: z.object({}),
+                      execute: async () => {
+                        await Effect.runPromise(
+                          llm
+                            .stream({
+                              user: nestedUser,
+                              sessionID: nestedSessionID,
+                              model: resolved,
+                              agent,
+                              system: ["You are a helpful assistant."],
+                              messages: [{ role: "user", content: "Nested work" }],
+                              tools: {},
+                            })
+                            .pipe(Stream.runDrain, Effect.provideService(InstanceRef, ctx)),
+                        )
+                        nestedCompleted = true
+                        return { output: "nested complete" }
+                      },
+                    }),
+                  },
+                })
+                .pipe(Stream.runDrain, Effect.provideService(InstanceRef, ctx)),
+            ),
+            timeout(5000),
+          ]),
+        )
+
+        expect(nestedCompleted).toBe(true)
+        const parent = yield* Effect.promise(() => parentRequest)
+        const nested = yield* Effect.promise(() => nestedRequest)
+        expect(parent.body.model).toBe(resolved.api.id)
+        expect(nested.body.model).toBe(resolved.api.id)
+      }),
+    {
+      config: () => ({
+        enabled_providers: [alibabaQwenFixture.providerID],
+        provider: {
+          [alibabaQwenFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  // kilocode_change end
   it.instance(
     "service stream cancellation cancels provider response body promptly",
     () =>

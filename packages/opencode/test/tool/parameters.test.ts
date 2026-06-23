@@ -244,6 +244,11 @@ describe("tool parameters", () => {
     test("rejects missing prompt", () => {
       expect(accepts(Task, { description: "d", subagent_type: "general" })).toBe(false)
     })
+    // kilocode_change start
+    test("rejects missing subagent_type", () => {
+      expect(accepts(Task, { description: "d", prompt: "p" })).toBe(false)
+    })
+    // kilocode_change end
   })
 
   describe("todo", () => {

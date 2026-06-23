@@ -48,7 +48,13 @@ export type Event =
   | EventSuggestionDismissed
   | EventCommandExecuted
   | EventProjectUpdated
-  | EventSessionCompacted
+  | EventLcmDbStatus1
+  | EventLcmContextUpdated1
+  | EventLcmMetricsUpdated1
+  | EventLcmFileStatus1
+  | EventLcmMaintenanceStarted1
+  | EventLcmMaintenanceEnded1
+  | EventLcmMaintenanceFailed1
   | EventVcsBranchUpdated
   | EventKiloSessionsRemoteStatusChanged
   | EventWorkspaceReady
@@ -368,6 +374,62 @@ export type ContextOverflowError = {
   }
 }
 
+export type LcmMemoryError = {
+  name: "LcmMemoryError"
+  data: {
+    message: string
+    code:
+      | "db_unavailable"
+      | "db_locked"
+      | "db_migration_failed"
+      | "db_corrupt"
+      | "settings_unavailable"
+      | "not_found"
+      | "unauthorized"
+      | "invalid_request"
+      | "over_limit"
+      | "timeout"
+      | "canceled"
+      | "recovery_required"
+      | "recovery_failed"
+      | "missing_source"
+      | "stale_source"
+      | "permission_denied"
+      | "provider_unavailable"
+      | "hard_limit_unresolved"
+      | "legacy_read_only"
+      | "provider_capacity_deferred"
+    safeMessage: string
+    retryable: boolean
+    diagnosticCode?: string
+    action?:
+      | "retry"
+      | "repeat_input"
+      | "start_new_thread"
+      | "re_register_file"
+      | "delete_session"
+      | "close_other_owner"
+      | "contact_support"
+    operationID?: string
+    conversationID?: string
+    templateKey?:
+      | "lcm.db.unavailable"
+      | "lcm.settings.unavailable"
+      | "lcm.auth.denied"
+      | "lcm.request.invalid"
+      | "lcm.operation.timeout"
+      | "lcm.operation.canceled"
+      | "lcm.recovery.missing_source"
+      | "lcm.file.stale"
+      | "lcm.hard_limit.unresolved"
+      | "lcm.provider_capacity.deferred"
+      | "lcm.provider.unavailable"
+    safeParams?: {
+      [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
+    }
+  }
+}
+
 export type ApiError = {
   name: "APIError"
   data: {
@@ -419,6 +481,7 @@ export type SessionStatus =
     }
   | {
       type: "busy"
+      message?: string
     }
   | {
       type: "offline"
@@ -545,6 +608,7 @@ export type AssistantMessage = {
     | MessageAbortedError
     | StructuredOutputError
     | ContextOverflowError
+    | LcmMemoryError
     | ApiError
   parentID: string
   modelID: string
@@ -962,7 +1026,13 @@ export type GlobalEvent = {
     | EventSuggestionDismissed
     | EventCommandExecuted
     | EventProjectUpdated
-    | EventSessionCompacted
+    | EventLcmDbStatus
+    | EventLcmContextUpdated
+    | EventLcmMetricsUpdated
+    | EventLcmFileStatus
+    | EventLcmMaintenanceStarted
+    | EventLcmMaintenanceEnded
+    | EventLcmMaintenanceFailed
     | EventVcsBranchUpdated
     | EventKiloSessionsRemoteStatusChanged
     | EventWorkspaceReady
@@ -1532,6 +1602,7 @@ export type Config = {
     preserve_recent_tokens?: number
     reserved?: number
   }
+  lcm?: unknown
   experimental?: {
     disable_paste_summary?: boolean
     batch_tool?: boolean
@@ -1932,6 +2003,158 @@ export type FormatterStatus = {
   enabled: boolean
 }
 
+export type LcmSafeError = {
+  code:
+    | "db_unavailable"
+    | "db_locked"
+    | "db_migration_failed"
+    | "db_corrupt"
+    | "settings_unavailable"
+    | "not_found"
+    | "unauthorized"
+    | "invalid_request"
+    | "over_limit"
+    | "timeout"
+    | "canceled"
+    | "recovery_required"
+    | "recovery_failed"
+    | "missing_source"
+    | "stale_source"
+    | "permission_denied"
+    | "provider_unavailable"
+    | "hard_limit_unresolved"
+    | "legacy_read_only"
+    | "provider_capacity_deferred"
+  templateKey:
+    | "lcm.db.unavailable"
+    | "lcm.settings.unavailable"
+    | "lcm.auth.denied"
+    | "lcm.request.invalid"
+    | "lcm.operation.timeout"
+    | "lcm.operation.canceled"
+    | "lcm.recovery.missing_source"
+    | "lcm.file.stale"
+    | "lcm.hard_limit.unresolved"
+    | "lcm.provider_capacity.deferred"
+    | "lcm.provider.unavailable"
+  safeParams: {
+    [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
+  }
+  safeMessage: string
+  action?:
+    | "retry"
+    | "repeat_input"
+    | "start_new_thread"
+    | "re_register_file"
+    | "delete_session"
+    | "close_other_owner"
+    | "contact_support"
+  retryable: boolean
+  operationID?: string
+  conversationID?: string
+  summaryID?: string
+  fileID?: string
+  diagnosticCode?: string
+}
+
+export type LcmDbStatus = {
+  status: "uninitialized" | "starting" | "ready" | "migrating" | "locked" | "corrupt" | "unavailable" | "closed"
+  dataDir: string
+  schemaVersion?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  ownerID?: string
+  startedAt?: string
+  queue?: {
+    foregroundQueued: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    backgroundQueued: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    foregroundLimit: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    backgroundLimit: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    active: boolean
+    activeLane?: "foreground" | "background"
+    activePurpose?:
+      | "startup"
+      | "migration"
+      | "sync"
+      | "assembly"
+      | "token_budget"
+      | "maintenance"
+      | "retrieval"
+      | "large_file"
+      | "map"
+      | "cleanup"
+      | "smoke"
+      | "debug_support"
+    rejected: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    canceled: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    timedOut: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  safeError?: LcmSafeError
+}
+
+export type LcmSettingsState = {
+  strategy: "upward" | "dolt"
+  freshTailTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  storageWarningThresholdBytes: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  storageBytes: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  storageWarning: boolean
+  effectiveScope: {
+    kind: "workspace" | "project" | "default"
+    projectID?: string
+    workspaceID?: string
+  }
+  lifecycleState?:
+    | "passive_synced"
+    | "lcm_active"
+    | "legacy_read_only"
+    | "recovery_required"
+    | "recovery_failed"
+    | "db_unavailable"
+  dbStatus?: LcmDbStatus
+  safeError?: LcmSafeError
+  memoryMaintenanceCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  retrievalCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  fileExplorationCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  mapCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type LcmBadRequestError = {
+  ok: false
+  error: LcmSafeError
+}
+
+export type LcmForbiddenError = {
+  ok: false
+  error: LcmSafeError
+}
+
+export type LcmNotFoundError = {
+  ok: false
+  error: LcmSafeError
+}
+
+export type LcmConflictError = {
+  ok: false
+  error: LcmSafeError
+}
+
+export type LcmServiceUnavailableError = {
+  ok: false
+  error: LcmSafeError
+}
+
+export type LcmTimeoutError = {
+  ok: false
+  error: LcmSafeError
+}
+
+export type LcmUpdateSettingsInput = {
+  sessionID?: string
+  projectID?: string
+  workspaceID?: string
+  strategy?: "upward" | "dolt"
+  freshTailTokens?: number
+  storageWarningThresholdBytes?: number
+}
+
 export type McpStatusConnected = {
   status: "connected"
 }
@@ -2059,6 +2282,117 @@ export type NotFoundError = {
   data: {
     message: string
   }
+}
+
+export type LcmCapabilities = {
+  sessionID: string
+  conversationID?: string
+  lifecycleState:
+    | "passive_synced"
+    | "lcm_active"
+    | "legacy_read_only"
+    | "recovery_required"
+    | "recovery_failed"
+    | "db_unavailable"
+  strategy: "upward" | "dolt"
+  dbReady: boolean
+  lcmActive: boolean
+  canAssemble: boolean
+  canMaintain: boolean
+  canRetrieve: boolean
+  dbStatus?: LcmDbStatus
+  safeError?: LcmSafeError
+}
+
+export type LcmCancelMaintenanceInput = {
+  reason?: "user"
+}
+
+export type LcmMaintenanceResult = {
+  conversationID: string
+  operationID: string
+  workNeeded: boolean
+  workPerformed: boolean
+  blocking: boolean
+  reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
+  beforeTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  afterTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  summariesCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  contextItemsReplaced: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  status:
+    | "healthy"
+    | "scheduled"
+    | "completed"
+    | "no_op"
+    | "deferred"
+    | "skipped"
+    | "failed"
+    | "canceled"
+    | "recovery_required"
+  safeMessage?: string
+  safeError?: LcmSafeError
+}
+
+export type LcmDbDiagnosticCheck = {
+  name: string
+  status: "passed" | "failed" | "skipped"
+  code?:
+    | "db_unavailable"
+    | "db_locked"
+    | "db_migration_failed"
+    | "db_corrupt"
+    | "settings_unavailable"
+    | "not_found"
+    | "unauthorized"
+    | "invalid_request"
+    | "over_limit"
+    | "timeout"
+    | "canceled"
+    | "recovery_required"
+    | "recovery_failed"
+    | "missing_source"
+    | "stale_source"
+    | "permission_denied"
+    | "provider_unavailable"
+    | "hard_limit_unresolved"
+    | "legacy_read_only"
+    | "provider_capacity_deferred"
+}
+
+export type LcmDbDiagnoseReport = {
+  operationID: string
+  dataDir: string
+  status: "uninitialized" | "starting" | "ready" | "migrating" | "locked" | "corrupt" | "unavailable" | "closed"
+  schemaVersion?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  checks: Array<LcmDbDiagnosticCheck>
+  safeErrors: Array<LcmSafeError>
+  quarantineRecommended: boolean
+}
+
+export type LcmDbRebuildInput = {
+  dryRun?: boolean
+}
+
+export type LcmDbRebuildReport = {
+  operationID: string
+  dataDir: string
+  dryRun: boolean
+  status: "would_rebuild" | "rebuilt" | "partial" | "failed"
+  quarantinedDataDir?: string
+  rebuiltConversations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  readOnlyConversations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  skippedConversations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  failedConversations: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  safeErrors: Array<LcmSafeError>
+}
+
+export type LcmPromptExportReport = {
+  operationID: string
+  sessionID: string
+  conversationID: string
+  exportDir: string
+  fileCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  warnings: Array<string>
 }
 
 export type TextPartInput = {
@@ -2422,6 +2756,62 @@ export type KilocodeSessionImportResult = {
 
 export type EffectHttpApiErrorForbidden = {
   _tag: "Forbidden"
+}
+
+export type LcmMemoryError1 = {
+  name: "LcmMemoryError"
+  data: {
+    message: string
+    code:
+      | "db_unavailable"
+      | "db_locked"
+      | "db_migration_failed"
+      | "db_corrupt"
+      | "settings_unavailable"
+      | "not_found"
+      | "unauthorized"
+      | "invalid_request"
+      | "over_limit"
+      | "timeout"
+      | "canceled"
+      | "recovery_required"
+      | "recovery_failed"
+      | "missing_source"
+      | "stale_source"
+      | "permission_denied"
+      | "provider_unavailable"
+      | "hard_limit_unresolved"
+      | "legacy_read_only"
+      | "provider_capacity_deferred"
+    safeMessage: string
+    retryable: boolean
+    diagnosticCode?: string
+    action?:
+      | "retry"
+      | "repeat_input"
+      | "start_new_thread"
+      | "re_register_file"
+      | "delete_session"
+      | "close_other_owner"
+      | "contact_support"
+    operationID?: string
+    conversationID?: string
+    templateKey?:
+      | "lcm.db.unavailable"
+      | "lcm.settings.unavailable"
+      | "lcm.auth.denied"
+      | "lcm.request.invalid"
+      | "lcm.operation.timeout"
+      | "lcm.operation.canceled"
+      | "lcm.recovery.missing_source"
+      | "lcm.file.stale"
+      | "lcm.hard_limit.unresolved"
+      | "lcm.provider_capacity.deferred"
+      | "lcm.provider.unavailable"
+    safeParams?: {
+      [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
+    }
+  }
 }
 
 export type SyncEventMessageUpdated = {
@@ -3208,6 +3598,7 @@ export type EventSessionError = {
       | MessageAbortedError
       | StructuredOutputError
       | ContextOverflowError
+      | LcmMemoryError
       | ApiError
   }
 }
@@ -3307,11 +3698,717 @@ export type EventProjectUpdated = {
   properties: Project
 }
 
-export type EventSessionCompacted = {
+export type EventLcmDbStatus = {
   id: string
-  type: "session.compacted"
+  type: "lcm.db.status"
   properties: {
-    sessionID: string
+    type: "lcm.db.status"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      status: "uninitialized" | "starting" | "ready" | "migrating" | "locked" | "corrupt" | "unavailable" | "closed"
+      schemaVersion?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      lifecycleState?:
+        | "passive_synced"
+        | "lcm_active"
+        | "legacy_read_only"
+        | "recovery_required"
+        | "recovery_failed"
+        | "db_unavailable"
+      dbReady: boolean
+      safeError?: {
+        code:
+          | "db_unavailable"
+          | "db_locked"
+          | "db_migration_failed"
+          | "db_corrupt"
+          | "settings_unavailable"
+          | "not_found"
+          | "unauthorized"
+          | "invalid_request"
+          | "over_limit"
+          | "timeout"
+          | "canceled"
+          | "recovery_required"
+          | "recovery_failed"
+          | "missing_source"
+          | "stale_source"
+          | "permission_denied"
+          | "provider_unavailable"
+          | "hard_limit_unresolved"
+          | "legacy_read_only"
+          | "provider_capacity_deferred"
+        templateKey:
+          | "lcm.db.unavailable"
+          | "lcm.settings.unavailable"
+          | "lcm.auth.denied"
+          | "lcm.request.invalid"
+          | "lcm.operation.timeout"
+          | "lcm.operation.canceled"
+          | "lcm.recovery.missing_source"
+          | "lcm.file.stale"
+          | "lcm.hard_limit.unresolved"
+          | "lcm.provider_capacity.deferred"
+          | "lcm.provider.unavailable"
+        safeParams: {
+          [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
+        }
+        safeMessage: string
+        action?:
+          | "retry"
+          | "repeat_input"
+          | "start_new_thread"
+          | "re_register_file"
+          | "delete_session"
+          | "close_other_owner"
+          | "contact_support"
+        retryable: boolean
+        operationID?: string
+        conversationID?: string
+        summaryID?: string
+        fileID?: string
+        diagnosticCode?: string
+      }
+    }
+  }
+}
+
+export type EventLcmContextUpdated = {
+  id: string
+  type: "lcm.context.updated"
+  properties: {
+    type: "lcm.context.updated"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      lifecycleState:
+        | "passive_synced"
+        | "lcm_active"
+        | "legacy_read_only"
+        | "recovery_required"
+        | "recovery_failed"
+        | "db_unavailable"
+      strategy: "upward" | "dolt"
+      activeTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      hardLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softThreshold?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      unconsumedRawTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      unconsumedRawItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      protectedTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      protectedTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      rawLaneTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      hardFillRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      budgetStatus?: "budgeted" | "unavailable" | "provider_limit_fallback"
+      softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
+      laneLatchDiagnostics?: Array<{
+        [key: string]: unknown
+      }>
+      contextItemCounts?: {
+        [key: string]: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      reason: "sync" | "rebuild" | "maintenance" | "large_file_marker" | "retrieval_cue" | "recovery"
+    }
+  }
+}
+
+export type EventLcmMetricsUpdated = {
+  id: string
+  type: "lcm.metrics.updated"
+  properties: {
+    type: "lcm.metrics.updated"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      conversationID: string
+      lifecycleState:
+        | "passive_synced"
+        | "lcm_active"
+        | "legacy_read_only"
+        | "recovery_required"
+        | "recovery_failed"
+        | "db_unavailable"
+      strategy: "upward" | "dolt"
+      activeTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      hardLimit: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softThreshold: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogItemCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailRawTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailRawItemCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      unconsumedRawTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      unconsumedRawItemCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      protectedTailRawTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      protectedTailRawItemCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      rawLaneTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      hardFillRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      budgetStatus?: "budgeted" | "unavailable" | "provider_limit_fallback"
+      softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
+      laneLatchDiagnostics?: Array<{
+        [key: string]: unknown
+      }>
+      providerContextLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      providerInputLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      providerOutputLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      outputReserve?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      systemPromptTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      toolSchemaTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      providerCapacityDeferred?: boolean
+      providerEndpointKeyHash?: string
+      tokenCounterMode: "provider" | "deterministic_fallback" | "fake"
+      tokenCounterVersion: string
+      laneTokens: {
+        [key: string]: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      contextItemCounts: {
+        [key: string]: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      deferredSoftMaintenanceQueued: boolean
+      deferredSoftMaintenanceQueuedCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      deferredSoftMaintenanceAttemptCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      deferredSoftMaintenanceNextRunAtMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      storageBytes: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      storageWarningThresholdBytes: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      storageWarning: boolean
+      memoryMaintenanceCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      retrievalCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      fileExplorationCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      mapCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      currency?: string
+      lastMaintenance?: {
+        operationID: string
+        status:
+          | "healthy"
+          | "scheduled"
+          | "completed"
+          | "no_op"
+          | "deferred"
+          | "skipped"
+          | "failed"
+          | "canceled"
+          | "recovery_required"
+        reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
+        blocking: boolean
+        beforeTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        afterTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      }
+      updatedAt: string
+    }
+  }
+}
+
+export type EventLcmFileStatus = {
+  id: string
+  type: "lcm.file.status"
+  properties: {
+    type: "lcm.file.status"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      fileID: string
+      sourceKind: "path" | "inline" | "image" | "tool_output" | "map_input" | "map_output"
+      staleState:
+        | "current"
+        | "missing"
+        | "moved"
+        | "size_mismatch"
+        | "mtime_mismatch"
+        | "hash_mismatch"
+        | "symlink_retargeted"
+        | "permission_denied"
+        | "outside_boundary"
+        | "artifact_missing"
+        | "artifact_size_mismatch"
+        | "artifact_hash_mismatch"
+        | "unknown"
+      explorationStatus:
+        | "not_started"
+        | "queued"
+        | "running"
+        | "completed"
+        | "sampled"
+        | "unavailable"
+        | "unsafe"
+        | "corrupt"
+        | "timeout"
+        | "over_limit"
+        | "canceled"
+        | "failed"
+      explorerKind: "none" | "text" | "html" | "pdf" | "image" | "sqlite" | "unknown"
+      sampled: boolean
+      sampleBytes?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      blockingUse: boolean
+      safeReason?:
+        | "none"
+        | "sampled"
+        | "unsupported_type"
+        | "missing_helper"
+        | "unsafe_active_content"
+        | "corrupt_input"
+        | "timeout"
+        | "over_limit"
+        | "canceled"
+        | "helper_failed"
+        | "stale_source"
+        | "permission_denied"
+        | "artifact_invalid"
+      safeError?: {
+        code:
+          | "db_unavailable"
+          | "db_locked"
+          | "db_migration_failed"
+          | "db_corrupt"
+          | "settings_unavailable"
+          | "not_found"
+          | "unauthorized"
+          | "invalid_request"
+          | "over_limit"
+          | "timeout"
+          | "canceled"
+          | "recovery_required"
+          | "recovery_failed"
+          | "missing_source"
+          | "stale_source"
+          | "permission_denied"
+          | "provider_unavailable"
+          | "hard_limit_unresolved"
+          | "legacy_read_only"
+          | "provider_capacity_deferred"
+        templateKey:
+          | "lcm.db.unavailable"
+          | "lcm.settings.unavailable"
+          | "lcm.auth.denied"
+          | "lcm.request.invalid"
+          | "lcm.operation.timeout"
+          | "lcm.operation.canceled"
+          | "lcm.recovery.missing_source"
+          | "lcm.file.stale"
+          | "lcm.hard_limit.unresolved"
+          | "lcm.provider_capacity.deferred"
+          | "lcm.provider.unavailable"
+        safeParams: {
+          [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
+        }
+        safeMessage: string
+        action?:
+          | "retry"
+          | "repeat_input"
+          | "start_new_thread"
+          | "re_register_file"
+          | "delete_session"
+          | "close_other_owner"
+          | "contact_support"
+        retryable: boolean
+        operationID?: string
+        conversationID?: string
+        summaryID?: string
+        fileID?: string
+        diagnosticCode?: string
+      }
+    }
+  }
+}
+
+export type EventLcmMaintenanceStarted = {
+  id: string
+  type: "lcm.maintenance.started"
+  properties: {
+    type: "lcm.maintenance.started"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      phase: "leaf_summary" | "condensation" | "hard_limit" | "deterministic_fallback" | "repair"
+      reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
+      status:
+        | "started"
+        | "scheduled"
+        | "completed"
+        | "no_op"
+        | "deferred"
+        | "skipped"
+        | "canceled"
+        | "failed"
+        | "recovery_required"
+      blocking: boolean
+      beforeTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      afterTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      hardLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softThreshold?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      unconsumedRawTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      unconsumedRawItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      protectedTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      protectedTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      rawLaneTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      afterSoftBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      afterSoftBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      providerCapacityDeferred?: boolean
+      providerEndpointKeyHash?: string
+      softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
+      laneLatchDiagnostics?: Array<{
+        [key: string]: unknown
+      }>
+      tokenCounterMode?: "provider" | "deterministic_fallback" | "fake"
+      tokenCounterVersion?: string
+      sweepPassesCompleted?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sweepMaxPasses?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sweepElapsedMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sweepMaxElapsedMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sweepStopReason?:
+        | "completed"
+        | "iteration_cap"
+        | "elapsed_cap"
+        | "canceled"
+        | "provider_capacity"
+        | "backoff"
+        | "no_work"
+        | "failed"
+      summaryPromptVersion?: string
+      summaryBackoffPurpose?: "leaf_summary" | "condensation" | "hard_limit_maintenance"
+      summaryBackoffFailureCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      summaryBackoffDelayMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      summaryBackoffRemainingMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      summariesCreated?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      contextItemsReplaced?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      safeLabel?: string
+      safeError?: {
+        code:
+          | "db_unavailable"
+          | "db_locked"
+          | "db_migration_failed"
+          | "db_corrupt"
+          | "settings_unavailable"
+          | "not_found"
+          | "unauthorized"
+          | "invalid_request"
+          | "over_limit"
+          | "timeout"
+          | "canceled"
+          | "recovery_required"
+          | "recovery_failed"
+          | "missing_source"
+          | "stale_source"
+          | "permission_denied"
+          | "provider_unavailable"
+          | "hard_limit_unresolved"
+          | "legacy_read_only"
+          | "provider_capacity_deferred"
+        templateKey:
+          | "lcm.db.unavailable"
+          | "lcm.settings.unavailable"
+          | "lcm.auth.denied"
+          | "lcm.request.invalid"
+          | "lcm.operation.timeout"
+          | "lcm.operation.canceled"
+          | "lcm.recovery.missing_source"
+          | "lcm.file.stale"
+          | "lcm.hard_limit.unresolved"
+          | "lcm.provider_capacity.deferred"
+          | "lcm.provider.unavailable"
+        safeParams: {
+          [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
+        }
+        safeMessage: string
+        action?:
+          | "retry"
+          | "repeat_input"
+          | "start_new_thread"
+          | "re_register_file"
+          | "delete_session"
+          | "close_other_owner"
+          | "contact_support"
+        retryable: boolean
+        operationID?: string
+        conversationID?: string
+        summaryID?: string
+        fileID?: string
+        diagnosticCode?: string
+      }
+    }
+  }
+}
+
+export type EventLcmMaintenanceEnded = {
+  id: string
+  type: "lcm.maintenance.ended"
+  properties: {
+    type: "lcm.maintenance.ended"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      phase: "leaf_summary" | "condensation" | "hard_limit" | "deterministic_fallback" | "repair"
+      reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
+      status:
+        | "started"
+        | "scheduled"
+        | "completed"
+        | "no_op"
+        | "deferred"
+        | "skipped"
+        | "canceled"
+        | "failed"
+        | "recovery_required"
+      blocking: boolean
+      beforeTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      afterTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      hardLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softThreshold?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      unconsumedRawTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      unconsumedRawItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      protectedTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      protectedTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      rawLaneTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      afterSoftBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      afterSoftBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      providerCapacityDeferred?: boolean
+      providerEndpointKeyHash?: string
+      softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
+      laneLatchDiagnostics?: Array<{
+        [key: string]: unknown
+      }>
+      tokenCounterMode?: "provider" | "deterministic_fallback" | "fake"
+      tokenCounterVersion?: string
+      sweepPassesCompleted?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sweepMaxPasses?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sweepElapsedMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sweepMaxElapsedMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sweepStopReason?:
+        | "completed"
+        | "iteration_cap"
+        | "elapsed_cap"
+        | "canceled"
+        | "provider_capacity"
+        | "backoff"
+        | "no_work"
+        | "failed"
+      summaryPromptVersion?: string
+      summaryBackoffPurpose?: "leaf_summary" | "condensation" | "hard_limit_maintenance"
+      summaryBackoffFailureCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      summaryBackoffDelayMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      summaryBackoffRemainingMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      summariesCreated?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      contextItemsReplaced?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      safeLabel?: string
+      safeError?: {
+        code:
+          | "db_unavailable"
+          | "db_locked"
+          | "db_migration_failed"
+          | "db_corrupt"
+          | "settings_unavailable"
+          | "not_found"
+          | "unauthorized"
+          | "invalid_request"
+          | "over_limit"
+          | "timeout"
+          | "canceled"
+          | "recovery_required"
+          | "recovery_failed"
+          | "missing_source"
+          | "stale_source"
+          | "permission_denied"
+          | "provider_unavailable"
+          | "hard_limit_unresolved"
+          | "legacy_read_only"
+          | "provider_capacity_deferred"
+        templateKey:
+          | "lcm.db.unavailable"
+          | "lcm.settings.unavailable"
+          | "lcm.auth.denied"
+          | "lcm.request.invalid"
+          | "lcm.operation.timeout"
+          | "lcm.operation.canceled"
+          | "lcm.recovery.missing_source"
+          | "lcm.file.stale"
+          | "lcm.hard_limit.unresolved"
+          | "lcm.provider_capacity.deferred"
+          | "lcm.provider.unavailable"
+        safeParams: {
+          [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
+        }
+        safeMessage: string
+        action?:
+          | "retry"
+          | "repeat_input"
+          | "start_new_thread"
+          | "re_register_file"
+          | "delete_session"
+          | "close_other_owner"
+          | "contact_support"
+        retryable: boolean
+        operationID?: string
+        conversationID?: string
+        summaryID?: string
+        fileID?: string
+        diagnosticCode?: string
+      }
+    }
+  }
+}
+
+export type EventLcmMaintenanceFailed = {
+  id: string
+  type: "lcm.maintenance.failed"
+  properties: {
+    type: "lcm.maintenance.failed"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      phase: "leaf_summary" | "condensation" | "hard_limit" | "deterministic_fallback" | "repair"
+      reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
+      status:
+        | "started"
+        | "scheduled"
+        | "completed"
+        | "no_op"
+        | "deferred"
+        | "skipped"
+        | "canceled"
+        | "failed"
+        | "recovery_required"
+      blocking: boolean
+      beforeTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      afterTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      hardLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softThreshold?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      freshTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      unconsumedRawTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      unconsumedRawItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      protectedTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      protectedTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      rawLaneTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      afterSoftBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      afterSoftBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      providerCapacityDeferred?: boolean
+      providerEndpointKeyHash?: string
+      softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
+      laneLatchDiagnostics?: Array<{
+        [key: string]: unknown
+      }>
+      tokenCounterMode?: "provider" | "deterministic_fallback" | "fake"
+      tokenCounterVersion?: string
+      sweepPassesCompleted?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sweepMaxPasses?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sweepElapsedMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sweepMaxElapsedMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sweepStopReason?:
+        | "completed"
+        | "iteration_cap"
+        | "elapsed_cap"
+        | "canceled"
+        | "provider_capacity"
+        | "backoff"
+        | "no_work"
+        | "failed"
+      summaryPromptVersion?: string
+      summaryBackoffPurpose?: "leaf_summary" | "condensation" | "hard_limit_maintenance"
+      summaryBackoffFailureCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      summaryBackoffDelayMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      summaryBackoffRemainingMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      summariesCreated?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      contextItemsReplaced?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      safeLabel?: string
+      safeError?: {
+        code:
+          | "db_unavailable"
+          | "db_locked"
+          | "db_migration_failed"
+          | "db_corrupt"
+          | "settings_unavailable"
+          | "not_found"
+          | "unauthorized"
+          | "invalid_request"
+          | "over_limit"
+          | "timeout"
+          | "canceled"
+          | "recovery_required"
+          | "recovery_failed"
+          | "missing_source"
+          | "stale_source"
+          | "permission_denied"
+          | "provider_unavailable"
+          | "hard_limit_unresolved"
+          | "legacy_read_only"
+          | "provider_capacity_deferred"
+        templateKey:
+          | "lcm.db.unavailable"
+          | "lcm.settings.unavailable"
+          | "lcm.auth.denied"
+          | "lcm.request.invalid"
+          | "lcm.operation.timeout"
+          | "lcm.operation.canceled"
+          | "lcm.recovery.missing_source"
+          | "lcm.file.stale"
+          | "lcm.hard_limit.unresolved"
+          | "lcm.provider_capacity.deferred"
+          | "lcm.provider.unavailable"
+        safeParams: {
+          [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
+        }
+        safeMessage: string
+        action?:
+          | "retry"
+          | "repeat_input"
+          | "start_new_thread"
+          | "re_register_file"
+          | "delete_session"
+          | "close_other_owner"
+          | "contact_support"
+        retryable: boolean
+        operationID?: string
+        conversationID?: string
+        summaryID?: string
+        fileID?: string
+        diagnosticCode?: string
+      }
+    }
   }
 }
 
@@ -4344,6 +5441,720 @@ export type EventTuiToastShow1 = {
     message: string
     variant: "info" | "success" | "warning" | "error"
     duration?: number
+  }
+}
+
+export type EventLcmDbStatus1 = {
+  id: string
+  type: "lcm.db.status"
+  properties: {
+    type: "lcm.db.status"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      status: "uninitialized" | "starting" | "ready" | "migrating" | "locked" | "corrupt" | "unavailable" | "closed"
+      schemaVersion?: number | "NaN" | "Infinity" | "-Infinity"
+      lifecycleState?:
+        | "passive_synced"
+        | "lcm_active"
+        | "legacy_read_only"
+        | "recovery_required"
+        | "recovery_failed"
+        | "db_unavailable"
+      dbReady: boolean
+      safeError?: {
+        code:
+          | "db_unavailable"
+          | "db_locked"
+          | "db_migration_failed"
+          | "db_corrupt"
+          | "settings_unavailable"
+          | "not_found"
+          | "unauthorized"
+          | "invalid_request"
+          | "over_limit"
+          | "timeout"
+          | "canceled"
+          | "recovery_required"
+          | "recovery_failed"
+          | "missing_source"
+          | "stale_source"
+          | "permission_denied"
+          | "provider_unavailable"
+          | "hard_limit_unresolved"
+          | "legacy_read_only"
+          | "provider_capacity_deferred"
+        templateKey:
+          | "lcm.db.unavailable"
+          | "lcm.settings.unavailable"
+          | "lcm.auth.denied"
+          | "lcm.request.invalid"
+          | "lcm.operation.timeout"
+          | "lcm.operation.canceled"
+          | "lcm.recovery.missing_source"
+          | "lcm.file.stale"
+          | "lcm.hard_limit.unresolved"
+          | "lcm.provider_capacity.deferred"
+          | "lcm.provider.unavailable"
+        safeParams: {
+          [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
+        }
+        safeMessage: string
+        action?:
+          | "retry"
+          | "repeat_input"
+          | "start_new_thread"
+          | "re_register_file"
+          | "delete_session"
+          | "close_other_owner"
+          | "contact_support"
+        retryable: boolean
+        operationID?: string
+        conversationID?: string
+        summaryID?: string
+        fileID?: string
+        diagnosticCode?: string
+      }
+    }
+  }
+}
+
+export type EventLcmContextUpdated1 = {
+  id: string
+  type: "lcm.context.updated"
+  properties: {
+    type: "lcm.context.updated"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      lifecycleState:
+        | "passive_synced"
+        | "lcm_active"
+        | "legacy_read_only"
+        | "recovery_required"
+        | "recovery_failed"
+        | "db_unavailable"
+      strategy: "upward" | "dolt"
+      activeTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      hardLimit?: number | "NaN" | "Infinity" | "-Infinity"
+      softThreshold?: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      unconsumedRawTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      unconsumedRawItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      protectedTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      protectedTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      rawLaneTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      hardFillRatio?: number | "NaN" | "Infinity" | "-Infinity"
+      rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      budgetStatus?: "budgeted" | "unavailable" | "provider_limit_fallback"
+      softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
+      laneLatchDiagnostics?: Array<{
+        [key: string]: unknown
+      }>
+      contextItemCounts?: {
+        [key: string]: number | "NaN" | "Infinity" | "-Infinity"
+      }
+      reason: "sync" | "rebuild" | "maintenance" | "large_file_marker" | "retrieval_cue" | "recovery"
+    }
+  }
+}
+
+export type EventLcmMetricsUpdated1 = {
+  id: string
+  type: "lcm.metrics.updated"
+  properties: {
+    type: "lcm.metrics.updated"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      conversationID: string
+      lifecycleState:
+        | "passive_synced"
+        | "lcm_active"
+        | "legacy_read_only"
+        | "recovery_required"
+        | "recovery_failed"
+        | "db_unavailable"
+      strategy: "upward" | "dolt"
+      activeTokens: number | "NaN" | "Infinity" | "-Infinity"
+      hardLimit: number | "NaN" | "Infinity" | "-Infinity"
+      softThreshold: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailTokens: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogTokens: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogItemCount: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailRawTokens: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailRawItemCount: number | "NaN" | "Infinity" | "-Infinity"
+      unconsumedRawTokens: number | "NaN" | "Infinity" | "-Infinity"
+      unconsumedRawItemCount: number | "NaN" | "Infinity" | "-Infinity"
+      protectedTailRawTokens: number | "NaN" | "Infinity" | "-Infinity"
+      protectedTailRawItemCount: number | "NaN" | "Infinity" | "-Infinity"
+      rawLaneTokens: number | "NaN" | "Infinity" | "-Infinity"
+      hardFillRatio?: number | "NaN" | "Infinity" | "-Infinity"
+      rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      budgetStatus?: "budgeted" | "unavailable" | "provider_limit_fallback"
+      softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
+      laneLatchDiagnostics?: Array<{
+        [key: string]: unknown
+      }>
+      providerContextLimit?: number | "NaN" | "Infinity" | "-Infinity"
+      providerInputLimit?: number | "NaN" | "Infinity" | "-Infinity"
+      providerOutputLimit?: number | "NaN" | "Infinity" | "-Infinity"
+      outputReserve?: number | "NaN" | "Infinity" | "-Infinity"
+      systemPromptTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      toolSchemaTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      providerCapacityDeferred?: boolean
+      providerEndpointKeyHash?: string
+      tokenCounterMode: "provider" | "deterministic_fallback" | "fake"
+      tokenCounterVersion: string
+      laneTokens: {
+        [key: string]: number | "NaN" | "Infinity" | "-Infinity"
+      }
+      contextItemCounts: {
+        [key: string]: number | "NaN" | "Infinity" | "-Infinity"
+      }
+      deferredSoftMaintenanceQueued: boolean
+      deferredSoftMaintenanceQueuedCount: number | "NaN" | "Infinity" | "-Infinity"
+      deferredSoftMaintenanceAttemptCount?: number | "NaN" | "Infinity" | "-Infinity"
+      deferredSoftMaintenanceNextRunAtMs?: number | "NaN" | "Infinity" | "-Infinity"
+      storageBytes: number | "NaN" | "Infinity" | "-Infinity"
+      storageWarningThresholdBytes: number | "NaN" | "Infinity" | "-Infinity"
+      storageWarning: boolean
+      memoryMaintenanceCostTotal?: number | "NaN" | "Infinity" | "-Infinity"
+      retrievalCostTotal?: number | "NaN" | "Infinity" | "-Infinity"
+      fileExplorationCostTotal?: number | "NaN" | "Infinity" | "-Infinity"
+      mapCostTotal?: number | "NaN" | "Infinity" | "-Infinity"
+      currency?: string
+      lastMaintenance?: {
+        operationID: string
+        status:
+          | "healthy"
+          | "scheduled"
+          | "completed"
+          | "no_op"
+          | "deferred"
+          | "skipped"
+          | "failed"
+          | "canceled"
+          | "recovery_required"
+        reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
+        blocking: boolean
+        beforeTokens?: number | "NaN" | "Infinity" | "-Infinity"
+        afterTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      }
+      updatedAt: string
+    }
+  }
+}
+
+export type EventLcmFileStatus1 = {
+  id: string
+  type: "lcm.file.status"
+  properties: {
+    type: "lcm.file.status"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      fileID: string
+      sourceKind: "path" | "inline" | "image" | "tool_output" | "map_input" | "map_output"
+      staleState:
+        | "current"
+        | "missing"
+        | "moved"
+        | "size_mismatch"
+        | "mtime_mismatch"
+        | "hash_mismatch"
+        | "symlink_retargeted"
+        | "permission_denied"
+        | "outside_boundary"
+        | "artifact_missing"
+        | "artifact_size_mismatch"
+        | "artifact_hash_mismatch"
+        | "unknown"
+      explorationStatus:
+        | "not_started"
+        | "queued"
+        | "running"
+        | "completed"
+        | "sampled"
+        | "unavailable"
+        | "unsafe"
+        | "corrupt"
+        | "timeout"
+        | "over_limit"
+        | "canceled"
+        | "failed"
+      explorerKind: "none" | "text" | "html" | "pdf" | "image" | "sqlite" | "unknown"
+      sampled: boolean
+      sampleBytes?: number | "NaN" | "Infinity" | "-Infinity"
+      blockingUse: boolean
+      safeReason?:
+        | "none"
+        | "sampled"
+        | "unsupported_type"
+        | "missing_helper"
+        | "unsafe_active_content"
+        | "corrupt_input"
+        | "timeout"
+        | "over_limit"
+        | "canceled"
+        | "helper_failed"
+        | "stale_source"
+        | "permission_denied"
+        | "artifact_invalid"
+      safeError?: {
+        code:
+          | "db_unavailable"
+          | "db_locked"
+          | "db_migration_failed"
+          | "db_corrupt"
+          | "settings_unavailable"
+          | "not_found"
+          | "unauthorized"
+          | "invalid_request"
+          | "over_limit"
+          | "timeout"
+          | "canceled"
+          | "recovery_required"
+          | "recovery_failed"
+          | "missing_source"
+          | "stale_source"
+          | "permission_denied"
+          | "provider_unavailable"
+          | "hard_limit_unresolved"
+          | "legacy_read_only"
+          | "provider_capacity_deferred"
+        templateKey:
+          | "lcm.db.unavailable"
+          | "lcm.settings.unavailable"
+          | "lcm.auth.denied"
+          | "lcm.request.invalid"
+          | "lcm.operation.timeout"
+          | "lcm.operation.canceled"
+          | "lcm.recovery.missing_source"
+          | "lcm.file.stale"
+          | "lcm.hard_limit.unresolved"
+          | "lcm.provider_capacity.deferred"
+          | "lcm.provider.unavailable"
+        safeParams: {
+          [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
+        }
+        safeMessage: string
+        action?:
+          | "retry"
+          | "repeat_input"
+          | "start_new_thread"
+          | "re_register_file"
+          | "delete_session"
+          | "close_other_owner"
+          | "contact_support"
+        retryable: boolean
+        operationID?: string
+        conversationID?: string
+        summaryID?: string
+        fileID?: string
+        diagnosticCode?: string
+      }
+    }
+  }
+}
+
+export type EventLcmMaintenanceStarted1 = {
+  id: string
+  type: "lcm.maintenance.started"
+  properties: {
+    type: "lcm.maintenance.started"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      phase: "leaf_summary" | "condensation" | "hard_limit" | "deterministic_fallback" | "repair"
+      reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
+      status:
+        | "started"
+        | "scheduled"
+        | "completed"
+        | "no_op"
+        | "deferred"
+        | "skipped"
+        | "canceled"
+        | "failed"
+        | "recovery_required"
+      blocking: boolean
+      beforeTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      afterTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      hardLimit?: number | "NaN" | "Infinity" | "-Infinity"
+      softThreshold?: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      unconsumedRawTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      unconsumedRawItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      protectedTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      protectedTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      rawLaneTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      afterSoftBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      afterSoftBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      providerCapacityDeferred?: boolean
+      providerEndpointKeyHash?: string
+      softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
+      laneLatchDiagnostics?: Array<{
+        [key: string]: unknown
+      }>
+      tokenCounterMode?: "provider" | "deterministic_fallback" | "fake"
+      tokenCounterVersion?: string
+      sweepPassesCompleted?: number | "NaN" | "Infinity" | "-Infinity"
+      sweepMaxPasses?: number | "NaN" | "Infinity" | "-Infinity"
+      sweepElapsedMs?: number | "NaN" | "Infinity" | "-Infinity"
+      sweepMaxElapsedMs?: number | "NaN" | "Infinity" | "-Infinity"
+      sweepStopReason?:
+        | "completed"
+        | "iteration_cap"
+        | "elapsed_cap"
+        | "canceled"
+        | "provider_capacity"
+        | "backoff"
+        | "no_work"
+        | "failed"
+      summaryPromptVersion?: string
+      summaryBackoffPurpose?: "leaf_summary" | "condensation" | "hard_limit_maintenance"
+      summaryBackoffFailureCount?: number | "NaN" | "Infinity" | "-Infinity"
+      summaryBackoffDelayMs?: number | "NaN" | "Infinity" | "-Infinity"
+      summaryBackoffRemainingMs?: number | "NaN" | "Infinity" | "-Infinity"
+      summariesCreated?: number | "NaN" | "Infinity" | "-Infinity"
+      contextItemsReplaced?: number | "NaN" | "Infinity" | "-Infinity"
+      safeLabel?: string
+      safeError?: {
+        code:
+          | "db_unavailable"
+          | "db_locked"
+          | "db_migration_failed"
+          | "db_corrupt"
+          | "settings_unavailable"
+          | "not_found"
+          | "unauthorized"
+          | "invalid_request"
+          | "over_limit"
+          | "timeout"
+          | "canceled"
+          | "recovery_required"
+          | "recovery_failed"
+          | "missing_source"
+          | "stale_source"
+          | "permission_denied"
+          | "provider_unavailable"
+          | "hard_limit_unresolved"
+          | "legacy_read_only"
+          | "provider_capacity_deferred"
+        templateKey:
+          | "lcm.db.unavailable"
+          | "lcm.settings.unavailable"
+          | "lcm.auth.denied"
+          | "lcm.request.invalid"
+          | "lcm.operation.timeout"
+          | "lcm.operation.canceled"
+          | "lcm.recovery.missing_source"
+          | "lcm.file.stale"
+          | "lcm.hard_limit.unresolved"
+          | "lcm.provider_capacity.deferred"
+          | "lcm.provider.unavailable"
+        safeParams: {
+          [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
+        }
+        safeMessage: string
+        action?:
+          | "retry"
+          | "repeat_input"
+          | "start_new_thread"
+          | "re_register_file"
+          | "delete_session"
+          | "close_other_owner"
+          | "contact_support"
+        retryable: boolean
+        operationID?: string
+        conversationID?: string
+        summaryID?: string
+        fileID?: string
+        diagnosticCode?: string
+      }
+    }
+  }
+}
+
+export type EventLcmMaintenanceEnded1 = {
+  id: string
+  type: "lcm.maintenance.ended"
+  properties: {
+    type: "lcm.maintenance.ended"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      phase: "leaf_summary" | "condensation" | "hard_limit" | "deterministic_fallback" | "repair"
+      reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
+      status:
+        | "started"
+        | "scheduled"
+        | "completed"
+        | "no_op"
+        | "deferred"
+        | "skipped"
+        | "canceled"
+        | "failed"
+        | "recovery_required"
+      blocking: boolean
+      beforeTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      afterTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      hardLimit?: number | "NaN" | "Infinity" | "-Infinity"
+      softThreshold?: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      unconsumedRawTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      unconsumedRawItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      protectedTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      protectedTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      rawLaneTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      afterSoftBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      afterSoftBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      providerCapacityDeferred?: boolean
+      providerEndpointKeyHash?: string
+      softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
+      laneLatchDiagnostics?: Array<{
+        [key: string]: unknown
+      }>
+      tokenCounterMode?: "provider" | "deterministic_fallback" | "fake"
+      tokenCounterVersion?: string
+      sweepPassesCompleted?: number | "NaN" | "Infinity" | "-Infinity"
+      sweepMaxPasses?: number | "NaN" | "Infinity" | "-Infinity"
+      sweepElapsedMs?: number | "NaN" | "Infinity" | "-Infinity"
+      sweepMaxElapsedMs?: number | "NaN" | "Infinity" | "-Infinity"
+      sweepStopReason?:
+        | "completed"
+        | "iteration_cap"
+        | "elapsed_cap"
+        | "canceled"
+        | "provider_capacity"
+        | "backoff"
+        | "no_work"
+        | "failed"
+      summaryPromptVersion?: string
+      summaryBackoffPurpose?: "leaf_summary" | "condensation" | "hard_limit_maintenance"
+      summaryBackoffFailureCount?: number | "NaN" | "Infinity" | "-Infinity"
+      summaryBackoffDelayMs?: number | "NaN" | "Infinity" | "-Infinity"
+      summaryBackoffRemainingMs?: number | "NaN" | "Infinity" | "-Infinity"
+      summariesCreated?: number | "NaN" | "Infinity" | "-Infinity"
+      contextItemsReplaced?: number | "NaN" | "Infinity" | "-Infinity"
+      safeLabel?: string
+      safeError?: {
+        code:
+          | "db_unavailable"
+          | "db_locked"
+          | "db_migration_failed"
+          | "db_corrupt"
+          | "settings_unavailable"
+          | "not_found"
+          | "unauthorized"
+          | "invalid_request"
+          | "over_limit"
+          | "timeout"
+          | "canceled"
+          | "recovery_required"
+          | "recovery_failed"
+          | "missing_source"
+          | "stale_source"
+          | "permission_denied"
+          | "provider_unavailable"
+          | "hard_limit_unresolved"
+          | "legacy_read_only"
+          | "provider_capacity_deferred"
+        templateKey:
+          | "lcm.db.unavailable"
+          | "lcm.settings.unavailable"
+          | "lcm.auth.denied"
+          | "lcm.request.invalid"
+          | "lcm.operation.timeout"
+          | "lcm.operation.canceled"
+          | "lcm.recovery.missing_source"
+          | "lcm.file.stale"
+          | "lcm.hard_limit.unresolved"
+          | "lcm.provider_capacity.deferred"
+          | "lcm.provider.unavailable"
+        safeParams: {
+          [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
+        }
+        safeMessage: string
+        action?:
+          | "retry"
+          | "repeat_input"
+          | "start_new_thread"
+          | "re_register_file"
+          | "delete_session"
+          | "close_other_owner"
+          | "contact_support"
+        retryable: boolean
+        operationID?: string
+        conversationID?: string
+        summaryID?: string
+        fileID?: string
+        diagnosticCode?: string
+      }
+    }
+  }
+}
+
+export type EventLcmMaintenanceFailed1 = {
+  id: string
+  type: "lcm.maintenance.failed"
+  properties: {
+    type: "lcm.maintenance.failed"
+    sessionID?: string
+    conversationID?: string
+    operationID?: string
+    timestamp: string
+    payload: {
+      phase: "leaf_summary" | "condensation" | "hard_limit" | "deterministic_fallback" | "repair"
+      reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
+      status:
+        | "started"
+        | "scheduled"
+        | "completed"
+        | "no_op"
+        | "deferred"
+        | "skipped"
+        | "canceled"
+        | "failed"
+        | "recovery_required"
+      blocking: boolean
+      beforeTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      afterTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      hardLimit?: number | "NaN" | "Infinity" | "-Infinity"
+      softThreshold?: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      freshTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      unconsumedRawTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      unconsumedRawItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      protectedTailRawTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      protectedTailRawItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      rawLaneTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity"
+      softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      afterSoftBacklogTokens?: number | "NaN" | "Infinity" | "-Infinity"
+      afterSoftBacklogItemCount?: number | "NaN" | "Infinity" | "-Infinity"
+      providerCapacityDeferred?: boolean
+      providerEndpointKeyHash?: string
+      softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
+      laneLatchDiagnostics?: Array<{
+        [key: string]: unknown
+      }>
+      tokenCounterMode?: "provider" | "deterministic_fallback" | "fake"
+      tokenCounterVersion?: string
+      sweepPassesCompleted?: number | "NaN" | "Infinity" | "-Infinity"
+      sweepMaxPasses?: number | "NaN" | "Infinity" | "-Infinity"
+      sweepElapsedMs?: number | "NaN" | "Infinity" | "-Infinity"
+      sweepMaxElapsedMs?: number | "NaN" | "Infinity" | "-Infinity"
+      sweepStopReason?:
+        | "completed"
+        | "iteration_cap"
+        | "elapsed_cap"
+        | "canceled"
+        | "provider_capacity"
+        | "backoff"
+        | "no_work"
+        | "failed"
+      summaryPromptVersion?: string
+      summaryBackoffPurpose?: "leaf_summary" | "condensation" | "hard_limit_maintenance"
+      summaryBackoffFailureCount?: number | "NaN" | "Infinity" | "-Infinity"
+      summaryBackoffDelayMs?: number | "NaN" | "Infinity" | "-Infinity"
+      summaryBackoffRemainingMs?: number | "NaN" | "Infinity" | "-Infinity"
+      summariesCreated?: number | "NaN" | "Infinity" | "-Infinity"
+      contextItemsReplaced?: number | "NaN" | "Infinity" | "-Infinity"
+      safeLabel?: string
+      safeError?: {
+        code:
+          | "db_unavailable"
+          | "db_locked"
+          | "db_migration_failed"
+          | "db_corrupt"
+          | "settings_unavailable"
+          | "not_found"
+          | "unauthorized"
+          | "invalid_request"
+          | "over_limit"
+          | "timeout"
+          | "canceled"
+          | "recovery_required"
+          | "recovery_failed"
+          | "missing_source"
+          | "stale_source"
+          | "permission_denied"
+          | "provider_unavailable"
+          | "hard_limit_unresolved"
+          | "legacy_read_only"
+          | "provider_capacity_deferred"
+        templateKey:
+          | "lcm.db.unavailable"
+          | "lcm.settings.unavailable"
+          | "lcm.auth.denied"
+          | "lcm.request.invalid"
+          | "lcm.operation.timeout"
+          | "lcm.operation.canceled"
+          | "lcm.recovery.missing_source"
+          | "lcm.file.stale"
+          | "lcm.hard_limit.unresolved"
+          | "lcm.provider_capacity.deferred"
+          | "lcm.provider.unavailable"
+        safeParams: {
+          [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
+        }
+        safeMessage: string
+        action?:
+          | "retry"
+          | "repeat_input"
+          | "start_new_thread"
+          | "re_register_file"
+          | "delete_session"
+          | "close_other_owner"
+          | "contact_support"
+        retryable: boolean
+        operationID?: string
+        conversationID?: string
+        summaryID?: string
+        fileID?: string
+        diagnosticCode?: string
+      }
+    }
   }
 }
 
@@ -5816,6 +7627,106 @@ export type FormatterStatusResponses = {
 }
 
 export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
+
+export type LcmSettingsGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    projectID?: string
+    workspaceID?: string
+  }
+  url: "/lcm/settings"
+}
+
+export type LcmSettingsGetErrors = {
+  /**
+   * LcmBadRequestError | InvalidRequestError
+   */
+  400: LcmBadRequestError | InvalidRequestError
+  /**
+   * LcmForbiddenError
+   */
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
+}
+
+export type LcmSettingsGetError = LcmSettingsGetErrors[keyof LcmSettingsGetErrors]
+
+export type LcmSettingsGetResponses = {
+  /**
+   * LCM settings state
+   */
+  200: LcmSettingsState
+}
+
+export type LcmSettingsGetResponse = LcmSettingsGetResponses[keyof LcmSettingsGetResponses]
+
+export type LcmSettingsUpdateData = {
+  body?: LcmUpdateSettingsInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    projectID?: string
+    workspaceID?: string
+  }
+  url: "/lcm/settings"
+}
+
+export type LcmSettingsUpdateErrors = {
+  /**
+   * LcmBadRequestError | InvalidRequestError
+   */
+  400: LcmBadRequestError | InvalidRequestError
+  /**
+   * LcmForbiddenError
+   */
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
+}
+
+export type LcmSettingsUpdateError = LcmSettingsUpdateErrors[keyof LcmSettingsUpdateErrors]
+
+export type LcmSettingsUpdateResponses = {
+  /**
+   * Updated LCM settings state
+   */
+  200: LcmSettingsState
+}
+
+export type LcmSettingsUpdateResponse = LcmSettingsUpdateResponses[keyof LcmSettingsUpdateResponses]
 
 export type McpStatusData = {
   body?: never
@@ -7538,13 +9449,29 @@ export type SessionSummarizeData = {
 
 export type SessionSummarizeErrors = {
   /**
-   * BadRequest | InvalidRequestError
+   * LcmBadRequestError | InvalidRequestError
    */
-  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  400: LcmBadRequestError | InvalidRequestError
   /**
-   * NotFoundError
+   * LcmForbiddenError
    */
-  404: NotFoundError
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
 }
 
 export type SessionSummarizeError = SessionSummarizeErrors[keyof SessionSummarizeErrors]
@@ -7557,6 +9484,359 @@ export type SessionSummarizeResponses = {
 }
 
 export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses]
+
+export type SessionLcmCapabilitiesData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/capabilities"
+}
+
+export type SessionLcmCapabilitiesErrors = {
+  /**
+   * LcmBadRequestError | InvalidRequestError
+   */
+  400: LcmBadRequestError | InvalidRequestError
+  /**
+   * LcmForbiddenError
+   */
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
+}
+
+export type SessionLcmCapabilitiesError = SessionLcmCapabilitiesErrors[keyof SessionLcmCapabilitiesErrors]
+
+export type SessionLcmCapabilitiesResponses = {
+  /**
+   * LCM capabilities
+   */
+  200: LcmCapabilities
+}
+
+export type SessionLcmCapabilitiesResponse = SessionLcmCapabilitiesResponses[keyof SessionLcmCapabilitiesResponses]
+
+export type SessionLcmSettingsGetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/settings"
+}
+
+export type SessionLcmSettingsGetErrors = {
+  /**
+   * LcmBadRequestError | InvalidRequestError
+   */
+  400: LcmBadRequestError | InvalidRequestError
+  /**
+   * LcmForbiddenError
+   */
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
+}
+
+export type SessionLcmSettingsGetError = SessionLcmSettingsGetErrors[keyof SessionLcmSettingsGetErrors]
+
+export type SessionLcmSettingsGetResponses = {
+  /**
+   * LCM settings state
+   */
+  200: LcmSettingsState
+}
+
+export type SessionLcmSettingsGetResponse = SessionLcmSettingsGetResponses[keyof SessionLcmSettingsGetResponses]
+
+export type SessionLcmSettingsUpdateData = {
+  body?: LcmUpdateSettingsInput
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/settings"
+}
+
+export type SessionLcmSettingsUpdateErrors = {
+  /**
+   * LcmBadRequestError | InvalidRequestError
+   */
+  400: LcmBadRequestError | InvalidRequestError
+  /**
+   * LcmForbiddenError
+   */
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
+}
+
+export type SessionLcmSettingsUpdateError = SessionLcmSettingsUpdateErrors[keyof SessionLcmSettingsUpdateErrors]
+
+export type SessionLcmSettingsUpdateResponses = {
+  /**
+   * Updated LCM settings state
+   */
+  200: LcmSettingsState
+}
+
+export type SessionLcmSettingsUpdateResponse =
+  SessionLcmSettingsUpdateResponses[keyof SessionLcmSettingsUpdateResponses]
+
+export type SessionLcmMaintenanceCancelData = {
+  body?: LcmCancelMaintenanceInput
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/maintenance/cancel"
+}
+
+export type SessionLcmMaintenanceCancelErrors = {
+  /**
+   * LcmBadRequestError | InvalidRequestError
+   */
+  400: LcmBadRequestError | InvalidRequestError
+  /**
+   * LcmForbiddenError
+   */
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
+}
+
+export type SessionLcmMaintenanceCancelError =
+  SessionLcmMaintenanceCancelErrors[keyof SessionLcmMaintenanceCancelErrors]
+
+export type SessionLcmMaintenanceCancelResponses = {
+  /**
+   * LCM maintenance cancellation result
+   */
+  200: LcmMaintenanceResult
+}
+
+export type SessionLcmMaintenanceCancelResponse =
+  SessionLcmMaintenanceCancelResponses[keyof SessionLcmMaintenanceCancelResponses]
+
+export type SessionLcmDbDiagnoseData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/db/diagnose"
+}
+
+export type SessionLcmDbDiagnoseErrors = {
+  /**
+   * LcmBadRequestError | InvalidRequestError
+   */
+  400: LcmBadRequestError | InvalidRequestError
+  /**
+   * LcmForbiddenError
+   */
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
+}
+
+export type SessionLcmDbDiagnoseError = SessionLcmDbDiagnoseErrors[keyof SessionLcmDbDiagnoseErrors]
+
+export type SessionLcmDbDiagnoseResponses = {
+  /**
+   * LCM database diagnosis report
+   */
+  200: LcmDbDiagnoseReport
+}
+
+export type SessionLcmDbDiagnoseResponse = SessionLcmDbDiagnoseResponses[keyof SessionLcmDbDiagnoseResponses]
+
+export type SessionLcmDbRebuildData = {
+  body?: LcmDbRebuildInput
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/db/rebuild"
+}
+
+export type SessionLcmDbRebuildErrors = {
+  /**
+   * LcmBadRequestError | InvalidRequestError
+   */
+  400: LcmBadRequestError | InvalidRequestError
+  /**
+   * LcmForbiddenError
+   */
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
+}
+
+export type SessionLcmDbRebuildError = SessionLcmDbRebuildErrors[keyof SessionLcmDbRebuildErrors]
+
+export type SessionLcmDbRebuildResponses = {
+  /**
+   * LCM database rebuild report
+   */
+  200: LcmDbRebuildReport
+}
+
+export type SessionLcmDbRebuildResponse = SessionLcmDbRebuildResponses[keyof SessionLcmDbRebuildResponses]
+
+export type SessionLcmPromptsExportData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/prompts/export"
+}
+
+export type SessionLcmPromptsExportErrors = {
+  /**
+   * LcmBadRequestError | InvalidRequestError
+   */
+  400: LcmBadRequestError | InvalidRequestError
+  /**
+   * LcmForbiddenError
+   */
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
+}
+
+export type SessionLcmPromptsExportError = SessionLcmPromptsExportErrors[keyof SessionLcmPromptsExportErrors]
+
+export type SessionLcmPromptsExportResponses = {
+  /**
+   * LCM prompt export report
+   */
+  200: LcmPromptExportReport
+}
+
+export type SessionLcmPromptsExportResponse = SessionLcmPromptsExportResponses[keyof SessionLcmPromptsExportResponses]
 
 export type SessionPromptAsyncData = {
   body?: {

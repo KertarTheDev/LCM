@@ -206,6 +206,54 @@ describe("saveCustomProvider", () => {
     expect(calls.set).toEqual([{ providerID: "myprovider", auth: { type: "api", key: "sk-test" } }])
   })
 
+  it("preserves core-supported custom provider settings in the save payload", async () => {
+    const { ctx, calls, setCachedConfig } = createCtx()
+    const provider = {
+      name: "Ollama",
+      env: ["OLLAMA_API_KEY"],
+      options: {
+        baseURL: "http://127.0.0.1:11434/v1",
+        timeout: false,
+        chunkTimeout: 120000,
+        providerSpecificOption: "keep",
+      },
+      models: {
+        "qwen3:32b": {
+          name: "Qwen 3 32B",
+          tool_call: true,
+          options: { num_ctx: 100000 },
+          limit: { context: 100000, output: 20000 },
+          variants: { thinking: { reasoningEffort: "xhigh", nativeOption: true } },
+        },
+      },
+    }
+
+    await saveCustomProvider(ctx, "req", "ollama", provider, undefined, false, null, setCachedConfig)
+
+    expect(calls.config).toHaveLength(1)
+    const payload = calls.config[0].config.provider as Record<string, typeof provider & { npm: string }>
+    expect(payload.ollama).toEqual({
+      npm: "@ai-sdk/openai-compatible",
+      name: "Ollama",
+      env: ["OLLAMA_API_KEY"],
+      options: {
+        timeout: false,
+        chunkTimeout: 120000,
+        providerSpecificOption: "keep",
+        baseURL: "http://127.0.0.1:11434/v1",
+      },
+      models: {
+        "qwen3:32b": {
+          tool_call: true,
+          options: { num_ctx: 100000 },
+          name: "Qwen 3 32B",
+          limit: { context: 100000, output: 20000 },
+          variants: { thinking: { reasoningEffort: "xhigh", nativeOption: true } },
+        },
+      },
+    })
+  })
+
   // Regression tests for https://github.com/Kilo-Org/kilocode/issues/9186
   //
   // The CLI's config.update endpoint deep-merges its payload with the existing

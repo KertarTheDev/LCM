@@ -84,8 +84,6 @@ export const dict = {
   "revert.banner.redo.all": "Refazer Tudo",
   "revert.banner.hint": "Envie uma nova mensagem para tornar isso permanente",
   "revert.disabled.agentBusy": "Aguarde o agente terminar",
-  "command.session.compact": "Compactar sessão",
-  "command.session.compact.description": "Resumir a sessão para reduzir o tamanho do contexto",
   "command.session.fork": "Bifurcar da mensagem",
   "command.session.fork.description": "Criar uma nova sessão a partir de uma mensagem anterior",
   "command.session.share": "Compartilhar sessão",
@@ -432,9 +430,6 @@ export const dict = {
   "toast.workspace.enabled.description": "Várias worktrees agora são exibidas na barra lateral",
   "toast.workspace.disabled.title": "Espaços de trabalho desativados",
   "toast.workspace.disabled.description": "Apenas a worktree principal é exibida na barra lateral",
-
-  "toast.model.none.title": "Nenhum modelo selecionado",
-  "toast.model.none.description": "Conecte um provedor para resumir esta sessão",
 
   "toast.file.loadFailed.title": "Falha ao carregar arquivo",
 
@@ -1503,13 +1498,9 @@ export const dict = {
     "Prevenir ações idênticas repetidas. Acionado quando a mesma chamada de ferramenta se repete com entrada idêntica.",
   "settings.checkpoints.enable.title": "Ativar snapshots",
   "settings.checkpoints.enable.description": "Criar pontos de verificação antes de editar arquivos",
-  "settings.context.autoCompaction.title": "Compactação automática",
-  "settings.context.autoCompaction.description": "Compactar automaticamente o contexto antes que atinja o limite",
   "settings.context.compactionLimit.title": "Limite de compactação automática",
   "settings.context.compactionLimit.description":
     "Compacte quando o contexto atingir esta porcentagem da janela do modelo. Deixe em branco para usar apenas a margem de segurança.",
-  "settings.context.prune.title": "Remover saídas antigas",
-  "settings.context.prune.description": "Remover saídas antigas de ferramentas durante a compactação",
   "settings.context.watcherPatterns": "Padrões de ignorar do observador",
   "settings.context.watcherPatterns.description": "Padrões glob para arquivos que o observador deve ignorar",
 

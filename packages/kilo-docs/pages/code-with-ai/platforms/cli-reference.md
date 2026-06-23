@@ -200,19 +200,22 @@ Options:
 debugging and troubleshooting tools
 
 Commands:
-  kilo debug config        show resolved configuration
-  kilo debug lsp           LSP debugging utilities
-  kilo debug rg            ripgrep debugging utilities
-  kilo debug file          file system debugging utilities
-  kilo debug scrap         list all known projects
-  kilo debug skill         list all available skills
-  kilo debug snapshot      snapshot debugging utilities
-  kilo debug startup       print startup timing
-  kilo debug agent <name>  show agent configuration details
-  kilo debug v2            debug v2 catalog and built-in plugins
-  kilo debug info          show debug information
-  kilo debug paths         show global paths (data, config, cache, state)
-  kilo debug wait          wait indefinitely (for debugging)
+  kilo debug config           show resolved configuration
+  kilo debug lsp              LSP debugging utilities
+  kilo debug rg               ripgrep debugging utilities
+  kilo debug file             file system debugging utilities
+  kilo debug scrap            list all known projects
+  kilo debug skill            list all available skills
+  kilo debug snapshot         snapshot debugging utilities
+  kilo debug startup          print startup timing
+  kilo debug agent <name>     show agent configuration details
+  kilo debug v2               debug v2 catalog and built-in plugins
+  kilo debug info             show debug information
+  kilo debug lcm-db-smoke     run the content-safe LCM PGlite backend smoke
+  kilo debug lcm-db-diagnose  run content-safe LCM DB diagnosis
+  kilo debug lcm-db-rebuild   run content-safe LCM DB rebuild support
+  kilo debug paths            show global paths (data, config, cache, state)
+  kilo debug wait             wait indefinitely (for debugging)
 
 Options:
   --help     Show help  [boolean]
@@ -530,6 +533,45 @@ show debug information
 Options:
   --help     Show help  [boolean]
   --version  Show version number  [boolean]
+```
+
+### kilo debug lcm-db-smoke
+
+```
+run the content-safe LCM PGlite backend smoke
+
+Options:
+  --help          Show help  [boolean]
+  --version       Show version number  [boolean]
+  --data-dir      Explicit LCM family root, normally <kilo-data-dir>/lcm/families/<family-id>  [string] [required]
+  --runtime-mode  runtime layout being exercised  [string] [choices: "source", "compiled-bin", "serve", "vscode-bundled"] [default: "source"]
+  --json          print JSON report  [boolean] [default: false]
+```
+
+### kilo debug lcm-db-diagnose
+
+```
+run content-safe LCM DB diagnosis
+
+Options:
+  --help      Show help  [boolean]
+  --version   Show version number  [boolean]
+  --data-dir  Explicit LCM family root, normally <kilo-data-dir>/lcm/families/<family-id>  [string] [required]
+  --json      print JSON report  [boolean] [default: false]
+```
+
+### kilo debug lcm-db-rebuild
+
+```
+run content-safe LCM DB rebuild support
+
+Options:
+  --help      Show help  [boolean]
+  --version   Show version number  [boolean]
+  --data-dir  Explicit LCM family root, normally <kilo-data-dir>/lcm/families/<family-id>  [string] [required]
+  --dry-run   report the rebuild action without changing DB files  [boolean]
+  --apply     quarantine the current PGlite directory and initialize a fresh one  [boolean]
+  --json      print JSON report  [boolean] [default: false]
 ```
 
 ### kilo debug paths
@@ -994,6 +1036,64 @@ Options:
   --help     Show help  [boolean]
   --version  Show version number  [boolean]
   --json     print daemon details as JSON  [boolean]
+```
+
+## kilo lcm
+
+```
+manage LCM memory
+
+Commands:
+  kilo lcm settings  show and update LCM memory settings
+
+Options:
+  --help     Show help  [boolean]
+  --version  Show version number  [boolean]
+```
+
+### kilo lcm settings
+
+```
+show and update LCM memory settings
+
+Commands:
+  kilo lcm settings show  show LCM memory settings
+  kilo lcm settings set   update LCM memory settings
+
+Options:
+  --help     Show help  [boolean]
+  --version  Show version number  [boolean]
+```
+
+### kilo lcm settings show
+
+```
+show LCM memory settings
+
+Options:
+  --help       Show help  [boolean]
+  --version    Show version number  [boolean]
+  --session    session ID whose LCM settings scope should be used  [string]
+  --project    project ID scope; defaults to the current project  [string]
+  --workspace  workspace ID scope  [string]
+  --json       print JSON output  [boolean] [default: false]
+```
+
+### kilo lcm settings set
+
+```
+update LCM memory settings
+
+Options:
+  --help                             Show help  [boolean]
+  --version                          Show version number  [boolean]
+  --session                          session ID whose LCM settings scope should be used  [string]
+  --project                          project ID scope; defaults to the current project  [string]
+  --workspace                        workspace ID scope  [string]
+  --json                             print JSON output  [boolean] [default: false]
+  --strategy                         LCM strategy  [string] [choices: "upward", "dolt"]
+  --storage-warning-threshold-bytes  local LCM storage warning threshold in bytes  [number]
+  --fresh-tail-tokens                raw-message tokens kept fresh before soft backlog summarization  [number]
 ```
 
 ## kilo db

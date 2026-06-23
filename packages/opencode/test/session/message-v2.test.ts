@@ -1,11 +1,22 @@
 import { describe, expect, test } from "bun:test"
 import { APICallError } from "ai"
+// kilocode_change start
+import { Schema } from "effect"
+// kilocode_change end
 import { MessageV2 } from "../../src/session/message-v2"
 import { ProviderTransform } from "@/provider/transform"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { Question } from "../../src/question"
+// kilocode_change start
+import {
+  LCM_SAFE_ACTIONS,
+  LCM_SAFE_ERROR_CODES,
+  LCM_SAFE_MESSAGE_TEMPLATES,
+  type LcmSafeMessageTemplateKey,
+} from "../../src/session/lcm/types"
+// kilocode_change end
 
 const sessionID = SessionID.make("session")
 const providerID = ProviderID.make("test")
@@ -100,6 +111,22 @@ function assistantInfo(
   } as unknown as MessageV2.Assistant
 }
 
+// kilocode_change start
+function safeParseAssistant(input: unknown) {
+  try {
+    return {
+      success: true as const,
+      data: Schema.decodeUnknownSync(MessageV2.Assistant)(input),
+    }
+  } catch (error) {
+    return {
+      success: false as const,
+      error,
+    }
+  }
+}
+
+// kilocode_change end
 function basePart(messageID: string, id: string) {
   return {
     id: PartID.make(id.startsWith("prt") ? id : `prt_${id}`),
@@ -108,6 +135,85 @@ function basePart(messageID: string, id: string) {
   }
 }
 
+// kilocode_change start
+describe("session.message-v2.Assistant.error", () => {
+  function parseAssistantWithLcmError(input?: {
+    code?: (typeof LCM_SAFE_ERROR_CODES)[number]
+    action?: (typeof LCM_SAFE_ACTIONS)[number]
+    templateKey?: LcmSafeMessageTemplateKey
+  }) {
+    const templateKey = input?.templateKey ?? "lcm.db.unavailable"
+    const error = new MessageV2.LcmMemoryError({
+      message: LCM_SAFE_MESSAGE_TEMPLATES[templateKey],
+      code: input?.code ?? "db_locked",
+      safeMessage: LCM_SAFE_MESSAGE_TEMPLATES[templateKey],
+      retryable: true,
+      diagnosticCode: "lcm_owner_lock_same_process_conflict",
+      ...(input?.action ? { action: input.action } : {}),
+      operationID: "op_test",
+      templateKey,
+      safeParams: {
+        retryable: true,
+      },
+    }).toObject() as MessageV2.Assistant["error"]
+
+    return safeParseAssistant(assistantInfo(MessageID.ascending(), MessageID.ascending(), error))
+  }
+
+  test("accepts content-safe LCM memory errors as first-class assistant errors", () => {
+    const error = new MessageV2.LcmMemoryError({
+      message: "Memory storage is not ready. Follow the shown recovery action.",
+      code: "db_locked",
+      safeMessage: "Memory storage is not ready. Follow the shown recovery action.",
+      retryable: true,
+      diagnosticCode: "lcm_owner_lock_same_process_conflict",
+      action: "close_other_owner",
+      operationID: "op_test",
+      templateKey: "lcm.db.unavailable",
+      safeParams: {
+        retryable: true,
+        action: "close_other_owner",
+      },
+    }).toObject() as MessageV2.Assistant["error"]
+
+    const result = safeParseAssistant(assistantInfo(MessageID.ascending(), MessageID.ascending(), error))
+    expect(result.success).toBe(true)
+    expect(result.success ? result.data.error?.name : undefined).toBe("LcmMemoryError")
+  })
+
+  test("accepts every LCM safe-error code", () => {
+    for (const code of LCM_SAFE_ERROR_CODES) {
+      const result = parseAssistantWithLcmError({ code })
+      expect(result.success).toBe(true)
+      expect(
+        result.success && result.data.error?.name === "LcmMemoryError" ? result.data.error.data.code : undefined,
+      ).toBe(code)
+    }
+  })
+
+  test("accepts every LCM safe action", () => {
+    for (const action of LCM_SAFE_ACTIONS) {
+      const result = parseAssistantWithLcmError({ action })
+      expect(result.success).toBe(true)
+      expect(
+        result.success && result.data.error?.name === "LcmMemoryError" ? result.data.error.data.action : undefined,
+      ).toBe(action)
+    }
+  })
+
+  test("accepts every LCM safe-message template key", () => {
+    const templateKeys = Object.keys(LCM_SAFE_MESSAGE_TEMPLATES) as LcmSafeMessageTemplateKey[]
+    for (const templateKey of templateKeys) {
+      const result = parseAssistantWithLcmError({ templateKey })
+      expect(result.success).toBe(true)
+      expect(
+        result.success && result.data.error?.name === "LcmMemoryError" ? result.data.error.data.templateKey : undefined,
+      ).toBe(templateKey)
+    }
+  })
+})
+
+// kilocode_change end
 describe("session.message-v2.toModelMessage", () => {
   test("filters out messages with no parts", async () => {
     const input: MessageV2.WithParts[] = [

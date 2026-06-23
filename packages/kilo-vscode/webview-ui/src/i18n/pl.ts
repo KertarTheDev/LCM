@@ -84,8 +84,6 @@ export const dict = {
   "revert.banner.redo.all": "Ponów wszystko",
   "revert.banner.hint": "Wyślij nową wiadomość, aby to utrwalić",
   "revert.disabled.agentBusy": "Poczekaj aż agent zakończy",
-  "command.session.compact": "Kompaktuj sesję",
-  "command.session.compact.description": "Podsumuj sesję, aby zmniejszyć rozmiar kontekstu",
   "command.session.fork": "Rozwidlij od wiadomości",
   "command.session.fork.description": "Utwórz nową sesję od poprzedniej wiadomości",
   "command.session.share": "Udostępnij sesję",
@@ -434,9 +432,6 @@ export const dict = {
   "toast.workspace.enabled.description": "Kilka worktree jest teraz wyświetlanych na pasku bocznym",
   "toast.workspace.disabled.title": "Przestrzenie robocze wyłączone",
   "toast.workspace.disabled.description": "Tylko główny worktree jest wyświetlany na pasku bocznym",
-
-  "toast.model.none.title": "Nie wybrano modelu",
-  "toast.model.none.description": "Połącz dostawcę, aby podsumować tę sesję",
 
   "toast.file.loadFailed.title": "Nie udało się załadować pliku",
 
@@ -1496,13 +1491,9 @@ export const dict = {
     "Zapobieganie powtarzaniu tych samych akcji. Uruchamiane, gdy to samo wywołanie narzędzia powtarza się z identycznymi danymi wejściowymi.",
   "settings.checkpoints.enable.title": "Włącz migawki",
   "settings.checkpoints.enable.description": "Twórz punkty kontrolne przed edycją plików",
-  "settings.context.autoCompaction.title": "Automatyczna kompakcja",
-  "settings.context.autoCompaction.description": "Automatycznie kompaktuj kontekst, zanim osiągnie limit",
   "settings.context.compactionLimit.title": "Limit automatycznego kompaktowania",
   "settings.context.compactionLimit.description":
     "Kompaktuj, gdy kontekst osiągnie ten procent okna modelu. Pozostaw puste, aby używać tylko bufora bezpieczeństwa.",
-  "settings.context.prune.title": "Przytnij stare wyjścia",
-  "settings.context.prune.description": "Usuń stare wyjścia narzędzi podczas kompakcji",
   "settings.context.watcherPatterns": "Wzorce ignorowania obserwatora plików",
   "settings.context.watcherPatterns.description": "Wzorce glob dla plików do ignorowania",
 

@@ -9,36 +9,38 @@
  * session resumes without user intervention.
  */
 
-import type { KiloClient } from "@kilocode/sdk/v2/client"
+import type { Event, KiloClient } from "@kilocode/sdk/v2/client"
 
 /** Pending network-offline requests: requestID -> { sessionID, refcount }. */
 const waits = new Map<string, { sid: string; refs: number }>()
 
-type Props = { id?: string; sessionID?: string; requestID?: string }
+type NetworkEvent = Extract<Event, { type: `session.network.${string}` }>
 type GetDir = (sessionID: string) => string
 
-/**
- * Process a session.network.* event. Call from handleEvent() with the event
- * type cast to `string` and properties cast to `Props` (these event types
- * are not yet in the SDK Event union, pending SDK regeneration).
- */
-export function handleNetworkEvent(type: string, props: Props, client: KiloClient | null, dir: GetDir) {
-  if (type === "session.network.asked" && props.id && props.sessionID) {
-    const existing = waits.get(props.id)
-    if (existing) existing.refs++
-    else waits.set(props.id, { sid: props.sessionID, refs: 1 })
-    return
-  }
-  if (type === "session.network.restored" && props.requestID) {
-    const entry = waits.get(props.requestID)
-    if (!entry) return
-    console.log("[Kilo New] network: auto-replying to restore", props.requestID)
-    void (client as any)?.network?.reply({ requestID: props.requestID, directory: dir(entry.sid) })
-    waits.delete(props.requestID)
-    return
-  }
-  if ((type === "session.network.replied" || type === "session.network.rejected") && props.requestID) {
-    waits.delete(props.requestID)
+export function isNetworkEvent(event: Event): event is NetworkEvent {
+  return event.type.startsWith("session.network.")
+}
+
+/** Process a session.network.* event from handleEvent(). */
+export function handleNetworkEvent(event: NetworkEvent, client: KiloClient | null, dir: GetDir) {
+  switch (event.type) {
+    case "session.network.asked": {
+      const existing = waits.get(event.properties.id)
+      if (existing) existing.refs++
+      else waits.set(event.properties.id, { sid: event.properties.sessionID, refs: 1 })
+      return
+    }
+    case "session.network.restored": {
+      const entry = waits.get(event.properties.requestID)
+      if (!entry) return
+      console.log("[Kilo New] network: auto-replying to restore", event.properties.requestID)
+      void client?.network.reply({ requestID: event.properties.requestID, directory: dir(entry.sid) })
+      waits.delete(event.properties.requestID)
+      return
+    }
+    case "session.network.replied":
+    case "session.network.rejected":
+      waits.delete(event.properties.requestID)
   }
 }
 

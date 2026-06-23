@@ -130,7 +130,7 @@ describe("resolveEventSessionId", () => {
     const event = {
       id: "e8",
       type: "session.network.restored",
-      properties: { sessionID: "s7" },
+      properties: { sessionID: "s7", requestID: "network_1" },
     } satisfies Payload
 
     expect(resolveEventSessionId(event, noLookup)).toBe("s7")
@@ -158,8 +158,24 @@ describe("resolveEventSessionId", () => {
     expect(resolveEventSessionId(suggestion, noLookup)).toBe("s10")
   })
 
+  it("routes suggestion shown and accepted events", () => {
+    const shown = {
+      id: "e11",
+      type: "suggestion.shown",
+      properties: { id: "sug_1", sessionID: "s12", text: "Review?", actions: [] },
+    } satisfies Payload
+    const accepted = {
+      id: "e12",
+      type: "suggestion.accepted",
+      properties: { sessionID: "s13", requestID: "sug_1", index: 0, action: { label: "Start", prompt: "x" } },
+    } satisfies Payload
+
+    expect(resolveEventSessionId(shown, noLookup)).toBe("s12")
+    expect(resolveEventSessionId(accepted, noLookup)).toBe("s13")
+  })
+
   it("returns undefined for global events", () => {
-    const event = { id: "e12", type: "server.connected", properties: {} } satisfies Payload
+    const event = { id: "e13", type: "server.connected", properties: {} } satisfies Payload
 
     expect(resolveEventSessionId(event, noLookup)).toBeUndefined()
   })

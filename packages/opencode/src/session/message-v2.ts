@@ -31,6 +31,13 @@ import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import { MessageError } from "./message-error"
 import { AuthError, OutputLengthError } from "./message-error"
 export { AuthError, OutputLengthError } from "./message-error"
+// kilocode_change start
+import { isLcmSafeError } from "./lcm/db-errors"
+import { LCM_SAFE_ACTIONS, LCM_SAFE_ERROR_CODES, type LcmSafeError } from "./lcm/types"
+import { LcmSafeErrorFailure } from "./lcm/types"
+import type { LcmSafeMessageTemplateKey } from "./lcm/types"
+import { LCM_SAFE_MESSAGE_TEMPLATES } from "./lcm/types"
+// kilocode_change end
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -60,6 +67,55 @@ export const ContextOverflowError = NamedError.create("ContextOverflowError", {
   message: Schema.String,
   responseBody: Schema.optional(Schema.String),
 })
+// kilocode_change start
+export const LcmMemoryError = NamedError.create("LcmMemoryError", {
+  message: Schema.String,
+  code: Schema.Literals(LCM_SAFE_ERROR_CODES),
+  safeMessage: Schema.String,
+  retryable: Schema.Boolean,
+  diagnosticCode: Schema.optional(Schema.String),
+  action: Schema.optional(Schema.Literals(LCM_SAFE_ACTIONS)),
+  operationID: Schema.optional(Schema.String),
+  conversationID: Schema.optional(Schema.String),
+  templateKey: Schema.optional(
+    Schema.Literals(
+      Object.keys(LCM_SAFE_MESSAGE_TEMPLATES) as [LcmSafeMessageTemplateKey, ...LcmSafeMessageTemplateKey[]],
+    ),
+  ),
+  safeParams: Schema.optional(
+    Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Number, Schema.Boolean])),
+  ),
+})
+
+function flatLcmSafeParams(input: Record<string, unknown>) {
+  const result: Record<string, string | number | boolean> = {}
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") result[key] = value
+  }
+  return Object.keys(result).length ? result : undefined
+}
+
+export function fromLcmSafeError(safeError: LcmSafeError): NonNullable<Assistant["error"]> {
+  const safeParams = flatLcmSafeParams(safeError.safeParams as Record<string, unknown>)
+  const enrichedSafeParams = {
+    ...(safeParams ?? {}),
+    ...(safeError.summaryID ? { summaryID: safeError.summaryID } : {}),
+    ...(safeError.fileID ? { fileID: safeError.fileID } : {}),
+  }
+  return new LcmMemoryError({
+    message: safeError.safeMessage,
+    code: safeError.code,
+    safeMessage: safeError.safeMessage,
+    retryable: safeError.retryable,
+    ...(safeError.diagnosticCode ? { diagnosticCode: safeError.diagnosticCode } : {}),
+    ...(safeError.action ? { action: safeError.action } : {}),
+    ...(safeError.operationID ? { operationID: safeError.operationID } : {}),
+    ...(safeError.conversationID ? { conversationID: safeError.conversationID } : {}),
+    templateKey: safeError.templateKey,
+    ...(Object.keys(enrichedSafeParams).length ? { safeParams: enrichedSafeParams } : {}),
+  }).toObject()
+}
+// kilocode_change end
 
 export class OutputFormatText extends Schema.Class<OutputFormatText>("OutputFormatText")({
   type: Schema.Literal("text"),
@@ -402,6 +458,9 @@ const AssistantErrorSchema = Schema.Union([
   AbortedError.EffectSchema,
   StructuredOutputError.EffectSchema,
   ContextOverflowError.EffectSchema,
+  // kilocode_change start
+  LcmMemoryError.EffectSchema,
+  // kilocode_change end
   APIError.EffectSchema,
 ]).annotate({ discriminator: "name" })
 type AssistantError = Schema.Schema.Type<typeof AssistantErrorSchema>
@@ -1211,6 +1270,12 @@ export function fromError(
   ctx: { providerID: ProviderID; aborted?: boolean },
 ): NonNullable<Assistant["error"]> {
   switch (true) {
+    // kilocode_change start
+    case e instanceof LcmSafeErrorFailure:
+      return fromLcmSafeError(e.safeError)
+    case isLcmSafeError(e):
+      return fromLcmSafeError(e)
+    // kilocode_change end
     case e instanceof DOMException && e.name === "AbortError":
       return new AbortedError(
         { message: e.message },

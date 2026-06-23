@@ -8,7 +8,9 @@ import { Config } from "@/config/config"
 import { Identifier } from "../id/id"
 import * as Log from "@opencode-ai/core/util/log"
 import { ToolID } from "./schema"
-import { TRUNCATION_DIR } from "./truncation-dir"
+// kilocode_change start
+import { TRUNCATION_DIR, truncationOutputMetadata, type TruncationOutputMetadata } from "./truncation-dir"
+// kilocode_change end
 
 const log = Log.create({ service: "truncation" })
 const RETENTION = Duration.days(7)
@@ -18,7 +20,11 @@ export const MAX_BYTES = 50 * 1024
 export const DIR = TRUNCATION_DIR
 export const GLOB = path.join(TRUNCATION_DIR, "*")
 
-export type Result = { content: string; truncated: false } | { content: string; truncated: true; outputPath: string }
+// kilocode_change start
+export type Result =
+  | { content: string; truncated: false }
+  | ({ content: string; truncated: true } & TruncationOutputMetadata)
+// kilocode_change end
 
 export interface Options {
   maxLines?: number
@@ -128,7 +134,9 @@ export const layer = Layer.effect(
       const file = yield* write(text)
 
       const hint = hasTaskTool(agent)
-        ? `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`
+        // kilocode_change start
+        ? `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse the Task tool with subagent_type="explore" to have the Explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`
+        // kilocode_change end
         : `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
 
       return {
@@ -137,7 +145,9 @@ export const layer = Layer.effect(
             ? `${preview}\n\n...${removed} ${unit} truncated...\n\n${hint}`
             : `...${removed} ${unit} truncated...\n\n${hint}\n\n${preview}`,
         truncated: true,
-        outputPath: file,
+        // kilocode_change start
+        ...truncationOutputMetadata({ outputPath: file, text }),
+        // kilocode_change end
       } as const
     })
 

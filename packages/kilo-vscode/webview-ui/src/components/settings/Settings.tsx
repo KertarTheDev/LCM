@@ -17,6 +17,7 @@ import DisplayTab from "./DisplayTab"
 import AutocompleteTab from "./AutocompleteTab"
 import NotificationsTab from "./NotificationsTab"
 import ContextTab from "./ContextTab"
+import LcmMemoryTab from "./LcmMemoryTab"
 
 import CommitMessageTab from "./CommitMessageTab"
 import ExperimentalTab from "./ExperimentalTab"
@@ -186,6 +187,10 @@ const Settings: Component<SettingsProps> = (props) => {
             <Icon name="server" />
             <span class="label">{language.t("settings.context.title")}</span>
           </Tabs.Trigger>
+          <Tabs.Trigger value="lcmMemory">
+            <Icon name="server" />
+            <span class="label">Memory</span>
+          </Tabs.Trigger>
 
           <Tabs.Trigger value="commitMessage" aria-label={language.t("settings.commitMessage.title")}>
             <Icon name="edit" />
@@ -250,6 +255,10 @@ const Settings: Component<SettingsProps> = (props) => {
         <Tabs.Content value="context">
           <h3>{language.t("settings.context.title")}</h3>
           <ContextTab />
+        </Tabs.Content>
+        <Tabs.Content value="lcmMemory">
+          <h3>Memory</h3>
+          <LcmMemoryTab />
         </Tabs.Content>
 
         <Tabs.Content value="commitMessage">

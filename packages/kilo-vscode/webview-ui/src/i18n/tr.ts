@@ -84,8 +84,6 @@ export const dict = {
   "revert.banner.redo.all": "Tümünü Yinele",
   "revert.banner.hint": "Bunu kalıcı yapmak için yeni bir mesaj gönderin",
   "revert.disabled.agentBusy": "Ajanın bitmesini bekleyin",
-  "command.session.compact": "Oturumu sıkıştır",
-  "command.session.compact.description": "Bağlam boyutunu azaltmak için oturumu özetle",
   "command.session.fork": "Mesajdan dallandır",
   "command.session.fork.description": "Önceki bir mesajdan yeni oturum oluştur",
   "command.session.share": "Oturumu paylaş",
@@ -432,9 +430,6 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "Düzenleme ve yazma izinleri otomatik olarak onaylanacak",
   "toast.permissions.autoaccept.off.title": "Otomatik kabul durduruldu",
   "toast.permissions.autoaccept.off.description": "Düzenleme ve yazma izinleri onay gerektirecek",
-
-  "toast.model.none.title": "Model seçilmedi",
-  "toast.model.none.description": "Bu oturumu özetlemek için bir sağlayıcı bağlayın",
 
   "toast.file.loadFailed.title": "Dosya yüklenemedi",
   "toast.file.listFailed.title": "Dosyalar listelenemedi",
@@ -1452,13 +1447,9 @@ export const dict = {
   "settings.checkpoints.enable.description":
     "Dosya düzenlemelerinden önce kontrol noktaları oluştur, böylece önceki durumları geri yükleyebilirsiniz",
 
-  "settings.context.autoCompaction.title": "Otomatik Sıkıştırma",
-  "settings.context.autoCompaction.description": "Bağlam sınıra ulaşmadan önce otomatik olarak sıkıştır",
   "settings.context.compactionLimit.title": "Otomatik sıkıştırma sınırı",
   "settings.context.compactionLimit.description":
     "Bağlam model penceresinin bu yüzdesine ulaştığında sıkıştır. Yalnızca güvenlik tamponunu kullanmak için boş bırakın.",
-  "settings.context.prune.title": "Eski Çıktıları Temizle",
-  "settings.context.prune.description": "Sıkıştırma sırasında eski araç çıktılarını kaldır",
   "settings.context.watcherPatterns": "Dosya İzleyici Yok Sayma Kalıpları",
   "settings.context.watcherPatterns.description": "İzleyicinin yok sayması gereken dosyalar için glob kalıpları",
 

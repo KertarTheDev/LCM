@@ -1,0 +1,73 @@
+# kilocode_change - new file
+name: LCM macOS platform smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-packaged-runtime:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-latest
+          - target: darwin-x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Install @vscode/vsce
+        run: bun install -g @vscode/vsce
+
+      - name: Build native CLI
+        working-directory: packages/opencode
+        run: bun run build --single
+
+      - name: Package target VSIX
+        working-directory: packages/kilo-vscode
+        env:
+          CLI_DIST_DIR: ../../packages/opencode/dist
+        run: bun script/build.ts --target "${{ matrix.target }}"
+
+      - name: Run packaged-runtime DB smoke
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          VSIX="packages/kilo-vscode/out/kilo-vscode-${TARGET}.vsix"
+          UNPACK_DIR="$RUNNER_TEMP/kilo-vscode-${TARGET}"
+          DATA_DIR="$RUNNER_TEMP/lcm-db-${TARGET}"
+          EVIDENCE="$RUNNER_TEMP/lcm-macos-${TARGET}-smoke.json"
+
+          rm -rf "$UNPACK_DIR" "$DATA_DIR"
+          mkdir -p "$UNPACK_DIR" "$DATA_DIR"
+          unzip -q "$VSIX" -d "$UNPACK_DIR"
+
+          "$UNPACK_DIR/extension/bin/kilo" debug lcm-db-smoke --data-dir "$DATA_DIR" --json > "$EVIDENCE"
+
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcm-macos-${{ matrix.target }}-evidence
+          if-no-files-found: ignore
+          path: |
+            packages/kilo-vscode/out/kilo-vscode-${{ matrix.target }}.vsix
+            ${{ runner.temp }}/lcm-macos-${{ matrix.target }}-smoke.json

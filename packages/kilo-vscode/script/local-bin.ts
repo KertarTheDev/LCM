@@ -29,7 +29,11 @@ const indexingDir = join(packagesDir, "kilo-indexing")
 const targetBinDir = join(kiloVscodeDir, "bin")
 const binName = process.platform === "win32" ? "kilo.exe" : "kilo"
 const targetBinPath = join(targetBinDir, binName)
+const snapshotName = "models-snapshot.json"
+const targetSnapshotPath = join(targetBinDir, snapshotName)
 const versionFile = join(targetBinDir, ".cli-version")
+const devSnapshotPath = join(opencodeDir, "src", "provider", snapshotName)
+const shellEnv = { ...process.env }
 
 function log(msg: string) {
   console.log(`[local-bin] ${msg}`)
@@ -150,10 +154,10 @@ async function ensureBuiltBinary(): Promise<string> {
 
   // Ensure dependencies are installed before building.
   log("Installing dependencies in opencode package...")
-  await $`bun install --frozen-lockfile`.cwd(opencodeDir)
+  await $`bun install --frozen-lockfile`.cwd(opencodeDir).env(shellEnv)
 
   // Build using the opencode package script.
-  await $`bun run build --single`.cwd(opencodeDir)
+  await $`bun run build --single`.cwd(opencodeDir).env(shellEnv)
 
   const built = await findKiloBinaryInOpencodeDist()
   if (!built) {

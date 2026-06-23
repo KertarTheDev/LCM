@@ -278,6 +278,9 @@ for (const item of targets) {
   const workerPath = "./src/cli/cmd/tui/worker.ts"
   const sessionExportWorkerPath = "./src/kilocode/session-export/worker.ts" // kilocode_change
   const indexingWorkerPath = "./src/kilocode/indexing-worker.ts" // kilocode_change
+  // kilocode_change start
+  const lcmPgliteRegexWorkerPath = "./src/session/lcm/pglite-regex.worker.ts"
+  // kilocode_change end
 
   // Use platform-specific bunfs root path based on target OS
   const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
@@ -314,7 +317,16 @@ for (const item of targets) {
     },
     // kilocode_change start - packages/app was removed; no embedded web UI
     files: {},
-    entrypoints: ["./src/index.ts", parserWorker, workerPath, sessionExportWorkerPath, indexingWorkerPath],
+    // kilocode_change start
+    entrypoints: [
+      "./src/index.ts",
+      parserWorker,
+      workerPath,
+      sessionExportWorkerPath,
+      indexingWorkerPath,
+      lcmPgliteRegexWorkerPath,
+    ],
+    // kilocode_change end
     // kilocode_change end
     define: {
       KILO_VERSION: `'${Script.version}'`,
@@ -324,6 +336,9 @@ for (const item of targets) {
       KILO_WORKER_PATH: workerPath,
       KILO_SESSION_EXPORT_WORKER_PATH: sessionExportWorkerPath, // kilocode_change
       KILO_INDEXING_WORKER_PATH: indexingWorkerPath, // kilocode_change
+      // kilocode_change start
+      KILO_LCM_PGLITE_REGEX_WORKER_PATH: lcmPgliteRegexWorkerPath,
+      // kilocode_change end
       KILO_CHANNEL: `'${Script.channel}'`,
       KILO_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
       KILO_BUILD_KIND: Script.release ? `'release'` : `'source'`, // kilocode_change

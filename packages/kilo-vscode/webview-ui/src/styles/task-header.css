@@ -1,11 +1,26 @@
 /* ============================================
-   Task Header Rename
+   Task Header
    ============================================ */
+
+[data-component="task-header"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px 4px;
+}
 
 [data-slot="task-header-title"] {
   display: flex;
   align-items: center;
+  flex: 1;
   min-width: 0;
+  overflow: hidden;
+  color: var(--vscode-foreground);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 [data-slot="task-header-title-trigger"] {
@@ -50,6 +65,79 @@
   white-space: nowrap;
 }
 
+[data-slot="task-header-stats"] {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+  min-width: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+[data-slot="task-header-maintenance"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-sizing: border-box;
+  max-width: 170px;
+  min-height: 20px;
+  padding: 2px 7px;
+  overflow: hidden;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--vscode-foreground) 7%, transparent);
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  line-height: 14px;
+  vertical-align: middle;
+}
+
+[data-slot="task-header-maintenance"][data-state="running"] {
+  border-color: color-mix(in srgb, var(--vscode-progressBar-background) 45%, var(--border-weak-base));
+  color: var(--vscode-progressBar-background);
+}
+
+[data-slot="task-header-maintenance"][data-state="completed"] {
+  border-color: color-mix(in srgb, var(--vscode-testing-iconPassed, #5cb85c) 45%, var(--border-weak-base));
+  color: var(--vscode-testing-iconPassed, #5cb85c);
+}
+
+[data-slot="task-header-maintenance"][data-state="failed"] {
+  border-color: color-mix(in srgb, var(--vscode-errorForeground) 45%, var(--border-weak-base));
+  color: var(--vscode-errorForeground);
+}
+
+[data-slot="task-header-maintenance-dot"] {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+[data-slot="task-header-maintenance"][data-state="running"] [data-slot="task-header-maintenance-dot"] {
+  animation: task-header-maintenance-pulse 1.2s ease-in-out infinite;
+}
+
+[data-slot="task-header-maintenance-label"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes task-header-maintenance-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* ============================================
    Task Header Todos
    ============================================ */
@@ -67,7 +155,7 @@
     width: 100%;
     padding: 6px 16px;
     cursor: pointer;
-    font-size: var(--kilo-font-size-12);
+    font-size: 12px;
     color: var(--text-weak);
     box-sizing: border-box;
 
@@ -100,7 +188,7 @@
   }
 
   [data-slot="task-header-todo-content"] {
-    font-size: var(--kilo-font-size-12);
+    font-size: 12px;
     color: var(--text-base);
 
     &[data-completed] {
@@ -170,6 +258,18 @@
   pointer-events: none;
 }
 
+@keyframes timeline-fade-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0);
+    transform-origin: bottom;
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
 @keyframes timeline-pulse {
   0%,
   100% {
@@ -184,13 +284,22 @@
    Context Progress Bar
    ============================================ */
 
+.context-progress-stack {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .context-progress {
   display: flex;
   align-items: center;
   gap: 6px;
   flex: 1;
+  min-width: 0;
   white-space: nowrap;
-  font-size: var(--kilo-font-size-11);
+  font-size: 11px;
   color: var(--vscode-descriptionForeground);
 }
 
@@ -231,6 +340,17 @@
   height: 100%;
 }
 
+.context-progress-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--vscode-descriptionForeground);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ============================================
    Task Header Graph Section
    ============================================ */
@@ -256,7 +376,7 @@
   align-items: center;
   gap: 6px;
   padding: 0 8px;
-  font-size: var(--kilo-font-size-11);
+  font-size: 11px;
   color: var(--vscode-descriptionForeground);
   white-space: nowrap;
 }

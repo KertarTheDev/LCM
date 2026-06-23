@@ -30,23 +30,31 @@ export const ServeCommand = effectCmd({
     // kilocode_change end
 
     // kilocode_change start - graceful signal shutdown
-    // yield* Effect.never
-    yield* Effect.promise(
-      () =>
-        new Promise<void>((resolve) => {
-          const shutdown = async () => {
-            try {
-              await InstanceRuntime.disposeAllInstances()
-              await server.stop(true)
-            } finally {
-              resolve()
-            }
-          }
-          process.once("SIGTERM", shutdown)
-          process.once("SIGINT", shutdown)
-          process.once("SIGHUP", shutdown)
-        }),
-    )
+    const abort = new AbortController()
+    let shutdownPromise: Promise<void> | undefined
+
+    function handleShutdownSignal() {
+      void shutdown()
+    }
+
+    function shutdown() {
+      shutdownPromise ??= (async () => {
+        try {
+          await InstanceRuntime.disposeAllInstances()
+          await server.stop(true)
+        } finally {
+          process.off("SIGTERM", handleShutdownSignal)
+          process.off("SIGINT", handleShutdownSignal)
+          process.off("SIGHUP", handleShutdownSignal)
+          abort.abort()
+        }
+      })()
+      return shutdownPromise
+    }
+    process.on("SIGTERM", handleShutdownSignal)
+    process.on("SIGINT", handleShutdownSignal)
+    process.on("SIGHUP", handleShutdownSignal)
+    yield* Effect.promise(() => new Promise((resolve) => abort.signal.addEventListener("abort", resolve)))
     // kilocode_change end
   }),
 })

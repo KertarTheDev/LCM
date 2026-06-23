@@ -1,10 +1,9 @@
-// Regressions for the MAX_COMPACTION_ATTEMPTS cap in SessionPrompt.runLoop.
-// Ensures the loop cannot spin forever when every compaction round still
-// overflows the model context, and that the exhausted turn surfaces as an
-// error (rather than silently completing).
+// Regressions for provider context overflow in the LCM prompt path.
+// LCM-active sessions must retry through LCM preflight and fail closed without
+// enqueueing legacy lossy compaction turns.
 
 import { NodeFileSystem } from "@effect/platform-node"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Agent as AgentSvc } from "../../src/agent/agent"
@@ -33,12 +32,20 @@ import { Question } from "../../src/question"
 import { Reference } from "../../src/reference/reference"
 import { RepositoryCache } from "../../src/reference/repository-cache"
 import { Session } from "../../src/session/session"
-import { SessionCompaction } from "../../src/session/compaction"
 import { Instruction } from "../../src/session/instruction"
+import {
+  LCM_BLOCKING_MAINTENANCE_LABEL,
+  LCM_PREFLIGHT_ASSEMBLY_LABEL,
+  LCM_PREFLIGHT_STORAGE_LABEL,
+  LCM_PREFLIGHT_SYNC_LABEL,
+} from "../../src/session/lcm/events"
+import { lcmProviderOverflowRecoveryInputLimit } from "../../src/session/lcm/model-limits"
+import { LcmRuntime } from "../../src/session/lcm/runtime"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionCompaction } from "../../src/session/compaction"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { MessageID, SessionID } from "../../src/session/schema"
@@ -73,10 +80,7 @@ const summary = Layer.succeed(
   }),
 )
 
-// Pass-through plugin mock. Lets every plugin trigger proceed with its default
-// output so compaction's `experimental.compaction.autocontinue` stays on (the
-// "compact" result path uses replay mode and the loop re-enters without the
-// synthetic continue prompt anyway).
+// Pass-through plugin mock. Lets every plugin trigger proceed with its default output.
 const plugin = Layer.mock(Plugin.Service)({
   trigger: <Name extends string, Input, Output>(_name: Name, _input: Input, output: Output) => Effect.succeed(output),
   list: () => Effect.succeed([]),
@@ -96,9 +100,9 @@ const mcp = Layer.succeed(
     disconnect: () => Effect.void,
     getPrompt: () => Effect.succeed(undefined),
     readResource: () => Effect.succeed(undefined),
-    startAuth: () => Effect.die("unexpected MCP auth in compaction cap tests"),
-    authenticate: () => Effect.die("unexpected MCP auth in compaction cap tests"),
-    finishAuth: () => Effect.die("unexpected MCP auth in compaction cap tests"),
+    startAuth: () => Effect.die("unexpected MCP auth in LCM provider-overflow tests"),
+    authenticate: () => Effect.die("unexpected MCP auth in LCM provider-overflow tests"),
+    finishAuth: () => Effect.die("unexpected MCP auth in LCM provider-overflow tests"),
     removeAuth: () => Effect.void,
     supportsOAuth: () => Effect.succeed(false),
     hasStoredTokens: () => Effect.succeed(false),
@@ -179,6 +183,7 @@ function makeHttp() {
     SessionPrompt.layer.pipe(
       Layer.provide(SessionRevert.defaultLayer),
       Layer.provide(Image.defaultLayer),
+      Layer.provide(LcmRuntime.defaultLayer),
       Layer.provide(summary),
       Layer.provideMerge(runState),
       Layer.provideMerge(compact),
@@ -256,9 +261,74 @@ function providerCfg(url: string) {
 
 const overflowBody = { type: "error", error: { code: "context_length_exceeded" } }
 
-describe("session compaction cap", () => {
+describe("LCM provider overflow retry", () => {
+  test("classifies provider overflow as LCM retry or fail-closed safe error", () => {
+    const retry = SessionPrompt.resolveLcmProviderOverflowResult({
+      lifecycleState: "lcm_active",
+      retryAttempt: 0,
+      conversationID: "conv_provider_overflow",
+      threshold: { activeTokens: 120_000, hardLimit: 100_000 },
+    })
+    expect(retry).toMatchObject({
+      action: "retry",
+      nextAttempt: 1,
+      providerOverflowRecovery: { attempt: 1 },
+    })
+
+    const exhausted = SessionPrompt.resolveLcmProviderOverflowResult({
+      lifecycleState: "lcm_active",
+      retryAttempt: 2,
+      conversationID: "conv_provider_overflow",
+      threshold: { activeTokens: 120_000, hardLimit: 100_000 },
+    })
+    expect(exhausted).toMatchObject({
+      action: "fail",
+      safeError: {
+        code: "hard_limit_unresolved",
+        diagnosticCode: "lcm_prompt_provider_overflow_after_lcm_retry_exhausted",
+        retryable: false,
+        safeParams: {
+          conversationID: "conv_provider_overflow",
+          beforeTokens: 120_000,
+          hardLimit: 100_000,
+          action: "start_new_thread",
+        },
+      },
+    })
+
+    const inactive = SessionPrompt.resolveLcmProviderOverflowResult({
+      lifecycleState: "recovery_required",
+      retryAttempt: 0,
+    })
+    expect(inactive).toMatchObject({
+      action: "fail",
+      safeError: {
+        diagnosticCode: "lcm_prompt_provider_overflow_without_active_lcm_rejected",
+      },
+    })
+  })
+
+  test("tightens provider input limit on later LCM overflow recovery retries", () => {
+    const modelLimits = { context: 100_000, input: 90_000, output: 10_000 }
+    const first = lcmProviderOverflowRecoveryInputLimit({
+      modelLimits,
+      recovery: { attempt: 1 },
+    })
+    const second = lcmProviderOverflowRecoveryInputLimit({
+      modelLimits,
+      recovery: { attempt: 2 },
+    })
+
+    expect(typeof first).toBe("number")
+    expect(typeof second).toBe("number")
+    if (typeof first !== "number" || typeof second !== "number") return
+    expect(first).toBeLessThan(modelLimits.input)
+    expect(second).toBeLessThan(first)
+    expect(second).toBeGreaterThan(0)
+  })
+
   it.live(
-    "closes the turn with reason=error after MAX_COMPACTION_ATTEMPTS compactions",
+    "fails closed without legacy compaction after the LCM overflow retries are exhausted",
     () =>
       provideTmpdirServer(
         Effect.fnUntraced(function* ({ llm }) {
@@ -270,18 +340,9 @@ describe("session compaction cap", () => {
             permission: [{ permission: "*", pattern: "*", action: "allow" }],
           })
 
-          // Interleave overflow errors (top-level LLM call) and successful
-          // summary texts (compaction.process internal LLM call) so each
-          // compaction round completes and the loop re-enters. With
-          // MAX_COMPACTION_ATTEMPTS = 3 we queue 4 errors + 3 texts = 7 calls.
-          // The final error triggers guardCompactionAttempt and breaks.
-          yield* llm.error(400, overflowBody) // 1 — top-level fails → attempt 1
-          yield* llm.text("summary 1") // 2 — compaction summary succeeds
-          yield* llm.error(400, overflowBody) // 3 — post-replay fails → attempt 2
-          yield* llm.text("summary 2") // 4
-          yield* llm.error(400, overflowBody) // 5 — attempt 3
-          yield* llm.text("summary 3") // 6
-          yield* llm.error(400, overflowBody) // 7 — exhausts, breaks
+          yield* llm.error(400, overflowBody)
+          yield* llm.error(400, overflowBody)
+          yield* llm.error(400, overflowBody)
 
           const turnClose = yield* Deferred.make<KiloSession.CloseReason>()
           const unsub = yield* bus.subscribeCallback(KiloSession.Event.TurnClose, (evt) => {
@@ -298,17 +359,22 @@ describe("session compaction cap", () => {
           const result = yield* prompt.loop({ sessionID: chat.id })
           const reason = yield* Deferred.await(turnClose).pipe(Effect.timeout("2 seconds"))
           unsub()
-
-          // Each compaction round costs 2 LLM calls in this replay-mode path (one
-          // top-level overflow + one summary) plus 1 final overflow that trips the cap.
-          expect(yield* llm.calls).toBe(KiloSessionPrompt.MAX_COMPACTION_ATTEMPTS * 2 + 1)
+          expect(yield* llm.calls).toBe(3)
           expect(reason).toBe("error")
           expect(result.info.role).toBe("assistant")
           if (result.info.role !== "assistant") return
           expect(result.info.finish).toBe("error")
-          expect(result.info.error?.name).toBe("ContextOverflowError")
-          if (result.info.error?.name !== "ContextOverflowError") return
-          expect(result.info.error.data.message).toContain("Compaction exhausted")
+          expect(result.info.error).toMatchObject({
+            name: "LcmMemoryError",
+            data: {
+              code: "hard_limit_unresolved",
+              action: "start_new_thread",
+              diagnosticCode: "lcm_prompt_provider_overflow_after_lcm_retry_exhausted",
+            },
+          })
+          expect(
+            Array.from(MessageV2.stream(chat.id)).some((msg) => msg.parts.some((p) => p.type === "compaction")),
+          ).toBe(false)
         }),
         { git: true, config: providerCfg },
       ),
@@ -316,7 +382,7 @@ describe("session compaction cap", () => {
   )
 
   it.live(
-    "completes normally when compactions stay below the cap",
+    "recovers when the LCM overflow retry fits without legacy compaction",
     () =>
       provideTmpdirServer(
         Effect.fnUntraced(function* ({ llm }) {
@@ -328,11 +394,14 @@ describe("session compaction cap", () => {
             permission: [{ permission: "*", pattern: "*", action: "allow" }],
           })
 
-          yield* llm.error(400, overflowBody) // 1 — one compaction attempt
-          yield* llm.text("summary ok") // 2 — summary succeeds
-          yield* llm.text("final answer") // 3 — replayed turn completes
+          yield* llm.error(400, overflowBody)
+          yield* llm.text("final answer")
 
           const turnClose = yield* Deferred.make<KiloSession.CloseReason>()
+          const statusEvents: SessionStatus.Info[] = []
+          const unsubStatus = yield* bus.subscribeCallback(SessionStatus.Event.Status, (evt) => {
+            if (evt.properties.sessionID === chat.id) statusEvents.push(evt.properties.status)
+          })
           const unsub = yield* bus.subscribeCallback(KiloSession.Event.TurnClose, (evt) => {
             if (evt.properties.sessionID === chat.id)
               Deferred.doneUnsafe(turnClose, Effect.succeed(evt.properties.reason))
@@ -347,6 +416,68 @@ describe("session compaction cap", () => {
           const result = yield* prompt.loop({ sessionID: chat.id })
           const reason = yield* Deferred.await(turnClose).pipe(Effect.timeout("2 seconds"))
           unsub()
+          unsubStatus()
+
+          expect(yield* llm.calls).toBe(2)
+          expect(reason).toBe("completed")
+          expect(
+            statusEvents.some((event) => event.type === "busy" && event.message === LCM_BLOCKING_MAINTENANCE_LABEL),
+          ).toBe(true)
+          expect(
+            statusEvents.some((event) => event.type === "busy" && event.message === LCM_PREFLIGHT_STORAGE_LABEL),
+          ).toBe(true)
+          expect(
+            statusEvents.some((event) => event.type === "busy" && event.message === LCM_PREFLIGHT_SYNC_LABEL),
+          ).toBe(true)
+          expect(
+            statusEvents.some((event) => event.type === "busy" && event.message === LCM_PREFLIGHT_ASSEMBLY_LABEL),
+          ).toBe(true)
+          expect(result.info.role).toBe("assistant")
+          if (result.info.role !== "assistant") return
+          expect(result.info.finish).toBe("stop")
+          expect(result.info.error).toBeUndefined()
+          expect(result.parts.some((p) => p.type === "text" && p.text === "final answer")).toBe(true)
+          expect(
+            Array.from(MessageV2.stream(chat.id)).some((msg) => msg.parts.some((p) => p.type === "compaction")),
+          ).toBe(false)
+        }),
+        { git: true, config: providerCfg },
+      ),
+    15_000,
+  )
+
+  it.live(
+    "recovers when the second LCM overflow retry fits without legacy compaction",
+    () =>
+      provideTmpdirServer(
+        Effect.fnUntraced(function* ({ llm }) {
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const bus = yield* Bus.Service
+          const chat = yield* sessions.create({
+            title: "Compaction second retry under cap",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          })
+
+          yield* llm.error(400, overflowBody)
+          yield* llm.error(400, overflowBody)
+          yield* llm.text("final answer after second retry")
+
+          const turnClose = yield* Deferred.make<KiloSession.CloseReason>()
+          const unsub = yield* bus.subscribeCallback(KiloSession.Event.TurnClose, (evt) => {
+            if (evt.properties.sessionID === chat.id)
+              Deferred.doneUnsafe(turnClose, Effect.succeed(evt.properties.reason))
+          })
+
+          yield* prompt.prompt({
+            sessionID: chat.id,
+            agent: "code",
+            noReply: true,
+            parts: [{ type: "text", text: "overflow twice" }],
+          })
+          const result = yield* prompt.loop({ sessionID: chat.id })
+          const reason = yield* Deferred.await(turnClose).pipe(Effect.timeout("2 seconds"))
+          unsub()
 
           expect(yield* llm.calls).toBe(3)
           expect(reason).toBe("completed")
@@ -354,11 +485,14 @@ describe("session compaction cap", () => {
           if (result.info.role !== "assistant") return
           expect(result.info.finish).toBe("stop")
           expect(result.info.error).toBeUndefined()
-          expect(result.parts.some((p) => p.type === "text" && p.text === "final answer")).toBe(true)
+          expect(result.parts.some((p) => p.type === "text" && p.text === "final answer after second retry")).toBe(true)
+          expect(
+            Array.from(MessageV2.stream(chat.id)).some((msg) => msg.parts.some((p) => p.type === "compaction")),
+          ).toBe(false)
         }),
         { git: true, config: providerCfg },
       ),
-    15_000,
+    20_000,
   )
 })
 

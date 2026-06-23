@@ -223,39 +223,27 @@ async function main() {
 
   // Build the shared Shiki highlighting worker asset
   const shikiWorkerCtx = await createShikiWorkerContext()
+  const contexts = [
+    extensionCtx,
+    webviewCtx,
+    agentManagerCtx,
+    diffViewerCtx,
+    diffVirtualCtx,
+    kiloClawCtx,
+    marketplaceCtx,
+    shikiWorkerCtx,
+  ]
 
   if (watch) {
-    await Promise.all([
-      extensionCtx.watch(),
-      webviewCtx.watch(),
-      agentManagerCtx.watch(),
-      diffViewerCtx.watch(),
-      diffVirtualCtx.watch(),
-      kiloClawCtx.watch(),
-      marketplaceCtx.watch(),
-      shikiWorkerCtx.watch(),
-    ])
+    await Promise.all(contexts.map((ctx) => ctx.watch()))
   } else {
-    await Promise.all([
-      extensionCtx.rebuild(),
-      webviewCtx.rebuild(),
-      agentManagerCtx.rebuild(),
-      kiloClawCtx.rebuild(),
-      marketplaceCtx.rebuild(),
-      diffViewerCtx.rebuild(),
-      diffVirtualCtx.rebuild(),
-      shikiWorkerCtx.rebuild(),
-    ])
-    await Promise.all([
-      extensionCtx.dispose(),
-      webviewCtx.dispose(),
-      agentManagerCtx.dispose(),
-      diffViewerCtx.dispose(),
-      diffVirtualCtx.dispose(),
-      kiloClawCtx.dispose(),
-      marketplaceCtx.dispose(),
-      shikiWorkerCtx.dispose(),
-    ])
+    try {
+      for (const ctx of contexts) {
+        await ctx.rebuild()
+      }
+    } finally {
+      await Promise.all(contexts.map((ctx) => ctx.dispose()))
+    }
   }
 }
 
