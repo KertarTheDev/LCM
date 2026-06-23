@@ -25,7 +25,6 @@ import { Provider as ProviderSvc } from "../../src/provider/provider"
 import { Question } from "../../src/question"
 import { Reference } from "../../src/reference/reference"
 import { RepositoryCache } from "../../src/reference/repository-cache"
-import { SessionCompaction } from "../../src/session/compaction"
 import { Instruction } from "../../src/session/instruction"
 import { LcmRuntime } from "../../src/session/lcm/runtime"
 import { LLM } from "../../src/session/llm"
@@ -162,7 +161,6 @@ function makeHttp() {
     Layer.provide(Image.defaultLayer),
     Layer.provideMerge(deps),
   )
-  const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
@@ -171,7 +169,6 @@ function makeHttp() {
       Layer.provide(Image.defaultLayer),
       Layer.provide(summary),
       Layer.provideMerge(run),
-      Layer.provideMerge(compact),
       Layer.provideMerge(proc),
       Layer.provideMerge(registry),
       Layer.provideMerge(trunc),

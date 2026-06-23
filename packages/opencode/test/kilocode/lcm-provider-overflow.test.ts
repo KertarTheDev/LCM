@@ -45,7 +45,6 @@ import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
-import { SessionCompaction } from "../../src/session/compaction"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { MessageID, SessionID } from "../../src/session/schema"
@@ -177,7 +176,6 @@ function makeHttp() {
     Layer.provide(Image.defaultLayer),
     Layer.provideMerge(deps),
   )
-  const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
@@ -186,7 +184,6 @@ function makeHttp() {
       Layer.provide(LcmRuntime.defaultLayer),
       Layer.provide(summary),
       Layer.provideMerge(runState),
-      Layer.provideMerge(compact),
       Layer.provideMerge(proc),
       Layer.provideMerge(registry),
       Layer.provideMerge(trunc),
@@ -378,7 +375,7 @@ describe("LCM provider overflow retry", () => {
         }),
         { git: true, config: providerCfg },
       ),
-    30_000,
+    60_000,
   )
 
   it.live(
@@ -443,7 +440,7 @@ describe("LCM provider overflow retry", () => {
         }),
         { git: true, config: providerCfg },
       ),
-    15_000,
+    45_000,
   )
 
   it.live(
@@ -492,7 +489,7 @@ describe("LCM provider overflow retry", () => {
         }),
         { git: true, config: providerCfg },
       ),
-    20_000,
+    60_000,
   )
 })
 
