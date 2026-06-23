@@ -1602,6 +1602,9 @@ export type Config = {
     preserve_recent_tokens?: number
     reserved?: number
   }
+  /**
+   * LCM public settings and deployment defaults persisted through normal Kilo config storage.
+   */
   lcm?: unknown
   experimental?: {
     disable_paste_summary?: boolean

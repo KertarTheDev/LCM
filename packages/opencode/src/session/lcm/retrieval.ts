@@ -1085,6 +1085,8 @@ async function searchCandidates(db: PGlite, scope: LcmConversationScope, input: 
       `,
       params,
     )
+    const sourceAllowedSql = placeholders(allowed.length, closure.length)
+    const scopedLikeIndex = closure.length + allowed.length + 1
     const partRows = await queryRows<CandidateRow>(
       db,
       `
@@ -1107,13 +1109,15 @@ async function searchCandidates(db: PGlite, scope: LcmConversationScope, input: 
         JOIN lcm_messages message ON message.message_row_id = summary_message.message_row_id
         JOIN lcm_message_parts part ON part.message_row_id = message.message_row_id
         WHERE summary_message.summary_id IN (${closureSql})
+          AND message.conversation_id IN (${sourceAllowedSql})
+          AND part.conversation_id IN (${sourceAllowedSql})
           AND message.ignored = false
           AND part.ignored = false
           AND part.search_text <> ''
-          ${filter("part.search_text", likeIndex)}
+          ${filter("part.search_text", scopedLikeIndex)}
         ORDER BY summary_message.source_order, message.message_order, part.part_order, part.part_row_id
       `,
-      params,
+      [...closure, ...allowed, ...(like ? [like] : [])],
     )
     const fileAllowedSql = placeholders(allowed.length, closure.length)
     const fileLikeIndex = closure.length + allowed.length + 1
@@ -1671,6 +1675,7 @@ export const grep = Effect.fn("LcmRetrieval.grep")(function* (input: RetrievalIn
 
 async function describeSummary(db: PGlite, scope: LcmConversationScope, id: SummaryID): Promise<LcmDescribeResult> {
   const summaryID = await resolveSummaryID(db, scope, id)
+  const allowedSql = placeholders(scope.allowedConversationIDs.length, 1)
   const rows = await queryRows<
     SummaryRow & {
       parent_summary_ids: SummaryID[] | null
@@ -1691,23 +1696,28 @@ async function describeSummary(db: PGlite, scope: LcmConversationScope, id: Summ
         summary.fallback_mode,
         summary.created_at_ms,
         ARRAY(
-          SELECT parent_summary_id
-          FROM lcm_summary_parents
-          WHERE summary_id = summary.summary_id
-          ORDER BY parent_order, parent_summary_id
+          SELECT parent.parent_summary_id
+          FROM lcm_summary_parents parent
+          JOIN lcm_summaries parent_summary ON parent_summary.summary_id = parent.parent_summary_id
+          WHERE parent.summary_id = summary.summary_id
+            AND parent_summary.conversation_id IN (${allowedSql})
+          ORDER BY parent.parent_order, parent.parent_summary_id
         ) AS parent_summary_ids,
         ARRAY(
           SELECT child.summary_id
           FROM lcm_summary_parents child
           JOIN lcm_summaries child_summary ON child_summary.summary_id = child.summary_id
           WHERE child.parent_summary_id = summary.summary_id
-            AND child_summary.conversation_id IN (${placeholders(scope.allowedConversationIDs.length, 1)})
+            AND child_summary.conversation_id IN (${allowedSql})
           ORDER BY child.parent_order, child.summary_id
         ) AS child_summary_ids,
         (
           SELECT COUNT(*)::int
           FROM lcm_summary_messages covered
+          JOIN lcm_messages message ON message.message_row_id = covered.message_row_id
           WHERE covered.summary_id = summary.summary_id
+            AND message.conversation_id IN (${allowedSql})
+            AND message.ignored = false
         ) AS covered_message_count
       FROM lcm_summaries summary
       WHERE summary.summary_id = $1
@@ -1895,6 +1905,7 @@ async function expandItems(db: PGlite, scope: LcmConversationScope, summaryID: S
   }))
   const summaryIDs = traversal.summaries.map((summary) => summary.summary_id)
   const summarySql = placeholders(summaryIDs.length)
+  const allowedSql = placeholders(scope.allowedConversationIDs.length, summaryIDs.length)
   const rows = await queryRows<MessagePartRow>(
     db,
     `
@@ -1916,11 +1927,13 @@ async function expandItems(db: PGlite, scope: LcmConversationScope, summaryID: S
       JOIN lcm_messages message ON message.message_row_id = summary_message.message_row_id
       JOIN lcm_message_parts part ON part.message_row_id = message.message_row_id
       WHERE summary_message.summary_id IN (${summarySql})
+        AND message.conversation_id IN (${allowedSql})
+        AND part.conversation_id IN (${allowedSql})
         AND message.ignored = false
         AND part.ignored = false
       ORDER BY summary_message.source_order, message.message_order, part.part_order, part.part_row_id
     `,
-    summaryIDs,
+    [...summaryIDs, ...scope.allowedConversationIDs],
   )
 
   const items: LcmExpandResult["items"] = [...summaryItems]

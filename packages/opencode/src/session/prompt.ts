@@ -47,6 +47,7 @@ import { markLcmRenderOnlyPart, prepareKiloMessageVisibility, prepareKiloModelIn
 import type { LcmRawLeafRenderPreparationInput } from "./lcm/context"
 import { getLcmRuntimePreparedProviderPayload } from "./lcm/provider-payload"
 import { Service as LcmRuntimeService, defaultLayer as LcmRuntimeDefaultLayer } from "./lcm/runtime"
+import { LCM_MAP_TOOL_IDS, LCM_RETRIEVAL_TOOL_IDS } from "./lcm/tool-ids"
 // kilocode_change start - LCM path-backed admission before prompt file payloads
 import { lcmPromptPathAdmissionThresholdBytes, lcmShouldAdmitPromptPathBackedFile } from "./lcm/admission"
 // kilocode_change end
@@ -113,8 +114,8 @@ const CODE_SWITCH = KiloSessionPrompt.CODE_SWITCH_TEXT // kilocode_change - shar
 
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
-const LCM_RETRIEVAL_TOOL_IDS = new Set(["lcm_grep", "lcm_describe", "lcm_expand", "lcm_expand_query", "lcm_read"])
-const LCM_MAP_TOOL_IDS = new Set(["llm_map", "agentic_map", "lcm_map_status", "lcm_map_cancel"])
+const LCM_RETRIEVAL_TOOL_ID_SET = new Set<string>(LCM_RETRIEVAL_TOOL_IDS)
+const LCM_MAP_TOOL_ID_SET = new Set<string>(LCM_MAP_TOOL_IDS)
 const LCM_PROVIDER_OVERFLOW_RECOVERY_MAX_ATTEMPTS = 2
 
 type LcmAllowedToolIDs = {
@@ -173,6 +174,9 @@ export function renderLcmSystemToolGuide(input: LcmAllowedToolIDs) {
   )
   lines.push(
     "When a visible large-file marker exposes a file_... handle in a root session, ask lcm_expand_query a focused question that names that handle; use lcm_read only in sessions where it is listed as available.",
+  )
+  lines.push(
+    "If a visible or copied handle is denied, unavailable, or stale, treat only that handle as unusable; continue with broad lcm_grep or lcm_expand_query without the stale handle when exact recovery is still needed.",
   )
   lines.push(
     "Recover exact commands, timestamps, root-cause chains, file changes, config values, and full errors through retrieval/read paths instead of inferring them from summaries alone.",
@@ -697,8 +701,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         providerID: input.model.providerID,
         agent: input.agent,
       })) {
-        if (LCM_RETRIEVAL_TOOL_IDS.has(item.id) && !lcmAllowedToolIDs.retrieval.has(item.id)) continue
-        if (LCM_MAP_TOOL_IDS.has(item.id) && !lcmAllowedToolIDs.map.has(item.id)) continue
+        if (LCM_RETRIEVAL_TOOL_ID_SET.has(item.id) && !lcmAllowedToolIDs.retrieval.has(item.id)) continue
+        if (LCM_MAP_TOOL_ID_SET.has(item.id) && !lcmAllowedToolIDs.map.has(item.id)) continue
         const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
         tools[item.id] = tool({
           description: item.description,

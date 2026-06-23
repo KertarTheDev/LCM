@@ -23,6 +23,8 @@ test("LCM system tool guide names retrieval, direct-content, and map tool usage"
   expect(guide).toContain("lcm_expand")
   expect(guide).toContain("lcm_read")
   expect(guide).toContain("use lcm_read only in sessions where it is listed as available")
+  expect(guide).toContain("stale")
+  expect(guide).toContain("continue with broad lcm_grep or lcm_expand_query")
   expect(guide).toContain("Recover exact commands, timestamps, root-cause chains")
   expect(guide).toContain("llm_map")
   expect(guide).toContain("agentic_map")

@@ -11,7 +11,13 @@ import {
 } from "../../src/session/lcm/retrieval"
 import type { LcmSafeError } from "../../src/session/lcm/types"
 import { tmpdir } from "../fixture/fixture"
-import { initializeRetrievalWorker, retrievalIDs, runRetrieval, seedRetrievalFixture } from "./retrieval-fixture"
+import {
+  initializeRetrievalWorker,
+  queryRetrieval,
+  retrievalIDs,
+  runRetrieval,
+  seedRetrievalFixture,
+} from "./retrieval-fixture"
 
 test("lcm:retrieval-tools grep returns deterministic literal results, cursors, snippets, and row handles", async () => {
   await using tmp = await tmpdir({ git: true })
@@ -167,6 +173,23 @@ test("lcm:retrieval-tools summary closure, metadata-only describe, and child exp
     )
     expect(excluded).toMatchObject({ ok: true, results: [] })
 
+    await queryRetrieval(
+      worker,
+      "INSERT INTO lcm_summary_messages (summary_id, message_row_id, source_order) VALUES ($1, $2, 99)",
+      [retrievalIDs.targetSummary, "msg_m21_sibling_1"],
+    )
+    const malformedLinkSearch = await runRetrieval(
+      worker,
+      LcmRetrieval.grep({
+        sessionID: retrievalIDs.rootSession,
+        dataDir,
+        pattern: "SIBLING_SECRET",
+        mode: "literal",
+        summaryID: retrievalIDs.targetSummary,
+      }),
+    )
+    expect(malformedLinkSearch).toMatchObject({ ok: true, results: [] })
+
     const summary = await runRetrieval(
       worker,
       LcmRetrieval.describe({
@@ -224,6 +247,53 @@ test("lcm:retrieval-tools summary closure, metadata-only describe, and child exp
     expect(expansion.items.some((item) => item.messageRowID === retrievalIDs.rootMessage)).toBe(true)
     expect(expansion.items.some((item) => item.fileID === retrievalIDs.file)).toBe(true)
     expect(JSON.stringify(expansion)).not.toContain("SIBLING_SECRET")
+  } finally {
+    await worker.close()
+  }
+})
+
+test("lcm:retrieval-tools stale or out-of-scope handles do not become unhandled failures", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const dataDir = path.join(tmp.path, "lcm")
+  const worker = await initializeRetrievalWorker(dataDir)
+  try {
+    await seedRetrievalFixture(worker)
+
+    const unauthorizedDescribe = await runRetrieval(
+      worker,
+      LcmRetrieval.describe({
+        sessionID: retrievalIDs.rootSession,
+        dataDir,
+        id: retrievalIDs.foreignSummary,
+      }),
+    )
+    expect(unauthorizedDescribe).toMatchObject({
+      ok: false,
+      error: { code: "unauthorized", diagnosticCode: "lcm_summary_outside_scope" },
+    })
+
+    let excerptHandles: string[] = []
+    const fallbackSearch = await runRetrieval(
+      worker,
+      LcmRetrieval.expandQuery({
+        sessionID: retrievalIDs.rootSession,
+        dataDir,
+        query: "What did AlphaCode mention?",
+        summaryID: retrievalIDs.foreignSummary,
+        generator: async ({ excerpts }) => {
+          excerptHandles = excerpts.map((excerpt) => excerpt.handle)
+          const citedHandle = excerptHandles[0] ?? retrievalIDs.rootMessage
+          return {
+            text: `AlphaCode appears in current-lineage memory ${citedHandle}.`,
+          }
+        },
+      }),
+    )
+    expect(fallbackSearch.ok).toBe(true)
+    if (!fallbackSearch.ok) throw new Error(fallbackSearch.error.safeMessage)
+    expect(excerptHandles.length).toBeGreaterThan(0)
+    expect(excerptHandles).not.toContain(retrievalIDs.foreignSummary)
+    expect(fallbackSearch.citations.length).toBeGreaterThan(0)
   } finally {
     await worker.close()
   }
