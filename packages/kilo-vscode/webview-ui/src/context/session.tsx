@@ -81,64 +81,13 @@ import { KILO_AUTO, KILO_PROVIDER_ID, parseModelString } from "../../../src/shar
 import { reviewMetadata, type ReviewMessageData } from "../../../src/shared/review-comments"
 import { visibleMessages as filterVisibleMessages } from "./session-queue"
 import { createAbortState } from "./abort-state"
+import { isLcmOwnerLockFailure, lcmPromptFailureDescription, lcmPromptFailureTitle } from "./session-lcm-errors"
+import type { LcmLockRecoveryState } from "./session-lcm-errors"
 
 const RECENT_LIMIT = 5
 const MESSAGE_PAGE_LIMIT = 80
 
 type MessageMutation = Exclude<MessageLoadMode, "focus"> | "append" | "update"
-
-export interface LcmLockRecoveryState {
-  sessionID: string
-  safeMessage: string
-  detail: string
-  status: "available" | "recovering"
-}
-
-function lcmPromptFailureTitle(safeError: SendMessageFailedMessage["safeError"] | undefined): string {
-  switch (safeError?.code) {
-    case "db_locked":
-      return "Memory locked"
-    case "db_corrupt":
-    case "db_migration_failed":
-    case "db_unavailable":
-    case "settings_unavailable":
-      return "Memory unavailable"
-    case "recovery_required":
-    case "recovery_failed":
-    case "missing_source":
-    case "stale_source":
-      return "Memory recovery needed"
-    case "hard_limit_unresolved":
-      return "Memory needs attention"
-    case "timeout":
-      return "Memory timed out"
-    case "provider_unavailable":
-    case "provider_capacity_deferred":
-      return "Memory provider unavailable"
-    default:
-      return "Failed to send message"
-  }
-}
-
-function lcmPromptFailureDescription(message: SendMessageFailedMessage): string {
-  const safeMessage = message.safeError?.safeMessage
-  if (!safeMessage) return message.error
-  if (message.safeError?.action === "retry") return `${safeMessage} You can retry after memory is ready.`
-  if (message.safeError?.action === "close_other_owner")
-    return `${safeMessage} If no other Kilo or VS Code window is using this task, use Force unlock.`
-  if (message.safeError?.action === "contact_support") return `${safeMessage} Contact support if this persists.`
-  if (message.safeError?.action === "start_new_thread")
-    return `${safeMessage} Start a new task if you need to continue immediately.`
-  return safeMessage
-}
-
-function isLcmOwnerLockFailure(message: SendMessageFailedMessage): boolean {
-  const safeError = message.safeError
-  return (
-    safeError?.code === "db_locked" &&
-    (safeError.action === "close_other_owner" || safeError.diagnosticCode?.startsWith("lcm_owner_lock") === true)
-  )
-}
 
 interface MessagePageState {
   initialLoaded: boolean
@@ -1028,6 +977,23 @@ export const SessionProvider: ParentComponent = (props) => {
     if (message.sessionID) patchPage(message.sessionID, { loadingInitial: false, loadingOlder: false })
   }
 
+  function handleSessionError(message: Extract<ExtensionMessage, { type: "sessionError" }>) {
+    if (message.error?.name === "MessageAbortedError") return
+    const sid = message.sessionID ?? currentSessionID()
+    if (!sid) return
+    const msgs = store.messages[sid] ?? []
+    const parent = [...msgs].reverse().find((m) => m.role === "user")
+    const errorMsg: Message = {
+      id: Identifier.ascending("message"),
+      sessionID: sid,
+      role: "assistant",
+      createdAt: new Date().toISOString(),
+      parentID: parent?.id,
+      error: message.error,
+    }
+    handleMessageCreated(errorMsg)
+  }
+
   function toggleFavorite(providerID: string, modelID: string) {
     const key = `${providerID}/${modelID}`
     const idx = store.favoriteModels.findIndex((f) => `${f.providerID}/${f.modelID}` === key)
@@ -1136,24 +1102,9 @@ export const SessionProvider: ParentComponent = (props) => {
         handleMessageRemoved(message.sessionID, message.messageID)
         break
 
-      case "sessionError": {
-        if (message.error?.name === "MessageAbortedError") break
-        const sid = message.sessionID ?? currentSessionID()
-        if (!sid) break
-        // Find the last user message in this session to use as parentID
-        const msgs = store.messages[sid] ?? []
-        const parent = [...msgs].reverse().find((m) => m.role === "user")
-        const errorMsg: Message = {
-          id: Identifier.ascending("message"),
-          sessionID: sid,
-          role: "assistant",
-          createdAt: new Date().toISOString(),
-          parentID: parent?.id,
-          error: message.error,
-        }
-        handleMessageCreated(errorMsg)
+      case "sessionError":
+        handleSessionError(message)
         break
-      }
 
       case "error":
         handleError(message)
