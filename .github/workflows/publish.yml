@@ -61,7 +61,7 @@ jobs:
       - name: Install VSIX packager
         run: bun install -g @vscode/vsce
 
-      # kilocode_change start - block alpha artifacts when first-prompt runtime bindings are broken
+      # kilocode_change start - block alpha artifacts when LCM prompt/tool runtime bindings are broken
       - name: Prompt runtime static check
         working-directory: packages/opencode
         run: bun run lcm:prompt-static
@@ -73,6 +73,10 @@ jobs:
       - name: MCP prompt schema smoke
         working-directory: packages/opencode
         run: bun run lcm:prompt-mcp-schema
+
+      - name: LCM tool wrapper smoke
+        working-directory: packages/opencode
+        run: bun run lcm:tool-wrapper-smoke
       # kilocode_change end
 
       - name: Compute LCM alpha version
