@@ -1,7 +1,8 @@
 // kilocode_change - new file
 import { Effect, Option, Schema } from "effect"
 import { LCM_RETRIEVAL_TOOL_DESCRIPTIONS } from "../session/lcm/retrieval"
-import type { LcmDescribeInput } from "../session/lcm/types"
+import type { LcmDescribeInput, LcmDescribeResult, LcmToolErrorResult } from "../session/lcm/types"
+import { lcmToolWrapperError } from "./lcm-tool-error"
 import * as Tool from "./tool"
 
 const parameters = Schema.Struct({
@@ -23,15 +24,21 @@ export const LcmDescribeTool = Tool.define(
           sessionID: ctx.sessionID,
           abortSignal: ctx.abort,
         })
-        return {
-          title: "LCM Describe",
-          metadata: {
-            ok: result.ok,
-            ...(result.ok ? { kind: result.kind } : { code: result.error.code }),
-            truncated: false,
-          },
-          output: JSON.stringify(result, null, 2),
-        }
-      }).pipe(Effect.orDie),
+        return renderResult(result)
+      }).pipe(
+        Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_describe_tool_wrapper_failed")))),
+      ),
   }),
 )
+
+function renderResult(result: LcmDescribeResult | LcmToolErrorResult) {
+  return {
+    title: "LCM Describe",
+    metadata: {
+      ok: result.ok,
+      ...(result.ok ? { kind: result.kind } : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
+      truncated: false,
+    },
+    output: JSON.stringify(result, null, 2),
+  }
+}

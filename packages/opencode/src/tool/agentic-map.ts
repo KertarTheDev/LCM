@@ -8,6 +8,7 @@ import { MessageID } from "../session/schema"
 import { LCM_MAP_TOOL_DESCRIPTIONS, type AgenticMapChildRunner } from "../session/lcm/map"
 import type { AgenticMapInput, LcmMapResult, LcmToolErrorResult } from "../session/lcm/types"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { lcmToolWrapperError } from "./lcm-tool-error"
 import type { TaskPromptOps } from "./task"
 import * as Tool from "./tool"
 
@@ -171,24 +172,31 @@ export const AgenticMapTool = Tool.define(
                 }).pipe(Effect.catchCause(() => Effect.succeed("denied" as const))),
               ),
           })
-          return {
-            title: "Agentic Map",
-            metadata: {
-              ok: result.ok,
-              ...(result.ok
-                ? {
-                    mapID: result.mapID,
-                    status: result.status,
-                    totalItems: result.totalItems,
-                    completedItems: result.completedItems,
-                    failedItems: result.failedItems,
-                  }
-                : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
-              truncated: false,
-            },
-            output: JSON.stringify(result, null, 2),
-          }
-        }).pipe(Effect.orDie),
+          return renderResult(result)
+        }).pipe(
+          Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("agentic_map_tool_wrapper_failed")))),
+        ),
     }
   }),
 )
+
+function renderResult(result: LcmMapResult | LcmToolErrorResult) {
+  return {
+    title: "Agentic Map",
+    metadata: {
+      ok: result.ok,
+      ...(result.ok
+        ? {
+            mapID: result.mapID,
+            status: result.status,
+            totalItems: result.totalItems,
+            completedItems: result.completedItems,
+            failedItems: result.failedItems,
+            retryAfterMs: result.retryAfterMs,
+          }
+        : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
+      truncated: false,
+    },
+    output: JSON.stringify(result, null, 2),
+  }
+}

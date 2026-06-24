@@ -118,6 +118,7 @@ export const RUNTIME_DEFAULTS = {
     maxRetriesLimit: 5,
     itemLeaseMs: 600_000,
     claimHeartbeatMs: 30_000,
+    providerCapacityRetryMs: 10_000,
   },
   upward: {
     freshTailCount: 2,

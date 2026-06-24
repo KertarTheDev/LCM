@@ -2,7 +2,8 @@
 import { PositiveInt } from "@opencode-ai/core/schema"
 import { Effect, Option, Schema } from "effect"
 import { LCM_RETRIEVAL_TOOL_DESCRIPTIONS } from "../session/lcm/retrieval"
-import type { LcmExpandQueryInput } from "../session/lcm/types"
+import type { LcmExpandQueryInput, LcmExpandQueryResult, LcmToolErrorResult } from "../session/lcm/types"
+import { lcmToolWrapperError } from "./lcm-tool-error"
 import * as Tool from "./tool"
 
 const parameters = Schema.Struct({
@@ -31,17 +32,30 @@ export const LcmExpandQueryTool = Tool.define(
           ...(model?.providerID ? { providerID: model.providerID } : {}),
           ...(model?.id ? { modelID: model.id } : model?.api?.id ? { modelID: model.api.id } : {}),
         })
-        return {
-          title: "LCM Expand Query",
-          metadata: {
-            ok: result.ok,
-            ...(result.ok
-              ? { citations: result.citations.length }
-              : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
-            truncated: result.ok ? result.truncated === true : false,
-          },
-          output: JSON.stringify(result, null, 2),
-        }
-      }).pipe(Effect.orDie),
+        return renderResult(result)
+      }).pipe(
+        Effect.catchAll(() =>
+          Effect.succeed(renderResult(lcmToolWrapperError("lcm_expand_query_tool_wrapper_failed"))),
+        ),
+      ),
   }),
 )
+
+function renderResult(result: LcmExpandQueryResult | LcmToolErrorResult) {
+  return {
+    title: "LCM Expand Query",
+    metadata: {
+      ok: result.ok,
+      ...(result.ok
+        ? {
+            citations: result.citations.length,
+            coverage: result.coverage,
+            noAnswerReason: result.noAnswerReason,
+            searchedExcerptCount: result.searchedExcerptCount,
+          }
+        : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
+      truncated: result.ok ? result.truncated === true : false,
+    },
+    output: JSON.stringify(result, null, 2),
+  }
+}

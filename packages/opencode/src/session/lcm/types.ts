@@ -1268,8 +1268,12 @@ export interface LcmGrepInput extends LcmPageInput {
   summaryID?: SummaryID
 }
 
+export type LcmGrepScopeWarning = "summary_not_found" | "summary_outside_scope" | "summary_invalid"
+
 export interface LcmGrepResult {
   ok: true
+  effectiveMode?: "regex" | "literal"
+  scopeWarning?: LcmGrepScopeWarning
   results: Array<{
     resultID: LcmGrepResultID
     summaryID?: SummaryID
@@ -1338,12 +1342,22 @@ export interface LcmExpandQueryInput {
   maxAnswerTokens?: number
 }
 
+export type LcmExpandQueryNoAnswerReason =
+  | "no_excerpts"
+  | "provider_empty"
+  | "provider_malformed_json"
+  | "provider_citation_rejected"
+  | "provider_declined"
+
 export interface LcmExpandQueryResult {
   ok: true
   answer: string
   citations: Array<{ summaryID?: SummaryID; fileID?: LcmFileID; messageRowID?: MessageRowID; partRowID?: PartRowID }>
   coverage?: "full" | "partial" | "none"
   truncated?: boolean
+  noAnswerReason?: LcmExpandQueryNoAnswerReason
+  searchedExcerptCount?: number
+  rejectedCitationCount?: number
 }
 
 export interface LcmReadInput {
@@ -1504,6 +1518,7 @@ export interface LcmMapResult {
   failedItems: number
   retriedItems: number
   safeError?: LcmSafeError
+  retryAfterMs?: number
 }
 
 export const LCM_SAFE_MESSAGE_TEMPLATES = {

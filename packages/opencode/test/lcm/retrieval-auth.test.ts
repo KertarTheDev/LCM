@@ -73,7 +73,10 @@ test("lcm:retrieval-auth allows current lineage and denies sibling, foreign, for
         summaryID: retrievalIDs.siblingSummary,
       }),
     )
-    expect(sibling).toMatchObject({ ok: false, error: { code: "unauthorized" } })
+    expect(sibling.ok).toBe(true)
+    if (!sibling.ok) throw new Error(sibling.error.safeMessage)
+    expect(sibling.scopeWarning).toBe("summary_outside_scope")
+    expect(sibling.results).toHaveLength(0)
 
     const foreign = await runRetrieval(
       worker,

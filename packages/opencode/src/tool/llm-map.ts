@@ -4,6 +4,7 @@ import { Effect, Option, Schema } from "effect"
 import { LCM_MAP_TOOL_DESCRIPTIONS } from "../session/lcm/map"
 import type { LlmMapInput, LcmMapResult, LcmToolErrorResult } from "../session/lcm/types"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { lcmToolWrapperError } from "./lcm-tool-error"
 import * as Tool from "./tool"
 
 const modelSelection = Schema.Union([
@@ -81,23 +82,28 @@ export const LlmMapTool = Tool.define(
               }).pipe(Effect.catchCause(() => Effect.succeed("denied" as const))),
             ),
         })
-        return {
-          title: "LLM Map",
-          metadata: {
-            ok: result.ok,
-            ...(result.ok
-              ? {
-                  mapID: result.mapID,
-                  status: result.status,
-                  totalItems: result.totalItems,
-                  completedItems: result.completedItems,
-                  failedItems: result.failedItems,
-                }
-              : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
-            truncated: false,
-          },
-          output: JSON.stringify(result, null, 2),
-        }
-      }).pipe(Effect.orDie),
+        return renderResult(result)
+      }).pipe(Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("llm_map_tool_wrapper_failed"))))),
   }),
 )
+
+function renderResult(result: LcmMapResult | LcmToolErrorResult) {
+  return {
+    title: "LLM Map",
+    metadata: {
+      ok: result.ok,
+      ...(result.ok
+        ? {
+            mapID: result.mapID,
+            status: result.status,
+            totalItems: result.totalItems,
+            completedItems: result.completedItems,
+            failedItems: result.failedItems,
+            retryAfterMs: result.retryAfterMs,
+          }
+        : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
+      truncated: false,
+    },
+    output: JSON.stringify(result, null, 2),
+  }
+}

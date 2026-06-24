@@ -2,13 +2,14 @@
 import { PositiveInt } from "@opencode-ai/core/schema"
 import { Effect, Option, Schema } from "effect"
 import { LCM_RETRIEVAL_TOOL_DESCRIPTIONS } from "../session/lcm/retrieval"
-import type { LcmGrepInput } from "../session/lcm/types"
+import type { LcmGrepInput, LcmGrepResult, LcmToolErrorResult } from "../session/lcm/types"
+import { lcmToolWrapperError } from "./lcm-tool-error"
 import * as Tool from "./tool"
 
 const parameters = Schema.Struct({
   pattern: Schema.String.annotate({ description: "Pattern to search for in authorized current-lineage memory" }),
   mode: Schema.optional(Schema.Literals(["regex", "literal"])).annotate({
-    description: "Search mode. Defaults to regex.",
+    description: "Search mode. Defaults to literal.",
   }),
   caseSensitive: Schema.optional(Schema.Boolean).annotate({
     description: "Whether matching is case-sensitive. Defaults to false.",
@@ -37,17 +38,26 @@ export const LcmGrepTool = Tool.define(
           sessionID: ctx.sessionID,
           abortSignal: ctx.abort,
         })
-        return {
-          title: "LCM Grep",
-          metadata: {
-            ok: result.ok,
-            ...(result.ok
-              ? { matches: result.results.length, hasMore: result.page.hasMore }
-              : { code: result.error.code }),
-            truncated: result.ok ? result.page.hasMore : false,
-          },
-          output: JSON.stringify(result, null, 2),
-        }
-      }).pipe(Effect.orDie),
+        return renderResult(result)
+      }).pipe(Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_grep_tool_wrapper_failed"))))),
   }),
 )
+
+function renderResult(result: LcmGrepResult | LcmToolErrorResult) {
+  return {
+    title: "LCM Grep",
+    metadata: {
+      ok: result.ok,
+      ...(result.ok
+        ? {
+            matches: result.results.length,
+            hasMore: result.page.hasMore,
+            effectiveMode: result.effectiveMode,
+            scopeWarning: result.scopeWarning,
+          }
+        : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
+      truncated: result.ok ? result.page.hasMore : false,
+    },
+    output: JSON.stringify(result, null, 2),
+  }
+}

@@ -2,7 +2,8 @@
 import { PositiveInt } from "@opencode-ai/core/schema"
 import { Effect, Option, Schema } from "effect"
 import { LCM_RETRIEVAL_TOOL_DESCRIPTIONS } from "../session/lcm/retrieval"
-import type { LcmExpandInput } from "../session/lcm/types"
+import type { LcmExpandInput, LcmExpandResult, LcmToolErrorResult } from "../session/lcm/types"
+import { lcmToolWrapperError } from "./lcm-tool-error"
 import * as Tool from "./tool"
 
 const parameters = Schema.Struct({
@@ -28,15 +29,23 @@ export const LcmExpandTool = Tool.define(
           sessionID: ctx.sessionID,
           abortSignal: ctx.abort,
         })
-        return {
-          title: "LCM Expand",
-          metadata: {
-            ok: result.ok,
-            ...(result.ok ? { items: result.items.length, hasMore: result.page.hasMore } : { code: result.error.code }),
-            truncated: result.ok ? result.page.hasMore : false,
-          },
-          output: JSON.stringify(result, null, 2),
-        }
-      }).pipe(Effect.orDie),
+        return renderResult(result)
+      }).pipe(
+        Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_expand_tool_wrapper_failed")))),
+      ),
   }),
 )
+
+function renderResult(result: LcmExpandResult | LcmToolErrorResult) {
+  return {
+    title: "LCM Expand",
+    metadata: {
+      ok: result.ok,
+      ...(result.ok
+        ? { items: result.items.length, hasMore: result.page.hasMore }
+        : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
+      truncated: result.ok ? result.page.hasMore : false,
+    },
+    output: JSON.stringify(result, null, 2),
+  }
+}

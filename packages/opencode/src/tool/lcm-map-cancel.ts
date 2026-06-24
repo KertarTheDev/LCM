@@ -1,7 +1,8 @@
 // kilocode_change - new file
 import { Effect, Option, Schema } from "effect"
 import { LCM_MAP_TOOL_DESCRIPTIONS } from "../session/lcm/map"
-import type { LcmMapCancelInput } from "../session/lcm/types"
+import type { LcmMapCancelInput, LcmMapResult, LcmToolErrorResult } from "../session/lcm/types"
+import { lcmToolWrapperError } from "./lcm-tool-error"
 import * as Tool from "./tool"
 
 const parameters = Schema.Struct({
@@ -23,23 +24,30 @@ export const LcmMapCancelTool = Tool.define(
           sessionID: ctx.sessionID,
           abortSignal: ctx.abort,
         })
-        return {
-          title: "LCM Map Cancel",
-          metadata: {
-            ok: result.ok,
-            ...(result.ok
-              ? {
-                  mapID: result.mapID,
-                  status: result.status,
-                  totalItems: result.totalItems,
-                  completedItems: result.completedItems,
-                  failedItems: result.failedItems,
-                }
-              : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
-            truncated: false,
-          },
-          output: JSON.stringify(result, null, 2),
-        }
-      }).pipe(Effect.orDie),
+        return renderResult(result)
+      }).pipe(
+        Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_map_cancel_tool_wrapper_failed")))),
+      ),
   }),
 )
+
+function renderResult(result: LcmMapResult | LcmToolErrorResult) {
+  return {
+    title: "LCM Map Cancel",
+    metadata: {
+      ok: result.ok,
+      ...(result.ok
+        ? {
+            mapID: result.mapID,
+            status: result.status,
+            totalItems: result.totalItems,
+            completedItems: result.completedItems,
+            failedItems: result.failedItems,
+            retryAfterMs: result.retryAfterMs,
+          }
+        : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
+      truncated: false,
+    },
+    output: JSON.stringify(result, null, 2),
+  }
+}

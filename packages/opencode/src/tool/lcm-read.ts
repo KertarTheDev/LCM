@@ -4,6 +4,7 @@ import { Effect, Option, Schema } from "effect"
 import { LCM_RETRIEVAL_TOOL_DESCRIPTIONS } from "../session/lcm/retrieval"
 import type { LcmReadInput, LcmReadResult, LcmToolErrorResult } from "../session/lcm/types"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { lcmToolWrapperError } from "./lcm-tool-error"
 import * as Tool from "./tool"
 
 const parameters = Schema.Struct({
@@ -47,17 +48,21 @@ export const LcmReadTool = Tool.define(
               }).pipe(Effect.catchCause(() => Effect.succeed("denied" as const))),
             ),
         })
-        return {
-          title: "LCM Read",
-          metadata: {
-            ok: result.ok,
-            ...(result.ok
-              ? { bytesReturned: result.bytesReturned, hasMore: result.page.hasMore }
-              : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
-            truncated: result.ok ? result.page.hasMore : false,
-          },
-          output: JSON.stringify(result, null, 2),
-        }
-      }).pipe(Effect.orDie),
+        return renderResult(result)
+      }).pipe(Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_read_tool_wrapper_failed"))))),
   }),
 )
+
+function renderResult(result: LcmReadResult | LcmToolErrorResult) {
+  return {
+    title: "LCM Read",
+    metadata: {
+      ok: result.ok,
+      ...(result.ok
+        ? { bytesReturned: result.bytesReturned, hasMore: result.page.hasMore }
+        : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
+      truncated: result.ok ? result.page.hasMore : false,
+    },
+    output: JSON.stringify(result, null, 2),
+  }
+}

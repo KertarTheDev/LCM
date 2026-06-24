@@ -3609,6 +3609,13 @@ export const layer = Layer.effect(
         citations: publicResult.citations,
         ...(publicResult.coverage ? { coverage: publicResult.coverage } : {}),
         ...(publicResult.truncated !== undefined ? { truncated: publicResult.truncated } : {}),
+        ...(publicResult.noAnswerReason ? { noAnswerReason: publicResult.noAnswerReason } : {}),
+        ...(publicResult.searchedExcerptCount !== undefined
+          ? { searchedExcerptCount: publicResult.searchedExcerptCount }
+          : {}),
+        ...(publicResult.rejectedCitationCount !== undefined
+          ? { rejectedCitationCount: publicResult.rejectedCitationCount }
+          : {}),
       } satisfies LcmExpandQueryResult
     })
 
@@ -4256,13 +4263,83 @@ export const layer = Layer.effect(
       )
       if (!scopeResult.ok) return { ok: false, error: scopeResult.error } satisfies LcmToolErrorResult
       const scope = scopeResult.scope
-      return yield* LcmMap.mapStatus({
-        mapID: input.mapID,
-        sessionID: input.sessionID,
-        dataDir: dbResult.db.dataDir,
-        operationID,
-        scope,
-      }).pipe(
+      const languagePromises = new Map<string, Promise<LanguageModelV3>>()
+      const statusEffect = provider
+        ? LcmMap.resumeMap({
+            mapID: input.mapID,
+            sessionID: input.sessionID,
+            dataDir: dbResult.db.dataDir,
+            operationID,
+            scope,
+            scheduler: mapScheduler,
+            processor: async ({ prompt, request, modelSelection, abortSignal }) => {
+              const model = await Effect.runPromise(
+                provider.getModel(ProviderID.make(modelSelection.providerID), ModelID.make(modelSelection.modelID)),
+              )
+              const key = `${model.providerID}/${model.id}`
+              const language = await (languagePromises.get(key) ??
+                (() => {
+                  const promise = Effect.runPromise(provider.getLanguage(model))
+                  languagePromises.set(key, promise)
+                  return promise
+                })())
+              const generated = await runProviderGeneration(
+                model,
+                "background",
+                operationID,
+                () =>
+                  generateText({
+                    model: language,
+                    temperature: model.capabilities.temperature ? 0 : undefined,
+                    providerOptions: ProviderTransform.providerOptions(model, model.options),
+                    maxOutputTokens: Math.min(
+                      resolveLcmModelLimits(model).output ?? ProviderTransform.maxOutputTokens(model),
+                      4096,
+                    ),
+                    maxRetries: 0,
+                    abortSignal: abortSignal ?? input.abortSignal,
+                    messages: lcmGenerationMessages({ prompt, request }),
+                  }),
+                { abortSignal: abortSignal ?? input.abortSignal },
+              )
+              return {
+                text: generated.text,
+                usage: providerUsageFromGeneration({
+                  usage: generated.usage,
+                  providerID: modelSelection.providerID,
+                  modelID: modelSelection.modelID,
+                }),
+              }
+            },
+            recordUsage: async (usageInput) => {
+              await Effect.runPromise(
+                writeUsageRecord({
+                  sessionID: usageInput.sessionID,
+                  conversationID: usageInput.conversationID,
+                  jobID: usageInput.jobID,
+                  purpose: "llm_map",
+                  mode: "map_item",
+                  providerID: usageInput.usage.providerID,
+                  modelID: usageInput.usage.modelID,
+                  inputTokens: usageInput.usage.inputTokens,
+                  outputTokens: usageInput.usage.outputTokens,
+                  cacheReadTokens: usageInput.usage.cacheReadTokens,
+                  cacheWriteTokens: usageInput.usage.cacheWriteTokens,
+                  costAmount: usageInput.usage.costAmount,
+                  costCurrency: usageInput.usage.costCurrency,
+                  costStatus: usageInput.usage.costStatus,
+                }).pipe(Effect.catch(() => Effect.void)),
+              )
+            },
+          })
+        : LcmMap.mapStatus({
+            mapID: input.mapID,
+            sessionID: input.sessionID,
+            dataDir: dbResult.db.dataDir,
+            operationID,
+            scope,
+          })
+      return yield* statusEffect.pipe(
         Effect.provideService(LcmDb.Service, familyDb),
         Effect.catch((error) =>
           Effect.succeed({

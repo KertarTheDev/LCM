@@ -134,7 +134,7 @@ export function renderLcmSystemToolGuide(input: LcmAllowedToolIDs) {
   ]
   if (input.retrieval.has("lcm_grep")) {
     lines.push(
-      "- lcm_grep: start with broad, short, distinctive literal queries for exact strings, paths, commands, errors, symbols, timestamps, config values, and stable handles. Use regex mode only for actual regex syntax; use summaryID to search inside a visible sum_... handle.",
+      "- lcm_grep: start with broad, short, distinctive literal queries for exact strings, paths, commands, errors, symbols, timestamps, config values, and stable handles. Literal mode is the default; use regex mode only for actual regex syntax. Use summaryID to search inside a visible sum_... handle. If scopeWarning is returned, treat only that summary hint as stale and retry broad current-lineage terms.",
     )
   }
   if (input.retrieval.has("lcm_describe")) {
@@ -144,7 +144,7 @@ export function renderLcmSystemToolGuide(input: LcmAllowedToolIDs) {
   }
   if (input.retrieval.has("lcm_expand_query")) {
     lines.push(
-      "- lcm_expand_query: root-safe detail recovery. Ask focused exact-evidence questions with stable citations; pass summaryID when a fallback/degraded summary says original source is retained, and name visible file_... handles when a large-file/tool-output marker is the evidence source.",
+      "- lcm_expand_query: root-safe detail recovery. Ask focused exact-evidence questions with stable citations; pass summaryID when a fallback/degraded summary says original source is retained, and name visible file_... handles when a large-file/tool-output marker is the evidence source. If noAnswerReason is no_excerpts, retry with broad grep terms or without stale summaryID; if it is provider_empty, provider_malformed_json, or provider_citation_rejected, retry once with a narrower question that names exact handles.",
     )
   }
   if (input.retrieval.has("lcm_expand")) {
@@ -158,13 +158,15 @@ export function renderLcmSystemToolGuide(input: LcmAllowedToolIDs) {
     )
   }
   if (input.map.has("llm_map")) {
-    lines.push("- llm_map: asynchronous model map for large JSONL read-only transformations; poll with lcm_map_status.")
+    lines.push(
+      "- llm_map: asynchronous model map for large JSONL read-only transformations; poll with lcm_map_status. If status is running with provider_capacity_deferred or retryAfterMs, wait/poll/retry instead of treating the map as failed.",
+    )
   }
   if (input.map.has("agentic_map")) {
     lines.push("- agentic_map: asynchronous child-session map when each JSONL item needs tools or multi-step work.")
   }
   if (input.map.has("lcm_map_status")) {
-    lines.push("- lcm_map_status: poll an authorized map_... run and find output handles.")
+    lines.push("- lcm_map_status: poll an authorized map_... run, resume eligible retryable work, and find output handles.")
   }
   if (input.map.has("lcm_map_cancel")) {
     lines.push("- lcm_map_cancel: cancel an authorized map_... run.")
