@@ -366,7 +366,7 @@ export async function recoverOwnerLock(input: {
       }),
     }
   }
-  if (!ownerLock.canRecover) {
+  if (!ownerLock.canRecover && !input.force) {
     return {
       ok: false,
       ownerLock,

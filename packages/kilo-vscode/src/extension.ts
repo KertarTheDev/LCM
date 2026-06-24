@@ -32,6 +32,7 @@ import type { KiloProviderSessionContext } from "./kilo-provider/options"
 
 let agentManager: AgentManagerProvider | undefined
 let shuttingDown = false
+let shutdownExtensionServices: (() => Promise<void>) | undefined
 
 const RESTORE_KEY = "kilo.workbench.restore"
 
@@ -72,6 +73,9 @@ export function activate(context: vscode.ExtensionContext) {
   const remoteService = new RemoteStatusService()
   context.subscriptions.push(remoteService)
   connectionService.setRemoteService(remoteService)
+  void connectionService.cleanupOrphanedManagedServers().catch((error: unknown) => {
+    console.warn("[Kilo New] failed to clean up orphaned managed backend:", error)
+  })
 
   const settingsEditorProvider = new SettingsEditorProvider(context.extensionUri, connectionService, context)
   settingsEditorProvider.setRemoteService(remoteService)
@@ -115,9 +119,6 @@ export function activate(context: vscode.ExtensionContext) {
     }),
   )
 
-  // Prewarm the CLI backend early so autocomplete is ready before first editor use.
-  ensureBackendForAutocomplete(connectionService)
-
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     void markWorkspace(folder.uri.fsPath, (msg) => console.warn(`[Kilo New] ${msg}`))
   }
@@ -139,6 +140,22 @@ export function activate(context: vscode.ExtensionContext) {
     onSessionContextChanged: syncSettingsSessionContext,
   })
   provider.setRemoteService(remoteService)
+  let servicesShutdownPromise: Promise<void> | undefined
+  const shutdownServices = () => {
+    servicesShutdownPromise ??= (async () => {
+      shuttingDown = true
+      unsubscribeStateChange()
+      attention.dispose()
+      browserAutomationService.dispose()
+      provider.dispose()
+      await connectionService.disposeAndWait()
+    })()
+    return servicesShutdownPromise
+  }
+  shutdownExtensionServices = shutdownServices
+
+  // Prewarm the CLI backend early so autocomplete is ready before first editor use.
+  ensureBackendForAutocomplete(connectionService)
 
   // Register the webview view provider for the sidebar.
   // retainContextWhenHidden keeps the webview alive when switching to other sidebar panels.
@@ -556,18 +573,15 @@ export function activate(context: vscode.ExtensionContext) {
   // Dispose services when extension deactivates (kills the server)
   context.subscriptions.push({
     dispose: () => {
-      shuttingDown = true
-      unsubscribeStateChange()
-      attention.dispose()
-      browserAutomationService.dispose()
-      provider.dispose()
-      connectionService.dispose()
+      void shutdownServices()
     },
   })
 }
 
 export async function deactivate() {
   shuttingDown = true
+  await shutdownExtensionServices?.()
+  shutdownExtensionServices = undefined
   await agentManager?.shutdown()
   TelemetryProxy.getInstance().shutdown()
 }

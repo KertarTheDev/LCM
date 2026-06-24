@@ -50,6 +50,7 @@ export type LcmPrewarmWaitRetry = {
 export type LcmPrewarmWaitInput = LcmPrewarmInput & {
   abortSignal?: AbortSignal
   onRetry?: (retry: LcmPrewarmWaitRetry) => void
+  shouldRetry?: (readiness: Extract<LcmPrewarmReadiness, { ok: false }>) => boolean
 }
 
 const defaultRetryDelaysMs = [750, 2_000, 5_000] as const
@@ -172,7 +173,7 @@ export class LcmPrewarmer {
       if (input.abortSignal?.aborted) return this.notReady("Memory readiness wait was canceled.", false)
       const readiness = await this.checkReadiness(input, key, false, false)
       if (readiness.ok) return readiness
-      if (!readiness.retryable) return readiness
+      if (!readiness.retryable || input.shouldRetry?.(readiness) === false) return readiness
       const elapsedMs = Math.max(0, this.now() - startedAt)
       const remainingMs = Math.max(0, this.waitTimeoutMs - elapsedMs)
       if (remainingMs <= 0) return readiness

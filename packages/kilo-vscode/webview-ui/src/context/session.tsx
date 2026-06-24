@@ -87,6 +87,13 @@ const MESSAGE_PAGE_LIMIT = 80
 
 type MessageMutation = Exclude<MessageLoadMode, "focus"> | "append" | "update"
 
+export interface LcmLockRecoveryState {
+  sessionID: string
+  safeMessage: string
+  detail: string
+  status: "available" | "recovering"
+}
+
 function lcmPromptFailureTitle(safeError: SendMessageFailedMessage["safeError"] | undefined): string {
   switch (safeError?.code) {
     case "db_locked":
@@ -117,11 +124,20 @@ function lcmPromptFailureDescription(message: SendMessageFailedMessage): string 
   const safeMessage = message.safeError?.safeMessage
   if (!safeMessage) return message.error
   if (message.safeError?.action === "retry") return `${safeMessage} You can retry after memory is ready.`
-  if (message.safeError?.action === "close_other_owner") return `${safeMessage} Close the other Kilo window and retry.`
+  if (message.safeError?.action === "close_other_owner")
+    return `${safeMessage} If no other Kilo or VS Code window is using this task, use Force unlock.`
   if (message.safeError?.action === "contact_support") return `${safeMessage} Contact support if this persists.`
   if (message.safeError?.action === "start_new_thread")
     return `${safeMessage} Start a new task if you need to continue immediately.`
   return safeMessage
+}
+
+function isLcmOwnerLockFailure(message: SendMessageFailedMessage): boolean {
+  const safeError = message.safeError
+  return (
+    safeError?.code === "db_locked" &&
+    (safeError.action === "close_other_owner" || safeError.diagnosticCode?.startsWith("lcm_owner_lock") === true)
+  )
 }
 
 interface MessagePageState {
@@ -242,6 +258,9 @@ interface SessionContextValue {
   contextUsage: Accessor<ContextUsage | undefined>
   lcmMetrics: Accessor<LcmMetricsSnapshotMessage | undefined>
   maintenanceHint: Accessor<LcmMaintenanceHint | undefined>
+  lcmLockRecovery: Accessor<LcmLockRecoveryState | undefined>
+  forceUnlockLcm: () => void
+  dismissLcmLockRecovery: () => void
 
   // Skills loaded from the CLI backend
   skills: Accessor<SkillInfo[]>
@@ -485,6 +504,9 @@ export const SessionProvider: ParentComponent = (props) => {
   // Cloud session preview state
   const [cloudPreviewId, setCloudPreviewId] = createSignal<string | null>(null)
   const [hiddenErrors, setHiddenErrors] = createSignal<Set<string>>(new Set())
+  const [lcmLockRecovery, setLcmLockRecovery] = createSignal<LcmLockRecoveryState | undefined>()
+  let lcmLockRecoveryRequestID: string | undefined
+  let lcmLockRecoverySequence = 0
 
   // Live worktree diff stats from extension polling
   const [worktreeStats, setWorktreeStats] = createSignal<
@@ -1139,6 +1161,10 @@ export const SessionProvider: ParentComponent = (props) => {
 
       case "sendMessageFailed":
         handleSendMessageFailed(message as unknown as SendMessageFailedMessage)
+        break
+
+      case "recoverLcmDbLock.result":
+        handleChatRecoverLockResult(message)
         break
 
       case "cloudSessionDataLoaded":
@@ -1804,6 +1830,53 @@ export const SessionProvider: ParentComponent = (props) => {
     }
   }
 
+  function dismissLcmLockRecovery() {
+    lcmLockRecoveryRequestID = undefined
+    setLcmLockRecovery(undefined)
+  }
+
+  function forceUnlockLcm() {
+    const recovery = lcmLockRecovery()
+    if (!recovery || recovery.status === "recovering") return
+    lcmLockRecoverySequence += 1
+    const requestID = `chat-lock-recover-${Date.now()}-${lcmLockRecoverySequence}`
+    lcmLockRecoveryRequestID = requestID
+    setLcmLockRecovery({ ...recovery, status: "recovering" })
+    vscode.postMessage({
+      type: "recoverLcmDbLock",
+      requestID,
+      body: { sessionID: recovery.sessionID, dryRun: false, force: true },
+    })
+  }
+
+  function handleChatRecoverLockResult(
+    message: Extract<ExtensionMessage, { type: "recoverLcmDbLock.result" }>,
+  ): boolean {
+    if (message.requestID !== lcmLockRecoveryRequestID) return false
+    lcmLockRecoveryRequestID = undefined
+    const active = lcmLockRecovery()
+    if (message.ok && (message.body.status === "recovered" || message.body.status === "not_needed")) {
+      setLcmLockRecovery(undefined)
+      showToast({
+        variant: "success",
+        title: "Memory unlocked",
+        description: "Send the message again to continue.",
+      })
+      return true
+    }
+
+    const detail = message.ok
+      ? (message.body.safeErrors[0]?.safeMessage ?? "Memory lock recovery did not complete.")
+      : message.error.safeMessage
+    if (active) setLcmLockRecovery({ ...active, status: "available", detail })
+    showToast({
+      variant: "error",
+      title: "Force unlock failed",
+      description: detail,
+    })
+    return true
+  }
+
   /**
    * Handle a failed send: remove the optimistic message from the store
    * and show a toast. The PromptInput restores the draft text separately
@@ -1835,6 +1908,15 @@ export const SessionProvider: ParentComponent = (props) => {
         : (language.t("prompt.toast.promptSendFailed.title") ?? "Failed to send message"),
       description: lcmPromptFailureDescription(message),
     })
+
+    if (isLcmOwnerLockFailure(message) && sid) {
+      setLcmLockRecovery({
+        sessionID: sid,
+        safeMessage: message.safeError?.safeMessage ?? message.error,
+        detail: "Only force unlock after closing any other Kilo or VS Code window using this task.",
+        status: "available",
+      })
+    }
 
     if (!message.sessionID && message.draftID) {
       setDraftSessionID(message.draftID)
@@ -2873,6 +2955,9 @@ export const SessionProvider: ParentComponent = (props) => {
     contextUsage,
     lcmMetrics,
     maintenanceHint,
+    lcmLockRecovery,
+    forceUnlockLcm,
+    dismissLcmLockRecovery,
     agents,
     allAgents,
     skills,

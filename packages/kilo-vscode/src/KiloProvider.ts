@@ -9,6 +9,7 @@ import type {
   TextPartInput,
   FilePartInput,
   Config,
+  LcmSafeError,
 } from "@kilocode/sdk/v2/client"
 import { type KiloConnectionService, ServerStartupError } from "./services/cli-backend"
 import { previewSound } from "./services/attention"
@@ -174,6 +175,13 @@ const mapAgent = (a: Agent) => ({
 // message.part.* events are always session-scoped; drop them when the session is unknown.
 const SESSION_SCOPED_PART_EVENTS = new Set(["message.part.updated", "message.part.delta", "message.part.removed"])
 const isSessionScopedPartEvent = (type: string) => SESSION_SCOPED_PART_EVENTS.has(type)
+
+function isLcmOwnerLockError(safeError: LcmSafeError | undefined): boolean {
+  return (
+    safeError?.code === "db_locked" &&
+    (safeError.action === "close_other_owner" || safeError.diagnosticCode?.startsWith("lcm_owner_lock") === true)
+  )
+}
 
 type SyncPayload = Extract<GlobalEvent["payload"], { type: "sync" }>
 type RawSyncPayload = {
@@ -1675,6 +1683,53 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
     this.lcmPrewarmer.prewarm(this.lcmPrewarmInput(sessionID, reason, directory))
   }
 
+  private async recoverLcmOwnerLockForSend(sessionID: string, directory: string, reason: string): Promise<boolean> {
+    if (!this.client) return false
+    const workspace = this.currentSession?.id === sessionID ? this.currentSession.workspaceID : undefined
+    const request = {
+      sessionID,
+      directory,
+      ...(workspace ? { workspace } : {}),
+    }
+
+    this.postMessage({
+      type: "sessionStatus",
+      sessionID,
+      status: "retry",
+      attempt: 1,
+      message: "Checking memory lock...",
+      next: Date.now(),
+    })
+    const preview = await this.client.session.lcm.db.recoverLock({
+      ...request,
+      lcmDbRecoverLockInput: { dryRun: true, force: false },
+    })
+    if (preview.error || !preview.data) return false
+    if (preview.data.status === "not_needed") return true
+    if (preview.data.status !== "would_recover" || preview.data.ownerLock.forceRequired) return false
+
+    this.postMessage({
+      type: "sessionStatus",
+      sessionID,
+      status: "retry",
+      attempt: 1,
+      message: "Recovering stale memory lock...",
+      next: Date.now(),
+    })
+    const recovered = await this.client.session.lcm.db.recoverLock({
+      ...request,
+      lcmDbRecoverLockInput: { dryRun: false, force: false },
+    })
+    if (recovered.error || !recovered.data) return false
+    if (recovered.data.status !== "recovered" && recovered.data.status !== "not_needed") return false
+
+    this.lcmPrewarmer.reset()
+    const readiness = await this.lcmPrewarmer.ensureReady(this.lcmPrewarmInput(sessionID, reason, directory))
+    if (readiness.ok) return true
+    if (readiness.safeError) throw readiness.safeError
+    throw new Error(readiness.safeMessage)
+  }
+
   private async waitForLcmReadyToSend(sessionID: string, directory: string, reason: string): Promise<boolean> {
     const abortController = new AbortController()
     this.retryAbortControllers.set(sessionID, abortController)
@@ -1688,14 +1743,25 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             sessionID,
             status: "retry",
             attempt: retry.attempt,
-            message: "Memory storage is starting. Waiting for lock to clear...",
+            message: isLcmOwnerLockError(retry.safeError) ? "Checking memory lock..." : "Memory storage is starting...",
             next: retry.next,
           })
         },
+        shouldRetry: (readiness) => !isLcmOwnerLockError(readiness.safeError),
       })
       if (abortController.signal.aborted) return false
+      if (readiness.ok) {
+        this.postMessage({ type: "sessionStatus", sessionID, status: "idle" })
+        return true
+      }
+      if (
+        isLcmOwnerLockError(readiness.safeError) &&
+        (await this.recoverLcmOwnerLockForSend(sessionID, directory, reason))
+      ) {
+        this.postMessage({ type: "sessionStatus", sessionID, status: "idle" })
+        return true
+      }
       this.postMessage({ type: "sessionStatus", sessionID, status: "idle" })
-      if (readiness.ok) return true
       if (!readiness.retryable && readiness.safeMessage === "Memory readiness wait was canceled.") return false
       if (readiness.safeError) throw readiness.safeError
       throw new Error(readiness.safeMessage)

@@ -629,7 +629,7 @@ test("owner-lock-platform-protocol-v1 stale takeover quarantines the observed ow
   await worker.close()
 })
 
-test("owner-lock support recovery quarantines stale locks and refuses live owners", async () => {
+test("owner-lock support recovery quarantines stale locks and explicit-force live owners", async () => {
   await using tmp = await tmpdir()
   const dataDir = path.join(tmp.path, "lcm")
   const layout = resolveLcmDbLayout(dataDir)
@@ -694,7 +694,7 @@ test("owner-lock support recovery quarantines stale locks and refuses live owner
     layout,
     operationID: operationID("support_live_refused"),
     dryRun: false,
-    force: true,
+    force: false,
     options,
   })
   expect(refused.ok).toBe(false)
@@ -710,6 +710,27 @@ test("owner-lock support recovery quarantines stale locks and refuses live owner
     })
   }
   expect((await readJson<LcmOwnerLockMetadata>(layout.ownerLockPath)).ownerID).toBe("owner_support_live")
+
+  const forcedPreview = await recoverOwnerLock({
+    layout,
+    operationID: operationID("support_live_force_preview"),
+    dryRun: true,
+    force: true,
+    options,
+  })
+  expect(forcedPreview).toMatchObject({ ok: true, recovered: false })
+  expect((await readJson<LcmOwnerLockMetadata>(layout.ownerLockPath)).ownerID).toBe("owner_support_live")
+
+  const forced = await recoverOwnerLock({
+    layout,
+    operationID: operationID("support_live_force_apply"),
+    dryRun: false,
+    force: true,
+    options,
+  })
+  expect(forced).toMatchObject({ ok: true, recovered: true, quarantined: true })
+  expect(await exists(layout.ownerLockPath)).toBe(false)
+  expect(await exists(`${layout.ownerLockPath}.quarantine.owner_support_live.op_support_live_force_apply`)).toBe(true)
 })
 
 test("uncheckable owner lock conflicts remain locked until a valid stale lock can be proven", async () => {

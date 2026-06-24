@@ -567,6 +567,49 @@ describe("LcmPrewarmer", () => {
     expect(calls).toBe(2)
   })
 
+  it("lets callers stop readiness waits for owner-lock failures", async () => {
+    const fake = createFakeTimers()
+    let calls = 0
+    const safeError = {
+      code: "db_locked",
+      templateKey: "lcm.db.unavailable",
+      safeParams: {},
+      safeMessage: "Memory storage is not ready. Follow the shown recovery action.",
+      retryable: true,
+      action: "close_other_owner",
+      diagnosticCode: "lcm_owner_lock_conflict",
+    }
+    const client = clientWithCapabilities(async () => {
+      calls += 1
+      return { data: { dbReady: false, safeError } }
+    })
+    const prewarmer = new LcmPrewarmer({
+      readinessTimeoutMs: 0,
+      waitTimeoutMs: 100,
+      waitRetryDelaysMs: [25],
+      timers: fake.api,
+      logger: { warn: () => undefined },
+    })
+
+    const readiness = await prewarmer.waitUntilReady({
+      client,
+      connectionState: "connected",
+      sessionID: "session_locked",
+      directory: "/repo",
+      reason: "promptSend",
+      shouldRetry: () => false,
+    })
+
+    expect(fake.timers).toHaveLength(0)
+    expect(calls).toBe(1)
+    expect(readiness).toEqual({
+      ok: false,
+      retryable: true,
+      safeMessage: safeError.safeMessage,
+      safeError,
+    })
+  })
+
   it("does not wait after non-retryable readiness failures", async () => {
     const fake = createFakeTimers()
     const safeError = retryableRouteError(false).error
