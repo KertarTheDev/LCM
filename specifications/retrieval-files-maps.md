@@ -84,7 +84,7 @@ Memory-derived claims must cite stable handles. If no supported answer exists, t
 
 When a query supplies or explicitly names a degraded fallback summary handle, excerpt gathering prefers covered original message parts before the fallback summary text when those parts are still authorized and searchable.
 
-Root sessions can use `lcm_expand_query`; the runtime can create temporary explore-child capacity internally while still gating direct content tools from the root model surface.
+Root sessions can use `lcm_expand_query`; the runtime can reserve temporary explore-child capacity internally while retrieval authorization and DB family resolution stay bound to the real caller session. Synthetic capacity identifiers are not session-family authority and must not be passed into retrieval scope resolution. Direct content tools remain gated from the root model surface.
 
 ## Memory Cues
 
@@ -189,6 +189,8 @@ The lower runtime worker counts are effective caps applied before a user-facing 
 ## LLM Map
 
 `llm_map` registers path-backed or artifact input, validates JSONL items and schema, creates a map run, claims items with leases, calls a model generator for each item, validates output JSON against schema, records per-item usage, and writes map output as an artifact file. Per-item map generation uses `renderLcmPromptRequest(...)`: schema/output policy is system content and the map prompt, JSON schema, and input item JSON are separate tagged untrusted user blocks.
+
+Map schema validation accepts Draft 2020-12 JSON object schemas and boolean schemas. For model robustness, `itemSchema` may also be a JSON string containing one of those schema values; the runtime parses it before byte/depth/property/ref limit checks, Ajv compilation, request fingerprinting, and durable `schema_json` storage. Blank or malformed schema strings fail before map rows are created with `lcm_map_schema_json_invalid`; parsed non-object/non-boolean schema values fail with `lcm_map_schema_type_invalid`.
 
 ## Agentic Map
 

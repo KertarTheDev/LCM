@@ -48,7 +48,7 @@
     "lcm:detail-recovery-demo": "bun test test/lcm/detail-recovery-demo.test.ts --timeout 60000",
     "lcm:sub-agent-scope": "bun run script/test-runner.ts test/lcm/sub-agent-scope.test.ts --timeout 60000 --concurrency 1",
     "lcm:retrieval-auth": "bun run script/test-runner.ts test/lcm/retrieval-auth.test.ts --timeout 60000 --concurrency 1",
-    "lcm:retrieval-tools": "bun run script/test-runner.ts test/lcm/retrieval-tools.test.ts --timeout 60000 --concurrency 1",
+    "lcm:retrieval-tools": "bun run script/test-runner.ts test/lcm/retrieval-tools.test.ts test/lcm/retrieval-runtime.test.ts --timeout 120000 --concurrency 1",
     "lcm:path-provenance": "bun run script/test-runner.ts test/lcm/path-provenance.test.ts --timeout 60000 --concurrency 1",
     "lcm:regex-safety": "bun run script/test-runner.ts test/lcm/regex-safety.test.ts --timeout 60000 --concurrency 1",
     "lcm:soft-backlog": "bun run script/test-runner.ts test/lcm/soft-backlog.test.ts --timeout 60000 --concurrency 1",

@@ -1855,6 +1855,7 @@ interface LlmMapInput {
   inputFileID?: LcmFileID
   inputPath?: string
   inputJsonl?: string
+  // Draft 2020-12 JSON Schema object/boolean, or a valid JSON string containing one.
   itemSchema: unknown
   prompt: string
   model?: "small" | "default" | { providerID: string; modelID: string }

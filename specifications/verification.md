@@ -35,6 +35,19 @@ Normal checkouts should run the documented `bun` commands directly. If a develop
 
 Run `bun run --cwd packages/opencode lcm:contracts:generate` before the contract check whenever public LCM routes, DTOs, safe-error literals, SDK payloads, or webview payloads change. Commit the generated artifact with the route or DTO change.
 
+## Targeted Typecheck Gates
+
+The root `bun run typecheck` Turbo gate can take close to an hour on constrained machines. Prefer these smaller package gates while developing, then use the broader gate only when packaging or when a cross-package change needs it:
+
+- Core shared package: `bun run typecheck:core`
+- Generated SDK: `bun run typecheck:sdk`
+- Runtime/CLI package: `bun run typecheck:opencode`
+- VSCode extension and webview together: `bun run typecheck:vscode`
+- VSCode extension host only: `bun run typecheck:vscode:extension`
+- VSCode webview only: `bun run typecheck:vscode:webview`
+
+For LCM runtime-only changes, run the focused owning tests first, then `bun run typecheck:opencode`. For VSCode-only changes, run the focused unit tests plus the extension or webview typecheck that owns the touched files. Avoid starting the full root typecheck as the first check in agent sessions because it causes long polling without narrowing failures.
+
 ## Runtime And Storage Suites
 
 - `lcm:migration:smoke`: PGlite migration smoke coverage for the current schema.

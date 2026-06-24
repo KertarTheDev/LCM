@@ -23,7 +23,10 @@ const parameters = Schema.Struct({
   inputJsonl: Schema.optional(Schema.String).annotate({
     description: "Inline JSONL input to register before mapping.",
   }),
-  itemSchema: Schema.Unknown.annotate({ description: "Draft 2020-12 JSON Schema for each output item." }),
+  itemSchema: Schema.Unknown.annotate({
+    description:
+      "Draft 2020-12 JSON Schema object or boolean for each output item. A valid JSON-stringified schema is also accepted.",
+  }),
   prompt: Schema.String.annotate({ description: "Instruction applied independently to each JSONL input item." }),
   model: Schema.optional(modelSelection).annotate({ description: "Model selector. Defaults to the current model." }),
   workers: Schema.optional(PositiveInt).annotate({

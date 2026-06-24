@@ -3531,7 +3531,6 @@ export const layer = Layer.effect(
         Effect.catch(() => Effect.succeed(undefined)),
       )
       const operationID = createOperationID()
-      let retrievalSessionID = input.sessionID
       let releaseChildSlot: Effect.Effect<void> | undefined
       const providerID = input.providerID
       const modelID = input.modelID
@@ -3558,9 +3557,9 @@ export const layer = Layer.effect(
           })()
         : undefined
       if (rootScope?.capabilityClass === "root") {
-        const childSessionID = `${input.sessionID}:lcm_expand_query:${operationID}`
+        const capacitySlotID = `${input.sessionID}:lcm_expand_query:${operationID}`
         const slot = yield* acquireChildSessionSlot({
-          sessionID: childSessionID,
+          sessionID: capacitySlotID,
           rootConversationID: rootScope.rootConversationID,
           projectID: rootScope.projectID,
           ...(rootScope.workspaceID ? { workspaceID: rootScope.workspaceID } : {}),
@@ -3574,29 +3573,12 @@ export const layer = Layer.effect(
         )
         if (!slot.ok) return { ok: false, error: slot.safeError } satisfies LcmToolErrorResult
         releaseChildSlot = slot.slot.release
-        const child = yield* getOrCreateChildConversation({
-          sessionID: childSessionID,
-          parentSessionID: input.sessionID,
-          capabilityClass: "explore_child",
-          source: "lcm_explore",
-          operationID,
-        }).pipe(
-          Effect.match({
-            onFailure: (safeError) => ({ ok: false as const, safeError }),
-            onSuccess: (child) => ({ ok: true as const, child }),
-          }),
-        )
-        if (!child.ok) {
-          yield* releaseChildSlot
-          return { ok: false, error: child.safeError } satisfies LcmToolErrorResult
-        }
-        retrievalSessionID = child.child.sessionID
       }
       let usage: LcmRetrieval.LcmExpandQueryUsage | undefined
       let languagePromise: Promise<LanguageModelV3> | undefined
       const runExpandQuery = LcmRetrieval.expandQuery({
         ...input,
-        sessionID: retrievalSessionID,
+        sessionID: input.sessionID,
         generator:
           provider && model && providerID && modelID
             ? async ({ prompt, request, maxAnswerTokens }) => {
