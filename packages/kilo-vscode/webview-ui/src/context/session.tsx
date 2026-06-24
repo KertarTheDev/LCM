@@ -67,6 +67,7 @@ import {
   lcmMaintenanceHintFromEvent,
   lcmMetricKeysFromEvent,
   lcmMaintenanceHintTtlMs,
+  shouldAcceptLcmMetrics,
   type LcmMaintenanceHint,
 } from "./session-utils"
 import { Identifier } from "../utils/id"
@@ -1648,7 +1649,9 @@ export const SessionProvider: ParentComponent = (props) => {
   function handleLcmEvent(event: Extract<ExtensionMessage, { type: "lcmEvent" }>["event"]) {
     if (event.type === "lcm.metrics.updated") {
       for (const key of lcmMetricKeysFromEvent(event)) {
-        setStore("lcmMetrics", key, event.payload)
+        if (shouldAcceptLcmMetrics(store.lcmMetrics[key], event.payload)) {
+          setStore("lcmMetrics", key, event.payload)
+        }
       }
     }
 

@@ -7,6 +7,8 @@ import {
   calcContextUsage,
   calcTokenUsage,
   lcmContextUsageFromMetrics,
+  lcmMaintenanceHintFromEvent,
+  shouldAcceptLcmMetrics,
   buildFamilyCosts,
   buildFamilyParents,
   buildFamilyParentsFromTools,
@@ -21,7 +23,13 @@ import {
   upsertSessionToolPart,
   recentSessions,
 } from "../../webview-ui/src/context/session-utils"
-import type { Message, Part, ToolPart } from "../../webview-ui/src/types/messages"
+import type {
+  LcmEventEnvelopeMessage,
+  LcmMetricsSnapshotMessage,
+  Message,
+  Part,
+  ToolPart,
+} from "../../webview-ui/src/types/messages"
 
 const t = (key: string) => key
 
@@ -220,7 +228,7 @@ describe("LCM metrics helpers", () => {
       unconsumedRawTokens: 0,
       unconsumedRawItemCount: 0,
       protectedTailRawTokens: 0,
-      protectedTailRawItemCount: undefined,
+      protectedTailRawItemCount: 0,
       rawLaneTokens: 0,
       hardFillRatio: 3000 / 12000,
       rawLaneRatio: 0,
@@ -233,6 +241,45 @@ describe("LCM metrics helpers", () => {
       percentage: null,
       source: "lcm_active_budget",
       limit: undefined,
+    })
+  })
+
+  it("ignores stale metrics snapshots by updatedAt", () => {
+    const current = { ...metrics, updatedAt: "2026-05-01T00:00:10.000Z" } as LcmMetricsSnapshotMessage
+    const older = { ...metrics, updatedAt: "2026-05-01T00:00:09.000Z" } as LcmMetricsSnapshotMessage
+    const newer = { ...metrics, updatedAt: "2026-05-01T00:00:11.000Z" } as LcmMetricsSnapshotMessage
+
+    expect(shouldAcceptLcmMetrics(current, older)).toBe(false)
+    expect(shouldAcceptLcmMetrics(current, newer)).toBe(true)
+    expect(shouldAcceptLcmMetrics(undefined, older)).toBe(true)
+  })
+
+  it("uses post-maintenance backlog fields for terminal maintenance hints", () => {
+    const event = {
+      type: "lcm.maintenance.ended",
+      sessionID: "session_m18",
+      conversationID: "conv_m18",
+      operationID: "op_m18",
+      timestamp: "2026-05-01T00:00:10.000Z",
+      payload: {
+        phase: "leaf_summary",
+        reason: "soft_threshold",
+        status: "completed",
+        blocking: false,
+        beforeTokens: 22_000,
+        afterTokens: 7_000,
+        softBacklogTokens: 14_000,
+        softBacklogItemCount: 4,
+        afterSoftBacklogTokens: 0,
+        afterSoftBacklogItemCount: 0,
+      },
+    } as LcmEventEnvelopeMessage
+
+    expect(lcmMaintenanceHintFromEvent(undefined, event, 123_000)).toMatchObject({
+      state: "completed",
+      softBacklogTokens: 0,
+      softBacklogItemCount: 0,
+      updatedAtMs: 123_000,
     })
   })
 })

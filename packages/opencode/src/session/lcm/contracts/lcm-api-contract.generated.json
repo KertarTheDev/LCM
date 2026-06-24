@@ -3573,7 +3573,7 @@
           }
         },
         "methods": {},
-        "source": "interface LlmMapInput {\n inputFileID?: LcmFileID\n inputPath?: string\n inputJsonl?: string\n itemSchema: unknown\n prompt: string\n model?: \"small\" | \"default\" | { providerID: string; modelID: string }\n workers?: number\n maxRetries?: number\n}"
+        "source": "interface LlmMapInput {\n inputFileID?: LcmFileID\n inputPath?: string\n inputJsonl?: string\n // Draft 2020-12 JSON Schema object/boolean, or a valid JSON string containing one.\n itemSchema: unknown\n prompt: string\n model?: \"small\" | \"default\" | { providerID: string; modelID: string }\n workers?: number\n maxRetries?: number\n}"
       }
     },
     "types": {
@@ -4403,7 +4403,7 @@
     }
   },
   "source": {
-    "sha256": "8d7a66ef7d12db587cda2a5137ab0e8480fd47efb943130920fa2aea7c2a95b4"
+    "sha256": "897f73b8075550f131b06c8ed8ecbabb7abbb2b4eb7cfb339840d94df0511826"
   },
   "surfaceClassifications": {
     "LcmAssemblyBlockedResult": {

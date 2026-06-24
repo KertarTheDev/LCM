@@ -97,6 +97,7 @@ interface CandidateRow {
   readonly message_row_id: MessageRowID | null
   readonly part_row_id: PartRowID | null
   readonly role: "user" | "assistant" | "tool" | "system" | null
+  readonly tool_name: string | null
   readonly message_order: number | string | bigint | null
   readonly search_text: string
   readonly source_timestamp_ms: number | string | bigint
@@ -642,6 +643,9 @@ function sortMatches(scope: LcmConversationScope, matches: SearchMatch[]) {
     const leftDegraded = isFallbackSummaryMetadata(left.candidate) ? 1 : 0
     const rightDegraded = isFallbackSummaryMetadata(right.candidate) ? 1 : 0
     if (leftDegraded !== rightDegraded) return leftDegraded - rightDegraded
+    const leftLcmToolEcho = isLcmToolEcho(left.candidate) ? 1 : 0
+    const rightLcmToolEcho = isLcmToolEcho(right.candidate) ? 1 : 0
+    if (leftLcmToolEcho !== rightLcmToolEcho) return leftLcmToolEcho - rightLcmToolEcho
     if (left.matchStartByte !== right.matchStartByte) return left.matchStartByte - right.matchStartByte
     const leftTime = Number(left.candidate.source_timestamp_ms)
     const rightTime = Number(right.candidate.source_timestamp_ms)
@@ -651,6 +655,16 @@ function sortMatches(scope: LcmConversationScope, matches: SearchMatch[]) {
     if (leftKind !== rightKind) return leftKind - rightKind
     return left.candidate.stable_row_id.localeCompare(right.candidate.stable_row_id)
   })
+}
+
+function isLcmToolEcho(candidate: CandidateRow) {
+  return (
+    candidate.kind === "message_part" &&
+    candidate.tool_name !== null &&
+    (candidate.tool_name.startsWith("lcm_") ||
+      candidate.tool_name === "llm_map" ||
+      candidate.tool_name === "agentic_map")
+  )
 }
 
 async function queryRows<T>(db: PGlite, sql: string, params: unknown[] = []) {
@@ -1067,6 +1081,7 @@ async function searchCandidates(db: PGlite, scope: LcmConversationScope, input: 
           NULL AS message_row_id,
           NULL AS part_row_id,
           NULL AS role,
+          NULL AS tool_name,
           (
             SELECT max(message.message_order)
             FROM lcm_summary_messages summary_message
@@ -1097,6 +1112,7 @@ async function searchCandidates(db: PGlite, scope: LcmConversationScope, input: 
           message.message_row_id,
           part.part_row_id,
           message.role,
+          part.tool_name,
           message.message_order,
           part.search_text,
           COALESCE(part.completed_at_ms, message.completed_at_ms, message.created_at_ms, part.created_at_ms)
@@ -1133,6 +1149,7 @@ async function searchCandidates(db: PGlite, scope: LcmConversationScope, input: 
             NULL AS message_row_id,
             NULL AS part_row_id,
             NULL AS role,
+            NULL AS tool_name,
             (
               SELECT min(message.message_order)
               FROM lcm_message_parts linked_part
@@ -1187,6 +1204,7 @@ async function searchCandidates(db: PGlite, scope: LcmConversationScope, input: 
         NULL AS message_row_id,
         NULL AS part_row_id,
         NULL AS role,
+        NULL AS tool_name,
         (
           SELECT max(message.message_order)
           FROM lcm_summary_messages summary_message
@@ -1215,6 +1233,7 @@ async function searchCandidates(db: PGlite, scope: LcmConversationScope, input: 
         message.message_row_id,
         part.part_row_id,
         message.role,
+        part.tool_name,
         message.message_order,
         part.search_text,
         COALESCE(part.completed_at_ms, message.completed_at_ms, message.created_at_ms, part.created_at_ms)
@@ -1245,6 +1264,7 @@ async function searchCandidates(db: PGlite, scope: LcmConversationScope, input: 
           NULL AS message_row_id,
           NULL AS part_row_id,
           NULL AS role,
+          NULL AS tool_name,
           (
             SELECT min(message.message_order)
             FROM lcm_message_parts linked_part
@@ -1461,12 +1481,12 @@ function normalizeGeneratedAnswer(input: {
   readonly excerpts: readonly LcmExpandQueryExcerpt[]
 }): Pick<LcmExpandQueryResult, "answer" | "citations" | "coverage" | "truncated"> {
   const answer = input.answer.trim()
-  if (!answer) return { answer: "", citations: [] }
+  if (!answer) return { answer: "", citations: [], coverage: "none", truncated: false }
   const structured = normalizeStructuredGeneratedAnswer({ answer, excerpts: input.excerpts })
   if (structured) return structured
   const allowed = new Set(input.excerpts.map((excerpt) => excerpt.handle))
   const citedHandles = uniqueOrdered(extractStableHandles(answer).filter((handle) => allowed.has(handle as never)))
-  if (citedHandles.length === 0) return { answer: "", citations: [] }
+  if (citedHandles.length === 0) return { answer: "", citations: [], coverage: "none", truncated: false }
   return {
     answer,
     citations: citedHandles.flatMap((handle) => {
@@ -1527,16 +1547,18 @@ function normalizeStructuredGeneratedAnswer(input: {
 }): Pick<LcmExpandQueryResult, "answer" | "citations" | "coverage" | "truncated"> | undefined {
   const envelope = maybeParseStructuredEnvelope(input.answer)
   if (envelope === undefined) return undefined
-  if (envelope === "invalid") return { answer: "", citations: [] }
+  if (envelope === "invalid") return { answer: "", citations: [], coverage: "none", truncated: false }
   const answer = envelope.answer.trim()
-  if (!answer || envelope.coverage === "none") return { answer: "", citations: [] }
+  if (!answer || envelope.coverage === "none") return { answer: "", citations: [], coverage: "none", truncated: false }
   const allowed = new Set(input.excerpts.map((excerpt) => excerpt.handle))
   const citedHandles = uniqueOrdered(envelope.citedHandles)
   if (citedHandles.length === 0 || citedHandles.some((handle) => !allowed.has(handle as never))) {
-    return { answer: "", citations: [] }
+    return { answer: "", citations: [], coverage: "none", truncated: false }
   }
   const visibleHandles = new Set(extractStableHandles(answer))
-  if (citedHandles.some((handle) => !visibleHandles.has(handle))) return { answer: "", citations: [] }
+  if (citedHandles.some((handle) => !visibleHandles.has(handle))) {
+    return { answer: "", citations: [], coverage: "none", truncated: false }
+  }
   return {
     answer,
     coverage: envelope.coverage,
@@ -2194,7 +2216,7 @@ const expandQueryInner = Effect.fn("LcmRetrieval.expandQueryInner")(function* (i
     }),
   )
   if (search.length === 0) {
-    return { ok: true, answer: "", citations: [] } satisfies LcmExpandQueryResult
+    return { ok: true, answer: "", citations: [], coverage: "none", truncated: false } satisfies LcmExpandQueryResult
   }
 
   const request = expandQueryPromptRequest({ query: input.query, maxAnswerTokens, excerpts: search })

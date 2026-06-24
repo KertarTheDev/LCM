@@ -1449,6 +1449,98 @@ function parseAndValidateOutput(input: {
   return value
 }
 
+function mapItemSafeError(input: {
+  readonly error: unknown
+  readonly operationID: OperationID
+  readonly conversationID: ConversationID
+}) {
+  const embeddedSafeError = lcmSafeErrorFromJson((input.error as { safeError?: unknown })?.safeError)
+  if (embeddedSafeError) return embeddedSafeError
+  const directSafeError = lcmSafeErrorFromJson(input.error)
+  if (directSafeError) return directSafeError
+
+  if (input.error instanceof DOMException && input.error.name === "AbortError") {
+    return safeMapError({
+      code: "canceled",
+      diagnosticCode: "lcm_map_item_generation_canceled",
+      operationID: input.operationID,
+      conversationID: input.conversationID,
+    })
+  }
+
+  const record = input.error && typeof input.error === "object" ? (input.error as Record<string, unknown>) : {}
+  const status =
+    typeof record.statusCode === "number"
+      ? record.statusCode
+      : typeof record.status === "number"
+        ? record.status
+        : undefined
+  if (status === 408) {
+    return safeMapError({
+      code: "timeout",
+      diagnosticCode: "lcm_map_item_provider_timeout",
+      operationID: input.operationID,
+      conversationID: input.conversationID,
+      retryable: true,
+    })
+  }
+  if (status === 429 || (status !== undefined && status >= 500)) {
+    return safeMapError({
+      code: "provider_unavailable",
+      diagnosticCode: "lcm_map_item_provider_unavailable",
+      operationID: input.operationID,
+      conversationID: input.conversationID,
+      retryable: true,
+    })
+  }
+
+  const message = [
+    typeof record.message === "string" ? record.message : "",
+    typeof record.code === "string" ? record.code : "",
+    typeof record.name === "string" ? record.name : "",
+  ]
+    .join(" ")
+    .toLowerCase()
+  if (message.includes("abort")) {
+    return safeMapError({
+      code: "canceled",
+      diagnosticCode: "lcm_map_item_generation_canceled",
+      operationID: input.operationID,
+      conversationID: input.conversationID,
+    })
+  }
+  if (message.includes("timeout") || message.includes("timed out") || message.includes("etimedout")) {
+    return safeMapError({
+      code: "timeout",
+      diagnosticCode: "lcm_map_item_provider_timeout",
+      operationID: input.operationID,
+      conversationID: input.conversationID,
+      retryable: true,
+    })
+  }
+  if (
+    message.includes("fetch failed") ||
+    message.includes("econnrefused") ||
+    message.includes("econnreset") ||
+    message.includes("enotfound")
+  ) {
+    return safeMapError({
+      code: "provider_unavailable",
+      diagnosticCode: "lcm_map_item_provider_unavailable",
+      operationID: input.operationID,
+      conversationID: input.conversationID,
+      retryable: true,
+    })
+  }
+
+  return safeMapError({
+    code: "invalid_request",
+    diagnosticCode: "lcm_map_item_generation_failed",
+    operationID: input.operationID,
+    conversationID: input.conversationID,
+  })
+}
+
 async function finalizeRun(input: {
   readonly db: PGlite
   readonly run: MapRunRow
@@ -1672,14 +1764,11 @@ async function processWorker(input: {
         ).catch(() => {})
         return
       }
-      const safeError =
-        lcmSafeErrorFromJson(error) ??
-        safeMapError({
-          code: "invalid_request",
-          diagnosticCode: "lcm_map_item_generation_failed",
-          operationID: input.operationID,
-          conversationID: input.run.conversation_id,
-        })
+      const safeError = mapItemSafeError({
+        error,
+        operationID: input.operationID,
+        conversationID: input.run.conversation_id,
+      })
       await Effect.runPromise(
         input.lcmDb.execute({
           operationID: input.operationID,

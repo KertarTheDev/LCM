@@ -398,6 +398,60 @@ test("invalid model output retries deterministically and returns a known-run fai
   await worker.close()
 })
 
+test("llm_map classifies provider failures without hiding map status behind generic limits", async () => {
+  await using tmp = await tmpdir()
+  const dataDir = path.join(tmp.path, "lcm")
+  const worker = await initialize(dataDir)
+  const service = dbService(worker)
+  const scheduler = createLcmMapScheduler(service)
+  await insertConversation({ worker, sessionID, conversationID, rootPath: tmp.path })
+
+  const started = await runMap(
+    service,
+    llmMap({
+      sessionID,
+      dataDir,
+      scheduler,
+      modelSelection,
+      inputJsonl: '{"name":"test","value":42}',
+      itemSchema: "true",
+      prompt: "Double the value and return JSON.",
+      maxRetries: 0,
+      generator: async () => {
+        throw new Error("fetch failed: ECONNREFUSED")
+      },
+    }),
+  )
+  expect(started.ok).toBe(true)
+  expectMapResult(started)
+  await scheduler.drain(started.mapID)
+
+  const status = await runMap(service, mapStatus({ sessionID, dataDir, mapID: started.mapID }))
+  expect(status.ok).toBe(true)
+  expectMapResult(status)
+  expect(status.status).toBe("failed")
+  expect(status.failedItems).toBe(1)
+  expect(status.safeError).toMatchObject({
+    code: "provider_unavailable",
+    diagnosticCode: "lcm_map_item_provider_unavailable",
+    retryable: true,
+  })
+  expect(JSON.stringify(status)).not.toContain("Double the value")
+  expect(JSON.stringify(status)).not.toContain('"value":42')
+
+  const rows = await query<{ error_code: string; safe_error_json: LcmSafeError }>(
+    worker,
+    "SELECT error_code, safe_error_json FROM lcm_map_items WHERE map_id = $1",
+    [started.mapID],
+  )
+  expect(rows[0]?.error_code).toBe("provider_unavailable")
+  expect(rows[0]?.safe_error_json).toMatchObject({
+    code: "provider_unavailable",
+    diagnosticCode: "lcm_map_item_provider_unavailable",
+  })
+  await worker.close()
+})
+
 test("pre-run validation rejects malformed inputs before map run and item rows are created", async () => {
   await using tmp = await tmpdir()
   const dataDir = path.join(tmp.path, "lcm")

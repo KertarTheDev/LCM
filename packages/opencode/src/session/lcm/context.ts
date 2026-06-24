@@ -1004,12 +1004,7 @@ function applyPartRenderFlags<T extends MessageV2.Part>(part: T, row: SourcePart
   return output
 }
 
-function parsePart(
-  schema: unknown,
-  value: unknown,
-  row: SourcePartRow,
-  diagnosticCode: string,
-): MessageV2.Part {
+function parsePart(schema: unknown, value: unknown, row: SourcePartRow, diagnosticCode: string): MessageV2.Part {
   try {
     return applyPartRenderFlags(Schema.decodeUnknownSync(schema as never)(value) as MessageV2.Part, row)
   } catch {
@@ -1017,11 +1012,7 @@ function parsePart(
   }
 }
 
-function parseMessageInfo(
-  schema: unknown,
-  value: unknown,
-  diagnosticCode: string,
-): MessageV2.Info {
+function parseMessageInfo(schema: unknown, value: unknown, diagnosticCode: string): MessageV2.Info {
   try {
     return Schema.decodeUnknownSync(schema as never)(value) as MessageV2.Info
   } catch {
@@ -4643,6 +4634,13 @@ export async function appendRawMessageContextItems(input: {
         WHERE conversation_id = $1
           AND item_type = 'raw_message'
           AND message_row_id = ANY($2::text[])
+        UNION
+        SELECT summary_message.message_row_id
+        FROM lcm_context_items context_item
+        JOIN lcm_summary_messages summary_message ON summary_message.summary_id = context_item.summary_id
+        WHERE context_item.conversation_id = $1
+          AND context_item.item_type = 'summary'
+          AND summary_message.message_row_id = ANY($2::text[])
       `,
       [input.conversationID, input.messageRowIDs],
     )

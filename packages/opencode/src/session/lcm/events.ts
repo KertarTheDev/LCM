@@ -564,6 +564,8 @@ function maintenancePayloadFromResult(
     rawLaneRatio?: number
     softBacklogRatio?: number
     softBacklogLargestSourceTokens?: number
+    afterSoftBacklogTokens?: number
+    afterSoftBacklogItemCount?: number
     softPressureReason?: LcmMaintenanceEventPayload["softPressureReason"]
     laneLatchDiagnostics?: LcmMaintenanceEventPayload["laneLatchDiagnostics"]
     safeError?: LcmSafeError
@@ -597,6 +599,8 @@ function maintenancePayloadFromResult(
     rawLaneRatio: input?.rawLaneRatio,
     softBacklogRatio: input?.softBacklogRatio,
     softBacklogLargestSourceTokens: input?.softBacklogLargestSourceTokens,
+    afterSoftBacklogTokens: input?.afterSoftBacklogTokens,
+    afterSoftBacklogItemCount: input?.afterSoftBacklogItemCount,
     softPressureReason: input?.softPressureReason,
     laneLatchDiagnostics: input?.laneLatchDiagnostics,
     sweepPassesCompleted: result.sweepPassesCompleted,
@@ -645,6 +649,8 @@ export function createLcmMaintenanceStartedEvent(input: {
   rawLaneRatio?: number
   softBacklogRatio?: number
   softBacklogLargestSourceTokens?: number
+  afterSoftBacklogTokens?: number
+  afterSoftBacklogItemCount?: number
   softPressureReason?: LcmMaintenanceEventPayload["softPressureReason"]
   laneLatchDiagnostics?: LcmMaintenanceEventPayload["laneLatchDiagnostics"]
   sweepMaxPasses?: number
@@ -681,6 +687,8 @@ export function createLcmMaintenanceStartedEvent(input: {
       rawLaneRatio: input.rawLaneRatio,
       softBacklogRatio: input.softBacklogRatio,
       softBacklogLargestSourceTokens: input.softBacklogLargestSourceTokens,
+      afterSoftBacklogTokens: input.afterSoftBacklogTokens,
+      afterSoftBacklogItemCount: input.afterSoftBacklogItemCount,
       softPressureReason: input.softPressureReason,
       laneLatchDiagnostics: input.laneLatchDiagnostics,
       sweepMaxPasses: input.sweepMaxPasses,
@@ -711,6 +719,8 @@ export function createLcmMaintenanceEndedEvent(input: {
   rawLaneRatio?: number
   softBacklogRatio?: number
   softBacklogLargestSourceTokens?: number
+  afterSoftBacklogTokens?: number
+  afterSoftBacklogItemCount?: number
   softPressureReason?: LcmMaintenanceEventPayload["softPressureReason"]
   laneLatchDiagnostics?: LcmMaintenanceEventPayload["laneLatchDiagnostics"]
   timestamp?: ISO8601
@@ -738,6 +748,8 @@ export function createLcmMaintenanceEndedEvent(input: {
       rawLaneRatio: input.rawLaneRatio,
       softBacklogRatio: input.softBacklogRatio,
       softBacklogLargestSourceTokens: input.softBacklogLargestSourceTokens,
+      afterSoftBacklogTokens: input.afterSoftBacklogTokens,
+      afterSoftBacklogItemCount: input.afterSoftBacklogItemCount,
       softPressureReason: input.softPressureReason,
       laneLatchDiagnostics: input.laneLatchDiagnostics,
     }),
@@ -763,6 +775,8 @@ export function createLcmMaintenanceFailedEvent(input: {
   rawLaneRatio?: number
   softBacklogRatio?: number
   softBacklogLargestSourceTokens?: number
+  afterSoftBacklogTokens?: number
+  afterSoftBacklogItemCount?: number
   softPressureReason?: LcmMaintenanceEventPayload["softPressureReason"]
   laneLatchDiagnostics?: LcmMaintenanceEventPayload["laneLatchDiagnostics"]
   safeError?: LcmSafeError
@@ -791,6 +805,8 @@ export function createLcmMaintenanceFailedEvent(input: {
       rawLaneRatio: input.rawLaneRatio,
       softBacklogRatio: input.softBacklogRatio,
       softBacklogLargestSourceTokens: input.softBacklogLargestSourceTokens,
+      afterSoftBacklogTokens: input.afterSoftBacklogTokens,
+      afterSoftBacklogItemCount: input.afterSoftBacklogItemCount,
       softPressureReason: input.softPressureReason,
       laneLatchDiagnostics: input.laneLatchDiagnostics,
       safeError: input.safeError,

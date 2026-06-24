@@ -287,8 +287,8 @@ function maintenanceHintBase(payload: LcmMaintenancePayload, operationID: string
     hardLimit: finiteNumber(payload.hardLimit),
     softThreshold: finiteNumber(payload.softThreshold),
     freshTailTokens: finiteNumber(payload.freshTailTokens),
-    softBacklogTokens: finiteNumber(payload.softBacklogTokens),
-    softBacklogItemCount: finiteNumber(payload.softBacklogItemCount),
+    softBacklogTokens: finiteNumber(payload.afterSoftBacklogTokens) ?? finiteNumber(payload.softBacklogTokens),
+    softBacklogItemCount: finiteNumber(payload.afterSoftBacklogItemCount) ?? finiteNumber(payload.softBacklogItemCount),
     freshTailRawTokens: finiteNumber(payload.freshTailRawTokens),
     freshTailRawItemCount: finiteNumber(payload.freshTailRawItemCount),
     unconsumedRawTokens: finiteNumber(payload.unconsumedRawTokens),
@@ -381,6 +381,17 @@ export function lcmMetricKeysFromEvent(event: LcmEventEnvelopeMessage): string[]
     if (key) keys.add(key)
   }
   return [...keys]
+}
+
+export function shouldAcceptLcmMetrics(
+  current: LcmMetricsSnapshotMessage | undefined,
+  next: LcmMetricsSnapshotMessage,
+): boolean {
+  if (!current) return true
+  const currentMs = Date.parse(current.updatedAt)
+  const nextMs = Date.parse(next.updatedAt)
+  if (!Number.isFinite(currentMs) || !Number.isFinite(nextMs)) return true
+  return nextMs >= currentMs
 }
 
 /**

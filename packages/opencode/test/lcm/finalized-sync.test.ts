@@ -8,10 +8,11 @@ import type { ModelID, ProviderID } from "../../src/provider/schema"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID } from "../../src/session/schema"
 import { Session as SessionRuntime } from "../../src/session/session"
+import { appendRawMessageContextItems } from "../../src/session/lcm/context"
 import { LcmDb } from "../../src/session/lcm/db"
 import { resolveLcmDbLayout } from "../../src/session/lcm/db-layout"
 import { MESSAGE_V2_SYNC_TAXONOMY, createSourcePartKey, syncFinalizedMessages } from "../../src/session/lcm/source-sync"
-import type { OperationID } from "../../src/session/lcm/types"
+import type { ConversationID, MessageRowID, OperationID } from "../../src/session/lcm/types"
 import { TRUNCATION_DIR, truncationOutputMetadata } from "../../src/tool/truncation-dir"
 import { provideTestInstance, tmpdir } from "../fixture/fixture"
 
@@ -357,6 +358,105 @@ test("sync re-pins the current user raw context when the source row already exis
     insertedParts: 0,
     idempotent: true,
   })
+})
+
+test("raw context append treats messages covered by active summaries as already consumed", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const dataDir = path.join(tmp.path, "lcm")
+  const { session, user } = await provideTestInstance({
+    directory: tmp.path,
+    fn: () => seedSealedFixture(tmp.path),
+  })
+
+  await runLcm(syncFinalizedMessages({ sessionID: session.id, dataDir }))
+
+  const result = await runLcm(
+    Effect.gen(function* () {
+      yield* syncFinalizedMessages({ sessionID: session.id, dataDir })
+      const conversation = yield* dbQuery<{ conversation_id: ConversationID }>(
+        "SELECT conversation_id FROM lcm_conversations WHERE source_session_id = $1",
+        [session.id],
+      )
+      const conversationID = conversation[0]!.conversation_id
+      const messages = yield* dbQuery<{ message_row_id: MessageRowID }>(
+        "SELECT message_row_id FROM lcm_messages WHERE conversation_id = $1 AND source_message_id = $2",
+        [conversationID, user.id],
+      )
+      const messageRowID = messages[0]!.message_row_id
+      yield* dbQuery(
+        "DELETE FROM lcm_context_items WHERE conversation_id = $1 AND item_type = 'raw_message' AND message_row_id = $2",
+        [conversationID, messageRowID],
+      )
+      yield* dbQuery(
+        `
+          INSERT INTO lcm_summaries (
+            summary_id,
+            conversation_id,
+            summary_type,
+            content_text,
+            source_token_count,
+            summary_token_count,
+            prompt_version,
+            strategy,
+            objective_status,
+            fallback_mode,
+            created_at_ms
+          )
+          VALUES ('sum_m06_user_consumed', $1, 'sprig', 'user message already summarized', 12, 4,
+                  'summary-leaf-v2', 'upward', 'accepted', 'none', 1777500007000)
+        `,
+        [conversationID],
+      )
+      yield* dbQuery(
+        "INSERT INTO lcm_summary_messages (summary_id, message_row_id, source_order) VALUES ('sum_m06_user_consumed', $1, 1)",
+        [messageRowID],
+      )
+      yield* dbQuery(
+        `
+          INSERT INTO lcm_context_items (
+            context_item_id,
+            conversation_id,
+            item_order,
+            item_type,
+            summary_id,
+            created_at_ms,
+            updated_at_ms
+          )
+          VALUES ('ctx_m06_user_consumed_summary', $1, 99, 'summary', 'sum_m06_user_consumed',
+                  1777500007000, 1777500007000)
+        `,
+        [conversationID],
+      )
+      const inserted = yield* LcmDb.Service.use((svc) =>
+        svc.executeForeground({
+          operationID: operationID("append_consumed"),
+          purpose: "debug_support",
+          run: async (db) =>
+            appendRawMessageContextItems({
+              db: db as PGlite,
+              conversationID,
+              messageRowIDs: [messageRowID],
+              nowMs: 1_777_500_007_100,
+            }),
+        }),
+      )
+      const rows = yield* dbQuery<{ raw_count: number; summary_count: number }>(
+        `
+          SELECT
+            count(*) FILTER (WHERE item_type = 'raw_message')::int AS raw_count,
+            count(*) FILTER (WHERE item_type = 'summary')::int AS summary_count
+          FROM lcm_context_items
+          WHERE conversation_id = $1
+            AND (message_row_id = $2 OR summary_id = 'sum_m06_user_consumed')
+        `,
+        [conversationID, messageRowID],
+      )
+      return { inserted, counts: rows[0] }
+    }),
+  )
+
+  expect(result.inserted).toBe(0)
+  expect(result.counts).toEqual({ raw_count: 0, summary_count: 1 })
 })
 
 test("aborted finalized sync returns content-safe cancellation before mutating memory", async () => {

@@ -141,6 +141,97 @@ test("lcm:retrieval-tools grep returns deterministic literal results, cursors, s
   }
 })
 
+test("lcm:retrieval-tools grep ranks factual memory before LCM tool-call echoes", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const dataDir = path.join(tmp.path, "lcm")
+  const worker = await initializeRetrievalWorker(dataDir)
+  try {
+    await seedRetrievalFixture(worker)
+    await queryRetrieval(
+      worker,
+      `
+        INSERT INTO lcm_messages (
+          message_row_id,
+          conversation_id,
+          source_session_id,
+          source_message_id,
+          role,
+          message_order,
+          created_at_ms,
+          provider_id,
+          model_id,
+          agent_name,
+          metadata_json
+        )
+        VALUES (
+          'msg_m21_lcm_tool_echo',
+          $1,
+          $2,
+          'source_m21_lcm_tool_echo',
+          'assistant',
+          99,
+          1777600210099,
+          'provider_m21',
+          'model_m21',
+          'code',
+          '{"version":1,"role":"assistant"}'::jsonb
+        )
+      `,
+      [retrievalIDs.rootConversation, retrievalIDs.rootSession],
+    )
+    await queryRetrieval(
+      worker,
+      `
+        INSERT INTO lcm_message_parts (
+          part_row_id,
+          message_row_id,
+          conversation_id,
+          source_part_key,
+          part_order,
+          part_kind,
+          terminal_state,
+          tool_name,
+          tool_input_json,
+          search_text,
+          created_at_ms,
+          completed_at_ms
+        )
+        VALUES (
+          'part_m21_lcm_tool_echo',
+          'msg_m21_lcm_tool_echo',
+          $1,
+          'echo:1',
+          1,
+          'tool',
+          'completed',
+          'lcm_grep',
+          '{"pattern":"AlphaCode","mode":"literal"}'::jsonb,
+          '{"pattern":"AlphaCode","mode":"literal"}',
+          1777600210099,
+          1777600210099
+        )
+      `,
+      [retrievalIDs.rootConversation],
+    )
+
+    const result = await runRetrieval(
+      worker,
+      LcmRetrieval.grep({
+        sessionID: retrievalIDs.rootSession,
+        dataDir,
+        pattern: "AlphaCode",
+        mode: "literal",
+      }),
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error(result.error.safeMessage)
+    expect(result.results[0]?.partRowID).toBe(retrievalIDs.rootPart)
+    expect(result.results.some((item) => item.partRowID === "part_m21_lcm_tool_echo")).toBe(true)
+  } finally {
+    await worker.close()
+  }
+})
+
 test("lcm:retrieval-tools summary closure, metadata-only describe, and child expansion follow M21 boundaries", async () => {
   await using tmp = await tmpdir({ git: true })
   const dataDir = path.join(tmp.path, "lcm")
@@ -446,7 +537,7 @@ test("lcm:retrieval-tools expand_query answers only with authorized citations", 
         generator: async () => ({ text: "Unsupported claim without a stable citation." }),
       }),
     )
-    expect(unsupported).toEqual({ ok: true, answer: "", citations: [] })
+    expect(unsupported).toEqual({ ok: true, answer: "", citations: [], coverage: "none", truncated: false })
 
     let structuredHandle = ""
     const structured = await runRetrieval(
@@ -494,7 +585,13 @@ test("lcm:retrieval-tools expand_query answers only with authorized citations", 
         }),
       }),
     )
-    expect(unsupportedStructured).toEqual({ ok: true, answer: "", citations: [] })
+    expect(unsupportedStructured).toEqual({
+      ok: true,
+      answer: "",
+      citations: [],
+      coverage: "none",
+      truncated: false,
+    })
 
     const missingVisibleCitation = await runRetrieval(
       worker,
@@ -512,7 +609,13 @@ test("lcm:retrieval-tools expand_query answers only with authorized citations", 
         }),
       }),
     )
-    expect(missingVisibleCitation).toEqual({ ok: true, answer: "", citations: [] })
+    expect(missingVisibleCitation).toEqual({
+      ok: true,
+      answer: "",
+      citations: [],
+      coverage: "none",
+      truncated: false,
+    })
 
     const malformedStructured = await runRetrieval(
       worker,
@@ -523,7 +626,7 @@ test("lcm:retrieval-tools expand_query answers only with authorized citations", 
         generator: async () => ({ text: '{"answer":"AlphaCode"' }),
       }),
     )
-    expect(malformedStructured).toEqual({ ok: true, answer: "", citations: [] })
+    expect(malformedStructured).toEqual({ ok: true, answer: "", citations: [], coverage: "none", truncated: false })
 
     let fileExcerpt = ""
     const fileResult = await runRetrieval(

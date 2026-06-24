@@ -198,6 +198,20 @@ test("maintenance status events carry safe labels and normalized safe errors", (
   expect(ended.payload.safeError).toBeUndefined()
   expect(ended.payload.afterTokens).toBe(9_000)
 
+  const endedAfterMetrics = createLcmMaintenanceEndedEvent({
+    sessionID: "session_m15_status",
+    result: maintenanceResult(),
+    phase: "leaf_summary",
+    softBacklogTokens: 14_000,
+    softBacklogItemCount: 6,
+    afterSoftBacklogTokens: 0,
+    afterSoftBacklogItemCount: 0,
+    timestamp: "2026-05-01T00:00:01.500Z",
+  })
+  expect(endedAfterMetrics.payload.softBacklogTokens).toBe(14_000)
+  expect(endedAfterMetrics.payload.afterSoftBacklogTokens).toBe(0)
+  expect(endedAfterMetrics.payload.afterSoftBacklogItemCount).toBe(0)
+
   const failed = createLcmMaintenanceFailedEvent({
     sessionID: "session_m15_status",
     result: maintenanceResult({
@@ -208,12 +222,16 @@ test("maintenance status events carry safe labels and normalized safe errors", (
     }),
     phase: "hard_limit",
     hardLimit: 12_000,
+    afterSoftBacklogTokens: 1_200,
+    afterSoftBacklogItemCount: 2,
     timestamp: "2026-05-01T00:00:02.000Z",
   })
   expect(failed.payload.safeError).toMatchObject({
     safeMessage: LCM_SAFE_MESSAGE_TEMPLATES["lcm.hard_limit.unresolved"],
     action: "start_new_thread",
   })
+  expect(failed.payload.afterSoftBacklogTokens).toBe(1_200)
+  expect(failed.payload.afterSoftBacklogItemCount).toBe(2)
 
   const canceled = createLcmMaintenanceFailedEvent({
     sessionID: "session_m15_status",

@@ -1920,7 +1920,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
       }
       // kilocode_change end
-      yield* syncLcmFinalized({ sessionID: input.sessionID, upToMessageID: info.id })
+      if (input.noReply === true) {
+        yield* syncLcmFinalized({ sessionID: input.sessionID, upToMessageID: info.id })
+      }
 
       return { info, parts }
     }, Effect.scoped)

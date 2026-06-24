@@ -992,8 +992,8 @@ export const layer = Layer.effect(
       operationID?: OperationID
       reason: LcmContextUpdatedEventPayload["reason"]
       lastMaintenance?: LcmMaintenanceResult
-    }) {
-      if (!bus) return
+    }): Effect.Effect<LcmMetricsSnapshot | undefined> {
+      if (!bus) return undefined
       const settings = yield* effectiveSettings({ sessionID: input.sessionID }).pipe(
         Effect.catch(() => Effect.succeed(undefined)),
       )
@@ -1044,6 +1044,71 @@ export const layer = Layer.effect(
           metrics,
         }),
       )
+      return metrics
+    })
+
+    function maintenanceEventFieldsFromMetrics(metrics: LcmMetricsSnapshot) {
+      return {
+        hardLimit: metrics.hardLimit,
+        softThreshold: metrics.softThreshold,
+        freshTailTokens: metrics.freshTailTokens,
+        softBacklogTokens: metrics.softBacklogTokens,
+        softBacklogItemCount: metrics.softBacklogItemCount,
+        softBacklogLargestSourceTokens: metrics.softBacklogLargestSourceTokens,
+        freshTailRawTokens: metrics.freshTailRawTokens,
+        freshTailRawItemCount: metrics.freshTailRawItemCount,
+        unconsumedRawTokens: metrics.unconsumedRawTokens,
+        unconsumedRawItemCount: metrics.unconsumedRawItemCount,
+        protectedTailRawTokens: metrics.protectedTailRawTokens,
+        protectedTailRawItemCount: metrics.protectedTailRawItemCount,
+        rawLaneTokens: metrics.rawLaneTokens,
+        rawLaneRatio: metrics.rawLaneRatio,
+        softBacklogRatio: metrics.softBacklogRatio,
+        afterSoftBacklogTokens: metrics.softBacklogTokens,
+        afterSoftBacklogItemCount: metrics.softBacklogItemCount,
+        softPressureReason: metrics.softPressureReason,
+        laneLatchDiagnostics: metrics.laneLatchDiagnostics,
+      }
+    }
+
+    const publishTerminalMaintenance = Effect.fn("LcmRuntime.publishTerminalMaintenance")(function* (input: {
+      sessionID: string
+      conversationID: ConversationID
+      operationID: OperationID
+      result: LcmMaintenanceResult
+      phase?: "leaf_summary" | "condensation" | "hard_limit" | "deterministic_fallback" | "repair"
+      threshold?: LcmThresholdDecision
+    }) {
+      const metrics = yield* publishMetrics({
+        sessionID: input.sessionID,
+        conversationID: input.conversationID,
+        operationID: input.operationID,
+        reason: "maintenance",
+        lastMaintenance: input.result,
+      })
+      if (bus) {
+        const fields = metrics
+          ? maintenanceEventFieldsFromMetrics(metrics)
+          : input.threshold
+            ? thresholdEventFields(input.threshold)
+            : {}
+        const event =
+          input.result.status === "failed" || input.result.status === "canceled" || input.result.safeError
+            ? createLcmMaintenanceFailedEvent({
+                sessionID: input.sessionID,
+                result: input.result,
+                phase: input.phase,
+                ...fields,
+              })
+            : createLcmMaintenanceEndedEvent({
+                sessionID: input.sessionID,
+                result: input.result,
+                phase: input.phase,
+                ...fields,
+              })
+        yield* publishLcmEvent(bus, event)
+      }
+      return metrics
     })
 
     const publishDbStatus = Effect.fn("LcmRuntime.publishDbStatus")(function* (input: {
@@ -1797,29 +1862,13 @@ export const layer = Layer.effect(
           if (maintenance.status === "failed" || maintenance.status === "canceled" || maintenance.safeError) {
             clearActiveLatchesFromThreshold(threshold)
           }
-          if (bus) {
-            const event =
-              maintenance.status === "failed" || maintenance.status === "canceled" || maintenance.safeError
-                ? createLcmMaintenanceFailedEvent({
-                    sessionID: input.sessionID,
-                    result: maintenance,
-                    phase: "hard_limit",
-                    ...thresholdEventFields(threshold),
-                  })
-                : createLcmMaintenanceEndedEvent({
-                    sessionID: input.sessionID,
-                    result: maintenance,
-                    phase: "hard_limit",
-                    ...thresholdEventFields(threshold),
-                  })
-            yield* publishLcmEvent(bus, event)
-          }
-          yield* publishMetrics({
+          yield* publishTerminalMaintenance({
             sessionID: input.sessionID,
             conversationID,
             operationID,
-            reason: "maintenance",
-            lastMaintenance: maintenance,
+            result: maintenance,
+            phase: "hard_limit",
+            threshold,
           })
           return maintenance
         }).pipe(
@@ -1916,29 +1965,13 @@ export const layer = Layer.effect(
         if (maintenance.status === "failed" || maintenance.status === "canceled" || maintenance.safeError) {
           clearActiveLatchesFromThreshold(threshold)
         }
-        if (bus) {
-          const event =
-            maintenance.status === "failed" || maintenance.status === "canceled" || maintenance.safeError
-              ? createLcmMaintenanceFailedEvent({
-                  sessionID: input.sessionID,
-                  result: maintenance,
-                  phase: "leaf_summary",
-                  ...thresholdEventFields(threshold),
-                })
-              : createLcmMaintenanceEndedEvent({
-                  sessionID: input.sessionID,
-                  result: maintenance,
-                  phase: "leaf_summary",
-                  ...thresholdEventFields(threshold),
-                })
-          yield* publishLcmEvent(bus, event)
-        }
-        yield* publishMetrics({
+        yield* publishTerminalMaintenance({
           sessionID: input.sessionID,
           conversationID,
           operationID,
-          reason: "maintenance",
-          lastMaintenance: maintenance,
+          result: maintenance,
+          phase: "leaf_summary",
+          threshold,
         })
         return maintenance
       }
@@ -2346,23 +2379,13 @@ export const layer = Layer.effect(
               summarySourceTokens: result.beforeTokens,
             })
           }
-          if (bus) {
-            yield* publishLcmEvent(
-              bus,
-              createLcmMaintenanceEndedEvent({
-                sessionID: input.sessionID,
-                result,
-                phase: "leaf_summary",
-                ...thresholdEventFields(threshold),
-              }),
-            )
-          }
-          yield* publishMetrics({
+          yield* publishTerminalMaintenance({
             sessionID: input.sessionID,
             conversationID,
             operationID,
-            reason: "maintenance",
-            lastMaintenance: result,
+            result,
+            phase: "leaf_summary",
+            threshold,
           })
           yield* handleSoftMaintenanceRetryOutcome(input, conversationID, result)
           return result
@@ -2417,23 +2440,13 @@ export const layer = Layer.effect(
               summarySourceTokens: result.beforeTokens,
             })
           }
-          if (bus) {
-            yield* publishLcmEvent(
-              bus,
-              createLcmMaintenanceEndedEvent({
-                sessionID: input.sessionID,
-                result,
-                phase: "leaf_summary",
-                ...thresholdEventFields(threshold),
-              }),
-            )
-          }
-          yield* publishMetrics({
+          yield* publishTerminalMaintenance({
             sessionID: input.sessionID,
             conversationID,
             operationID,
-            reason: "maintenance",
-            lastMaintenance: result,
+            result,
+            phase: "leaf_summary",
+            threshold,
           })
           yield* handleSoftMaintenanceRetryOutcome(input, conversationID, result)
           return result
@@ -2577,29 +2590,13 @@ export const layer = Layer.effect(
           clearActiveLatchesFromThreshold(threshold)
         }
 
-        if (bus) {
-          const event =
-            maintenance.status === "failed" || maintenance.status === "canceled" || maintenance.safeError
-              ? createLcmMaintenanceFailedEvent({
-                  sessionID: input.sessionID,
-                  result: maintenance,
-                  phase: "leaf_summary",
-                  ...thresholdEventFields(threshold),
-                })
-              : createLcmMaintenanceEndedEvent({
-                  sessionID: input.sessionID,
-                  result: maintenance,
-                  phase: "leaf_summary",
-                  ...thresholdEventFields(threshold),
-                })
-          yield* publishLcmEvent(bus, event)
-        }
-        yield* publishMetrics({
+        yield* publishTerminalMaintenance({
           sessionID: input.sessionID,
           conversationID,
           operationID,
-          reason: "maintenance",
-          lastMaintenance: maintenance,
+          result: maintenance,
+          phase: "leaf_summary",
+          threshold,
         })
         yield* handleSoftMaintenanceRetryOutcome(input, conversationID, maintenance)
         return maintenance
@@ -2617,23 +2614,12 @@ export const layer = Layer.effect(
               safeError,
             })
             yield* recordTerminalAttempt(result)
-            if (bus) {
-              yield* publishLcmEvent(
-                bus,
-                createLcmMaintenanceFailedEvent({
-                  sessionID: input.sessionID,
-                  result,
-                  phase: "leaf_summary",
-                  safeError,
-                }),
-              )
-            }
-            yield* publishMetrics({
+            yield* publishTerminalMaintenance({
               sessionID: input.sessionID,
               conversationID,
               operationID,
-              reason: "maintenance",
-              lastMaintenance: result,
+              result,
+              phase: "leaf_summary",
             })
             yield* handleSoftMaintenanceRetryOutcome(input, conversationID, result)
             return result
@@ -2884,23 +2870,23 @@ export const layer = Layer.effect(
         safeMessage: result.safeMessage,
       }).pipe(Effect.catch(() => Effect.void))
 
-      if (canceled && bus) {
-        yield* publishLcmEvent(
-          bus,
-          createLcmMaintenanceEndedEvent({
-            sessionID: input.sessionID,
-            result,
-            phase: "leaf_summary",
-          }),
-        )
+      if (canceled) {
+        yield* publishTerminalMaintenance({
+          sessionID: input.sessionID,
+          conversationID,
+          operationID,
+          result,
+          phase: "leaf_summary",
+        })
+      } else {
+        yield* publishMetrics({
+          sessionID: input.sessionID,
+          conversationID,
+          operationID,
+          reason: "maintenance",
+          lastMaintenance: result,
+        })
       }
-      yield* publishMetrics({
-        sessionID: input.sessionID,
-        conversationID,
-        operationID,
-        reason: "maintenance",
-        lastMaintenance: result,
-      })
 
       return result
     })
@@ -3327,23 +3313,14 @@ export const layer = Layer.effect(
                   )
                 }),
               )
-            if (bus) {
-              const event =
-                result.status === "failed" || result.status === "canceled" || result.safeError
-                  ? createLcmMaintenanceFailedEvent({
-                      sessionID: input.sessionID,
-                      result,
-                      phase: "hard_limit",
-                      hardLimit: currentThreshold.hardLimit,
-                    })
-                  : createLcmMaintenanceEndedEvent({
-                      sessionID: input.sessionID,
-                      result,
-                      phase: "hard_limit",
-                      hardLimit: currentThreshold.hardLimit,
-                    })
-              yield* publishLcmEvent(bus, event)
-            }
+            yield* publishTerminalMaintenance({
+              sessionID: input.sessionID,
+              conversationID,
+              operationID,
+              result,
+              phase: "hard_limit",
+              threshold: currentThreshold,
+            })
             return result
           }).pipe(
             Effect.ensuring(
