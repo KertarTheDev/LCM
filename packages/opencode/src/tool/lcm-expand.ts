@@ -31,7 +31,7 @@ export const LcmExpandTool = Tool.define(
         })
         return renderResult(result)
       }).pipe(
-        Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_expand_tool_wrapper_failed")))),
+        Effect.catchCause(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_expand_tool_wrapper_failed")))),
       ),
   }),
 )

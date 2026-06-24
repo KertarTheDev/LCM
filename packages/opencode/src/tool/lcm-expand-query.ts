@@ -34,7 +34,7 @@ export const LcmExpandQueryTool = Tool.define(
         })
         return renderResult(result)
       }).pipe(
-        Effect.catchAll(() =>
+        Effect.catchCause(() =>
           Effect.succeed(renderResult(lcmToolWrapperError("lcm_expand_query_tool_wrapper_failed"))),
         ),
       ),

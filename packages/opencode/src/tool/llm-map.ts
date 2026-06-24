@@ -83,7 +83,7 @@ export const LlmMapTool = Tool.define(
             ),
         })
         return renderResult(result)
-      }).pipe(Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("llm_map_tool_wrapper_failed"))))),
+      }).pipe(Effect.catchCause(() => Effect.succeed(renderResult(lcmToolWrapperError("llm_map_tool_wrapper_failed"))))),
   }),
 )
 

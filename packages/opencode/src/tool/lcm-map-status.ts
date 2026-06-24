@@ -26,7 +26,7 @@ export const LcmMapStatusTool = Tool.define(
         })
         return renderResult(result)
       }).pipe(
-        Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_map_status_tool_wrapper_failed")))),
+        Effect.catchCause(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_map_status_tool_wrapper_failed")))),
       ),
   }),
 )

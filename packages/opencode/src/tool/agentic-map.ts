@@ -174,7 +174,7 @@ export const AgenticMapTool = Tool.define(
           })
           return renderResult(result)
         }).pipe(
-          Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("agentic_map_tool_wrapper_failed")))),
+          Effect.catchCause(() => Effect.succeed(renderResult(lcmToolWrapperError("agentic_map_tool_wrapper_failed")))),
         ),
     }
   }),

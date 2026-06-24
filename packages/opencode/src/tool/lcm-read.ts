@@ -49,7 +49,7 @@ export const LcmReadTool = Tool.define(
             ),
         })
         return renderResult(result)
-      }).pipe(Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_read_tool_wrapper_failed"))))),
+      }).pipe(Effect.catchCause(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_read_tool_wrapper_failed"))))),
   }),
 )
 

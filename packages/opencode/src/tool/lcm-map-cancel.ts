@@ -26,7 +26,7 @@ export const LcmMapCancelTool = Tool.define(
         })
         return renderResult(result)
       }).pipe(
-        Effect.catchAll(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_map_cancel_tool_wrapper_failed")))),
+        Effect.catchCause(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_map_cancel_tool_wrapper_failed")))),
       ),
   }),
 )
