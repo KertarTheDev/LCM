@@ -4,6 +4,7 @@ import { Select } from "@kilocode/kilo-ui/select"
 import { TextField } from "@kilocode/kilo-ui/text-field"
 import type {
   LcmDbDiagnoseReport,
+  LcmDbRecoverLockReport,
   LcmDbRebuildReport,
   LcmPromptExportReport,
   LcmSafeError,
@@ -27,12 +28,10 @@ import {
   statusMessage,
 } from "./lcm-memory-state"
 import { createLcmSettingsRefreshScheduler } from "./lcm-memory-refresh"
-import {
-  createLcmMemoryNumericSettingsAutosave,
-  isLcmMemoryAutosaveValidationError,
-} from "./lcm-memory-autosave"
+import { createLcmMemoryNumericSettingsAutosave, isLcmMemoryAutosaveValidationError } from "./lcm-memory-autosave"
 import {
   beginLcmDbDiagnose,
+  beginLcmDbRecoverLock,
   beginLcmDbRebuild,
   beginLcmMaintenanceCancel,
   beginLcmPromptsExport,
@@ -74,8 +73,29 @@ function diagnosticSummary(report: LcmDbDiagnoseReport) {
 function diagnosticDetail(report: LcmDbDiagnoseReport) {
   const firstSafeError = report.safeErrors[0]
   if (firstSafeError) return firstSafeError.safeMessage
+  if (report.ownerLock?.canRecover) return "Memory lock recovery is available."
   if (report.quarantineRecommended) return "Memory can be rebuilt from saved Kilo messages."
   return `Operation ${report.operationID}`
+}
+
+function ownerLockDetail(report: LcmDbDiagnoseReport) {
+  const lock = report.ownerLock
+  if (!lock?.present) return undefined
+  switch (lock.recoveryState) {
+    case "recoverable":
+      return "The memory lock appears stale and can be recovered."
+    case "force_required":
+      return "The memory lock cannot be verified. Close other Kilo windows before recovering it."
+    case "fresh":
+    case "wait":
+      return "Another memory owner may still be starting. Check again shortly."
+    case "blocked":
+      return "Another live memory owner still appears active."
+    case "unavailable":
+      return "The memory lock could not be inspected."
+    default:
+      return undefined
+  }
 }
 
 function rebuildSummary(report: LcmDbRebuildReport) {
@@ -84,6 +104,25 @@ function rebuildSummary(report: LcmDbRebuildReport) {
   const failedConversations = finiteNumber(report.failedConversations) ?? 0
   const failed = failedConversations > 0 ? `, ${failedConversations} failed` : ""
   return `${repaired}. ${rebuiltConversations} conversations rebuilt${failed}.`
+}
+
+function recoverLockSummary(report: LcmDbRecoverLockReport) {
+  switch (report.status) {
+    case "would_recover":
+      return report.ownerLock.forceRequired
+        ? "Memory lock recovery preview. This requires explicit recovery after other Kilo windows are closed."
+        : "Memory lock recovery preview."
+    case "recovered":
+      return "Memory lock recovered."
+    case "not_needed":
+      return "Memory lock recovery was not needed."
+    case "refused":
+      return "Memory lock recovery was refused."
+    case "failed":
+      return "Memory lock recovery failed."
+    default:
+      return `Memory lock recovery ${report.status}.`
+  }
 }
 
 function promptExportSummary(report: LcmPromptExportReport) {
@@ -95,12 +134,17 @@ function shouldOfferRepairPreview(report: LcmDbDiagnoseReport | undefined) {
   return !!report && (report.quarantineRecommended || report.status === "corrupt" || report.status === "unavailable")
 }
 
+function shouldOfferLockRecoveryPreview(report: LcmDbDiagnoseReport | undefined) {
+  return report?.status === "locked" && report.ownerLock?.canRecover === true
+}
+
 const LcmMemoryTab: Component = () => {
   const vscode = useVSCode()
   const session = useSession()
   const [state, setState] = createSignal<LcmSettingsState>()
   const [error, setError] = createSignal<LcmSafeError>()
   const [diagnostics, setDiagnostics] = createSignal<LcmDbDiagnoseReport>()
+  const [lockRecovery, setLockRecovery] = createSignal<LcmDbRecoverLockReport>()
   const [rebuild, setRebuild] = createSignal<LcmDbRebuildReport>()
   const [promptExport, setPromptExport] = createSignal<LcmPromptExportReport>()
   const [pendingRequests, setPendingRequests] = createSignal<LcmSettingsPendingRequests>({})
@@ -111,10 +155,24 @@ const LcmMemoryTab: Component = () => {
   const saving = createMemo(() => pendingRequests().update !== undefined)
   const cancelingMaintenance = createMemo(() => pendingRequests().cancelMaintenance !== undefined)
   const diagnosingDb = createMemo(() => pendingRequests().diagnoseDb !== undefined)
+  const recoveringDbLock = createMemo(() => pendingRequests().recoverDbLock !== undefined)
   const rebuildingDb = createMemo(() => pendingRequests().rebuildDb !== undefined)
   const exportingPrompts = createMemo(() => pendingRequests().exportPrompts !== undefined)
   const settingsDisabled = createMemo(
-    () => loading() || saving() || cancelingMaintenance() || diagnosingDb() || rebuildingDb() || exportingPrompts(),
+    () =>
+      loading() ||
+      saving() ||
+      cancelingMaintenance() ||
+      diagnosingDb() ||
+      recoveringDbLock() ||
+      rebuildingDb() ||
+      exportingPrompts(),
+  )
+  const canPreviewLockRecovery = createMemo(
+    () => shouldOfferLockRecoveryPreview(diagnostics()) && !lockRecovery()?.dryRun,
+  )
+  const canApplyLockRecovery = createMemo(
+    () => lockRecovery()?.dryRun === true && lockRecovery()?.status === "would_recover",
   )
   const canPreviewRepair = createMemo(() => shouldOfferRepairPreview(diagnostics()) && !rebuild()?.dryRun)
   const canApplyRepair = createMemo(() => rebuild()?.dryRun === true && rebuild()?.status === "would_rebuild")
@@ -215,6 +273,7 @@ const LcmMemoryTab: Component = () => {
     if (!started) return
     setError(undefined)
     setDiagnostics(undefined)
+    setLockRecovery(undefined)
     setRebuild(undefined)
     vscode.postMessage({
       type: "diagnoseLcmDb",
@@ -237,6 +296,23 @@ const LcmMemoryTab: Component = () => {
       type: "rebuildLcmDb",
       requestID,
       body: { ...requestScope(), dryRun },
+    })
+  }
+
+  const recoverDbLock = (dryRun: boolean, force: boolean) => {
+    const requestID = nextRequestID(dryRun ? "db-lock-recover-preview" : "db-lock-recover-apply")
+    let started = false
+    setPendingRequests((pending) => {
+      const result = beginLcmDbRecoverLock(pending, requestID)
+      started = result.started
+      return result.pending
+    })
+    if (!started) return
+    setError(undefined)
+    vscode.postMessage({
+      type: "recoverLcmDbLock",
+      requestID,
+      body: { ...requestScope(), dryRun, force },
     })
   }
 
@@ -307,6 +383,7 @@ const LcmMemoryTab: Component = () => {
     setError(undefined)
     if (!message.body.safeError && message.body.dbStatus?.status === "ready") {
       setDiagnostics(undefined)
+      setLockRecovery(undefined)
       setRebuild(undefined)
     }
   }
@@ -326,8 +403,20 @@ const LcmMemoryTab: Component = () => {
       return
     }
     setDiagnostics(message.body)
+    setLockRecovery(undefined)
     setRebuild(undefined)
     setError(undefined)
+  }
+
+  const handleRecoverLockResult = (message: Extract<ExtensionMessage, { type: "recoverLcmDbLock.result" }>) => {
+    if (!acceptResponse("recoverDbLock", message.requestID)) return
+    if (!message.ok) {
+      setError(message.error)
+      return
+    }
+    setLockRecovery(message.body)
+    setError(undefined)
+    if (!message.body.dryRun) requestSettings({ resetPending: true })
   }
 
   const handleRebuildResult = (message: Extract<ExtensionMessage, { type: "rebuildLcmDb.result" }>) => {
@@ -363,6 +452,9 @@ const LcmMemoryTab: Component = () => {
       case "diagnoseLcmDb.result":
         handleDiagnoseResult(message)
         break
+      case "recoverLcmDbLock.result":
+        handleRecoverLockResult(message)
+        break
       case "rebuildLcmDb.result":
         handleRebuildResult(message)
         break
@@ -375,6 +467,7 @@ const LcmMemoryTab: Component = () => {
       case "lcmMemoryContextChanged":
         setError(undefined)
         setDiagnostics(undefined)
+        setLockRecovery(undefined)
         setRebuild(undefined)
         setPromptExport(undefined)
         requestSettings({ resetPending: true })
@@ -551,6 +644,19 @@ const LcmMemoryTab: Component = () => {
             >
               <div>{diagnosticSummary(report())}</div>
               <div>{diagnosticDetail(report())}</div>
+              <Show when={ownerLockDetail(report())}>{(detail) => <div>{detail()}</div>}</Show>
+              <Show when={canPreviewLockRecovery()}>
+                <div style={{ "margin-top": "8px" }}>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    onClick={() => recoverDbLock(true, report().ownerLock?.forceRequired ?? false)}
+                    disabled={settingsDisabled()}
+                  >
+                    Preview lock recovery
+                  </Button>
+                </div>
+              </Show>
               <Show when={canPreviewRepair()}>
                 <div style={{ "margin-top": "8px" }}>
                   <Button
@@ -560,6 +666,37 @@ const LcmMemoryTab: Component = () => {
                     disabled={settingsDisabled()}
                   >
                     Preview repair
+                  </Button>
+                </div>
+              </Show>
+            </div>
+          )}
+        </Show>
+        <Show when={lockRecovery()}>
+          {(report) => (
+            <div
+              data-lcm-db-lock-recovery
+              data-status={report().status}
+              data-dry-run={String(report().dryRun)}
+              style={{
+                color: "var(--vscode-descriptionForeground)",
+                "font-size": "12px",
+                "line-height": "1.35",
+                "margin-bottom": "12px",
+                "overflow-wrap": "anywhere",
+              }}
+            >
+              <div>{recoverLockSummary(report())}</div>
+              <Show when={report().safeErrors[0]}>{(safeError) => <div>{safeError().safeMessage}</div>}</Show>
+              <Show when={canApplyLockRecovery()}>
+                <div style={{ "margin-top": "8px" }}>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    onClick={() => recoverDbLock(false, report().force)}
+                    disabled={settingsDisabled()}
+                  >
+                    Recover memory lock
                   </Button>
                 </div>
               </Show>

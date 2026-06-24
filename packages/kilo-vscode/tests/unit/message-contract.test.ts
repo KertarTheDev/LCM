@@ -121,7 +121,9 @@ describe("KiloProvider message handler coverage", () => {
       "updateLcmSettings",
       "cancelLcmMaintenance",
       "diagnoseLcmDb",
+      "recoverLcmDbLock",
       "rebuildLcmDb",
+      "exportLcmPrompts",
     ]
     const missing = requiredCases.filter((type) => !lcmWebviewContent.includes(`"${type}"`))
 

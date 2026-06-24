@@ -9,6 +9,7 @@ type TimerRecord = {
 
 function createFakeTimers() {
   const timers: TimerRecord[] = []
+  let currentTimeMs = 0
   return {
     timers,
     api: {
@@ -21,10 +22,16 @@ function createFakeTimers() {
         const timer = handle as unknown as TimerRecord
         timer.cleared = true
       },
+      now() {
+        return currentTimeMs
+      },
     },
     flush(index: number) {
       const timer = timers[index]
-      if (timer && !timer.cleared) timer.callback()
+      if (timer && !timer.cleared) {
+        currentTimeMs += timer.delayMs
+        timer.callback()
+      }
     },
   }
 }
@@ -65,6 +72,13 @@ function malformedSafeError() {
 async function settle() {
   await Promise.resolve()
   await Promise.resolve()
+}
+
+async function settleUntil(condition: () => boolean, attempts = 10) {
+  for (let i = 0; i < attempts; i++) {
+    await settle()
+    if (condition()) return
+  }
 }
 
 describe("LcmPrewarmer", () => {
@@ -476,5 +490,146 @@ describe("LcmPrewarmer", () => {
       retryable: false,
       safeError: routeError.error,
     })
+  })
+
+  it("waits through retryable readiness failures until memory becomes ready", async () => {
+    const fake = createFakeTimers()
+    let calls = 0
+    const retries: unknown[] = []
+    const client = clientWithCapabilities(async () => {
+      calls += 1
+      if (calls < 3) return { data: { dbReady: false, safeError: retryableRouteError(true).error } }
+      return { data: { dbReady: true } }
+    })
+    const prewarmer = new LcmPrewarmer({
+      readinessTimeoutMs: 0,
+      waitTimeoutMs: 100,
+      waitRetryDelaysMs: [25],
+      timers: fake.api,
+      logger: { warn: () => undefined },
+    })
+
+    const readiness = prewarmer.waitUntilReady({
+      client,
+      connectionState: "connected",
+      sessionID: "session_wait",
+      directory: "/repo",
+      reason: "promptSend",
+      onRetry: (retry) => retries.push(retry),
+    })
+    await settleUntil(() => fake.timers.length >= 1)
+    fake.flush(0)
+    await settleUntil(() => fake.timers.length >= 2)
+    fake.flush(1)
+    await settle()
+
+    expect(await readiness).toEqual({ ok: true })
+    expect(calls).toBe(3)
+    expect(retries).toMatchObject([
+      { attempt: 1, delayMs: 25, next: 25 },
+      { attempt: 2, delayMs: 25, next: 50 },
+    ])
+  })
+
+  it("returns the last retryable readiness error when the wait window is exhausted", async () => {
+    const fake = createFakeTimers()
+    let calls = 0
+    const safeError = retryableRouteError(true).error
+    const client = clientWithCapabilities(async () => {
+      calls += 1
+      return { data: { dbReady: false, safeError } }
+    })
+    const prewarmer = new LcmPrewarmer({
+      readinessTimeoutMs: 0,
+      waitTimeoutMs: 25,
+      waitRetryDelaysMs: [25],
+      timers: fake.api,
+      logger: { warn: () => undefined },
+    })
+
+    const readiness = prewarmer.waitUntilReady({
+      client,
+      connectionState: "connected",
+      sessionID: "session_timeout",
+      directory: "/repo",
+      reason: "promptSend",
+    })
+    await settleUntil(() => fake.timers.length >= 1)
+    fake.flush(0)
+    await settle()
+
+    expect(await readiness).toEqual({
+      ok: false,
+      retryable: true,
+      safeMessage: safeError.safeMessage,
+      safeError,
+    })
+    expect(calls).toBe(2)
+  })
+
+  it("does not wait after non-retryable readiness failures", async () => {
+    const fake = createFakeTimers()
+    const safeError = retryableRouteError(false).error
+    const client = clientWithCapabilities(async () => ({ data: { dbReady: false, safeError } }))
+    const prewarmer = new LcmPrewarmer({
+      readinessTimeoutMs: 0,
+      waitTimeoutMs: 100,
+      waitRetryDelaysMs: [25],
+      timers: fake.api,
+      logger: { warn: () => undefined },
+    })
+
+    const readiness = await prewarmer.waitUntilReady({
+      client,
+      connectionState: "connected",
+      sessionID: "session_terminal",
+      directory: "/repo",
+      reason: "promptSend",
+    })
+
+    expect(fake.timers).toHaveLength(0)
+    expect(readiness).toEqual({
+      ok: false,
+      retryable: false,
+      safeMessage: safeError.safeMessage,
+      safeError,
+    })
+  })
+
+  it("aborts readiness waits without issuing another probe", async () => {
+    const fake = createFakeTimers()
+    let calls = 0
+    const controller = new AbortController()
+    const client = clientWithCapabilities(async () => {
+      calls += 1
+      return { data: { dbReady: false, safeError: retryableRouteError(true).error } }
+    })
+    const prewarmer = new LcmPrewarmer({
+      readinessTimeoutMs: 0,
+      waitTimeoutMs: 100,
+      waitRetryDelaysMs: [25],
+      timers: fake.api,
+      logger: { warn: () => undefined },
+    })
+
+    const readiness = prewarmer.waitUntilReady({
+      client,
+      connectionState: "connected",
+      sessionID: "session_abort",
+      directory: "/repo",
+      reason: "promptSend",
+      abortSignal: controller.signal,
+    })
+    await settleUntil(() => fake.timers.length >= 1)
+    controller.abort()
+    await settle()
+
+    expect(await readiness).toEqual({
+      ok: false,
+      retryable: false,
+      safeMessage: "Memory readiness wait was canceled.",
+    })
+    expect(calls).toBe(1)
+    expect(fake.timers[0]?.cleared).toBe(true)
   })
 })

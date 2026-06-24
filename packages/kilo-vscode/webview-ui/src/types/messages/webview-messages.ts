@@ -309,6 +309,16 @@ export interface RebuildLcmDbMessage {
   }
 }
 
+export interface RecoverLcmDbLockMessage {
+  type: "recoverLcmDbLock"
+  requestID: string
+  body?: {
+    sessionID?: string
+    dryRun?: boolean
+    force?: boolean
+  }
+}
+
 export interface ExportLcmPromptsMessage {
   type: "exportLcmPrompts"
   requestID: string
@@ -1187,6 +1197,7 @@ export type WebviewMessage =
   | UpdateLcmSettingsMessage
   | CancelLcmMaintenanceMessage
   | DiagnoseLcmDbMessage
+  | RecoverLcmDbLockMessage
   | RebuildLcmDbMessage
   | ExportLcmPromptsMessage
   | ConnectMcpMessage

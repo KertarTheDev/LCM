@@ -2362,6 +2362,17 @@ export type LcmDbDiagnosticCheck = {
     | "provider_capacity_deferred"
 }
 
+export type LcmOwnerLockSupportReport = {
+  present: boolean
+  recoveryState: "absent" | "fresh" | "wait" | "recoverable" | "force_required" | "blocked" | "unavailable"
+  diagnosticCode: string
+  canRecover: boolean
+  forceRequired: boolean
+  retryable: boolean
+  lockAgeMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  retryAfterMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
 export type LcmDbDiagnoseReport = {
   operationID: string
   dataDir: string
@@ -2370,6 +2381,22 @@ export type LcmDbDiagnoseReport = {
   checks: Array<LcmDbDiagnosticCheck>
   safeErrors: Array<LcmSafeError>
   quarantineRecommended: boolean
+  ownerLock?: LcmOwnerLockSupportReport
+}
+
+export type LcmDbRecoverLockInput = {
+  dryRun?: boolean
+  force?: boolean
+}
+
+export type LcmDbRecoverLockReport = {
+  operationID: string
+  dataDir: string
+  dryRun: boolean
+  force: boolean
+  status: "would_recover" | "recovered" | "not_needed" | "refused" | "failed"
+  ownerLock: LcmOwnerLockSupportReport
+  safeErrors: Array<LcmSafeError>
 }
 
 export type LcmDbRebuildInput = {
@@ -9740,6 +9767,56 @@ export type SessionLcmDbDiagnoseResponses = {
 }
 
 export type SessionLcmDbDiagnoseResponse = SessionLcmDbDiagnoseResponses[keyof SessionLcmDbDiagnoseResponses]
+
+export type SessionLcmDbRecoverLockData = {
+  body?: LcmDbRecoverLockInput
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/db/recover-lock"
+}
+
+export type SessionLcmDbRecoverLockErrors = {
+  /**
+   * LcmBadRequestError | InvalidRequestError
+   */
+  400: LcmBadRequestError | InvalidRequestError
+  /**
+   * LcmForbiddenError
+   */
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
+}
+
+export type SessionLcmDbRecoverLockError = SessionLcmDbRecoverLockErrors[keyof SessionLcmDbRecoverLockErrors]
+
+export type SessionLcmDbRecoverLockResponses = {
+  /**
+   * LCM database owner-lock recovery report
+   */
+  200: LcmDbRecoverLockReport
+}
+
+export type SessionLcmDbRecoverLockResponse = SessionLcmDbRecoverLockResponses[keyof SessionLcmDbRecoverLockResponses]
 
 export type SessionLcmDbRebuildData = {
   body?: LcmDbRebuildInput

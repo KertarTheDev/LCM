@@ -25,7 +25,7 @@ import {
 } from "./context"
 import { LcmDb } from "./db"
 import { isLcmSafeError, safeErrorForDbStatus } from "./db-errors"
-import { diagnoseRuntimeLcmDb, rebuildRuntimeLcmDb } from "./db-support-actions"
+import { diagnoseRuntimeLcmDb, rebuildRuntimeLcmDb, recoverRuntimeLcmDbLock } from "./db-support-actions"
 import {
   cancelQueuedDeferredSoftMaintenanceJob,
   finishDeferredSoftMaintenanceJob,
@@ -162,6 +162,7 @@ import {
   type LcmDescribeInput,
   type LcmDescribeResult,
   type LcmDbDiagnoseReport,
+  type LcmDbRecoverLockReport,
   type LcmDbRebuildReport,
   type LcmExpandQueryInput,
   type LcmExpandQueryResult,
@@ -254,6 +255,11 @@ export interface Interface {
   ) => Effect.Effect<LcmMaintenanceResult, LcmSafeError>
   readonly diagnoseDb: (input: { sessionID: string }) => Effect.Effect<LcmDbDiagnoseReport, LcmSafeError>
   readonly rebuildDb: (input: { sessionID: string; dryRun: boolean }) => Effect.Effect<LcmDbRebuildReport, LcmSafeError>
+  readonly recoverDbLock: (input: {
+    sessionID: string
+    dryRun: boolean
+    force: boolean
+  }) => Effect.Effect<LcmDbRecoverLockReport, LcmSafeError>
   readonly exportPrompts: (input: {
     sessionID: string
     workspaceRoot: string
@@ -2907,6 +2913,15 @@ export const layer = Layer.effect(
       return yield* rebuildRuntimeLcmDb({ lcmDb, sessionID: input.sessionID, dryRun: input.dryRun })
     })
 
+    const recoverDbLock: Interface["recoverDbLock"] = Effect.fn("LcmRuntime.recoverDbLock")(function* (input) {
+      return yield* recoverRuntimeLcmDbLock({
+        lcmDb,
+        sessionID: input.sessionID,
+        dryRun: input.dryRun,
+        force: input.force,
+      })
+    })
+
     const exportPrompts: Interface["exportPrompts"] = Effect.fn("LcmRuntime.exportPrompts")(function* (input) {
       const scope = yield* getConversationScope({ sessionID: input.sessionID })
       const ready = yield* resolveSessionFamilyDb({ sessionID: input.sessionID })
@@ -4401,6 +4416,7 @@ export const layer = Layer.effect(
       cancelDeferredMaintenance,
       diagnoseDb,
       rebuildDb,
+      recoverDbLock,
       exportPrompts,
       finalizeProviderRequestSnapshot: (input) =>
         Effect.gen(function* () {
@@ -4530,6 +4546,10 @@ export function diagnoseDb(input: { sessionID: string }) {
 
 export function rebuildDb(input: { sessionID: string; dryRun: boolean }) {
   return runPromise((svc) => svc.rebuildDb(input))
+}
+
+export function recoverDbLock(input: { sessionID: string; dryRun: boolean; force: boolean }) {
+  return runPromise((svc) => svc.recoverDbLock(input))
 }
 
 export function exportPrompts(input: { sessionID: string; workspaceRoot: string }) {

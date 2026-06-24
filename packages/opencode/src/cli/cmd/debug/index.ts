@@ -18,7 +18,7 @@ import { AgentCommand } from "./agent"
 import { StartupCommand } from "./startup"
 import { V2Command } from "./v2"
 // kilocode_change start
-import { LcmDbDiagnoseCommand, LcmDbRebuildCommand, LcmDbSmokeCommand } from "./lcm-db"
+import { LcmDbDiagnoseCommand, LcmDbRebuildCommand, LcmDbRecoverLockCommand, LcmDbSmokeCommand } from "./lcm-db"
 // kilocode_change end
 
 export const DebugCommand = cmd({
@@ -40,6 +40,7 @@ export const DebugCommand = cmd({
       // kilocode_change start
       .command(LcmDbSmokeCommand)
       .command(LcmDbDiagnoseCommand)
+      .command(LcmDbRecoverLockCommand)
       .command(LcmDbRebuildCommand)
       // kilocode_change end
       .command(PathsCommand)

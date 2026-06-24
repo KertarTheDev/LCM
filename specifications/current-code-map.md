@@ -40,7 +40,7 @@ Key files:
 - `safe-error-schema.ts`: shared zod schemas for LCM safe-error code/action/template payloads used by events, routes, and assistant-message error serialization.
 - `operation-control.ts`: shared content-safe operation timeout and cancellation helpers for prompt-critical context work.
 - `hash.ts`: canonical SHA-256, stable JSON hash, and namespace-separated hash helpers shared by context, provider protocol, and deferred-job identifiers.
-- `db-support-actions.ts`: runtime-owned DB diagnose/rebuild support orchestration, trusted session-family resolution, healthy-state repair refusal, and active-session resync after guided repair.
+- `db-support-actions.ts`: runtime-owned DB diagnose, owner-lock recovery, and rebuild support orchestration, trusted session-family resolution, live-owner/healthy-state repair refusal, and active-session resync after guided recovery or repair.
 - `deferred-jobs.ts`: runtime-owned persistence helpers for deferred soft-maintenance retries that must survive runtime restart without storing raw conversation content, including the content-safe protected-current-user boundary.
 - `lifecycle.ts`: family DB readiness, conversation creation, lifecycle states, boundary metadata, capability-class proof, session deletion cleanup, source coverage counts, and usage records.
 - `source-sync.ts`: finalized MessageV2 ingestion into immutable `lcm_messages`, `lcm_message_parts`, and large-file artifact rows.
@@ -65,7 +65,7 @@ Important changed files outside `src/session/lcm/`:
 - `packages/opencode/src/session/message-v2.ts`: maps LCM safe errors into assistant message errors.
 - `packages/opencode/src/session/llm.ts`, `session.ts`, `processor.ts`, `status.ts`, `system.ts`: smaller integration points for provider execution, session behavior, and status surfaces.
 - `packages/opencode/src/server/routes/instance/index.ts` and `session.ts`: LCM settings, capabilities, runtime-owned maintenance, and summarize compatibility route behavior without legacy `SessionCompaction` turns.
-- `packages/opencode/src/cli/cmd/lcm.ts` and `debug/lcm-db.ts`: user/debug CLI for LCM settings and family DB inspection/smoke/rebuild commands.
+- `packages/opencode/src/cli/cmd/lcm.ts` and `debug/lcm-db.ts`: user/debug CLI for LCM settings and family DB inspection/smoke/owner-lock-recovery/rebuild commands.
 
 ## Model-Visible Tools
 

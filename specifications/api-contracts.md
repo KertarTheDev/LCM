@@ -29,7 +29,7 @@ The generated JSON must be deterministic: UTF-8, sorted object keys, stable arra
 - Shared type names, string unions, enum literal values, required/optional field lists, route names, HTTP status mappings, webview message names, event names, and event payload names.
 - Safe-message template keys, allowed error-code mappings, allowed `safeParams` keys, default canonical English `safeMessage` text, retryability/action constraints, and action-consistency rules.
 - Retrieval and map tool input/result schemas plus canonical model-visible tool descriptions exactly as written below.
-- Public settings, DB smoke/diagnose/rebuild, usage, metrics, large-file status, and map DTO schemas.
+- Public settings, DB smoke/diagnose/recover-lock/rebuild, usage, metrics, large-file status, and map DTO schemas.
 
 `lcm:contracts:check` must compare generated SDK DTOs, runtime route DTOs, webview envelopes, tool schemas, event payload serializers, safe-error template registries, and model-visible tool descriptions against the committed artifact. It fails on source checksum drift, missing fields, extra public fields, optionality drift, string-literal drift, route/message/event-name drift, canonical safe-message drift, HTTP status drift, or tool-description drift. It must not fail solely because unrelated commits changed repository `HEAD`. Implementation-local helper fields may exist only when they are never serialized through runtime routes, tool results, events, settings payloads, usage rows, forwarded client payloads, debug reports, or model-visible tool registration.
 
@@ -277,6 +277,7 @@ type LcmWebviewMessageName =
   | "updateLcmSettings"
   | "cancelLcmMaintenance"
   | "diagnoseLcmDb"
+  | "recoverLcmDbLock"
   | "rebuildLcmDb"
   | "exportLcmPrompts"
 
@@ -363,7 +364,7 @@ When a second runtime hits a non-stale family DB owner lock, use `lcm.db.unavail
 
 When PGlite startup, migration, or health checks detect corruption, use `lcm.db.unavailable` with `code = "db_corrupt"`, `retryable = false`, and `action = "contact_support"` unless a specific retryable startup condition is known. Render it as inline session/family-memory status. The payload may include operation/conversation IDs, retryability, and action labels only; it must not include raw rows, message text, summaries, tool output, file content, helper output, lockfile contents, or arbitrary exception text.
 
-The debug CLI report shapes `LcmDbSmokeReport`, `LcmDbDiagnoseReport`, and `LcmDbRebuildReport` are content-safe support surfaces. For these commands, a data-dir argument identifies a family root, normally `<kilo-data-dir>/lcm/families/<family-id>`, not the parent Kilo data directory and not the `pglite/` child directory. `kilo debug lcm-db-smoke --data-dir <family-root> --json` reports only check names/statuses, runtime mode, schema version, operation ID, data directory, and safe errors. Diagnose is read-only when possible and includes only named health checks for owner-lock/layout, migration registry, search extension/index readiness, deferred maintenance queue readability, large-payload marker readability, path-provenance row readability, map status row readability, and artifact cleanup queue readability. The session route `POST /session/:sessionID/lcm/db/diagnose` derives the family root from trusted runtime session state, returns the same content-safe diagnose report shape, and uses the existing runtime-owned DB worker when that family is already open so it does not create a second owner. The session route `POST /session/:sessionID/lcm/db/rebuild` accepts `LcmDbRebuildInput`, defaults to `dryRun = true`, derives the family from trusted runtime session state, and never accepts caller-supplied data directories. Apply mode refuses healthy or otherwise non-repairable family state, permits only repairable corruption/unavailable diagnoses, closes the runtime-owned family worker before mutation when present, quarantines the family `pglite/` directory, initializes a fresh runtime-owned family DB, and resyncs the active session's finalized durable Kilo messages. Rebuild reports contain only counts, operation IDs, family data directory, quarantine directory, and safe errors; they must not expose raw memory or become raw-inspection/export payloads.
+The debug CLI report shapes `LcmDbSmokeReport`, `LcmDbDiagnoseReport`, `LcmDbRecoverLockReport`, and `LcmDbRebuildReport` are content-safe support surfaces. For these commands, a data-dir argument identifies a family root, normally `<kilo-data-dir>/lcm/families/<family-id>`, not the parent Kilo data directory and not the `pglite/` child directory. `kilo debug lcm-db-smoke --data-dir <family-root> --json` reports only check names/statuses, runtime mode, schema version, operation ID, data directory, and safe errors. Diagnose is read-only when possible and includes only named health checks for owner-lock/layout, migration registry, search extension/index readiness, deferred maintenance queue readability, large-payload marker readability, path-provenance row readability, map status row readability, and artifact cleanup queue readability. When storage is locked, diagnose may include `ownerLock` with only content-safe recovery state, diagnostic code, booleans, and timers; it must not expose owner IDs, hostnames, PIDs, raw lock bytes, or memory rows. The session route `POST /session/:sessionID/lcm/db/diagnose` derives the family root from trusted runtime session state, returns the same content-safe diagnose report shape, and uses the existing runtime-owned DB worker when that family is already open so it does not create a second owner. The session route `POST /session/:sessionID/lcm/db/recover-lock` accepts `LcmDbRecoverLockInput`, defaults to `dryRun = true` and `force = false`, derives the family from trusted runtime session state, and never accepts caller-supplied data directories. Apply mode closes the runtime-owned family worker before mutation when present, quarantines only a recoverable or explicitly forced uncheckable `owner.lock`, reopens the existing family DB, and refuses fresh/live-owner locks. The session route `POST /session/:sessionID/lcm/db/rebuild` accepts `LcmDbRebuildInput`, defaults to `dryRun = true`, derives the family from trusted runtime session state, and never accepts caller-supplied data directories. Apply mode refuses healthy or otherwise non-repairable family state, permits only repairable corruption/unavailable diagnoses, closes the runtime-owned family worker before mutation when present, quarantines the family `pglite/` directory, initializes a fresh runtime-owned family DB, and resyncs the active session's finalized durable Kilo messages. Recover-lock reports contain only operation IDs, family data directory, lock recovery state, and safe errors. Rebuild reports contain only counts, operation IDs, family data directory, quarantine directory, and safe errors; neither support report may expose raw memory or become raw-inspection/export payloads.
 
 `POST /session/:sessionID/lcm/prompts/export` is an explicit local debugging action, not a raw DB browser. The route derives the conversation and family DB from trusted runtime session state, writes a new workspace-local `lcm-export/<timestamp>-<sessionID>/` directory, and returns only `LcmPromptExportReport` metadata: operation ID, session ID, conversation ID, export directory, file count, and diagnostic warning codes. The Markdown files inside the export directory are intentionally content-bearing because the user explicitly requested prompt/context evidence; they reconstruct model-visible LCM prompts and active-context files from durable LCM rows and artifacts, including terminal tool inputs and outputs normally hidden from the chat UI. The extension host remains a client of this route and must not open PGlite or read raw family storage directly.
 
@@ -596,12 +597,32 @@ interface LcmDbQueueStatus {
 
 type LcmDebugCheckStatus = "passed" | "failed" | "skipped"
 type LcmDbRebuildStatus = "would_rebuild" | "rebuilt" | "partial" | "failed"
+type LcmDbRecoverLockStatus = "would_recover" | "recovered" | "not_needed" | "refused" | "failed"
 type LcmDbSmokeRuntimeMode = "source" | "compiled-bin" | "serve" | "vscode-bundled"
+type LcmOwnerLockRecoveryState =
+  | "absent"
+  | "fresh"
+  | "wait"
+  | "recoverable"
+  | "force_required"
+  | "blocked"
+  | "unavailable"
 
 interface LcmDbDiagnosticCheck {
   name: string
   status: LcmDebugCheckStatus
   code?: LcmSafeErrorCode
+}
+
+interface LcmOwnerLockSupportReport {
+  present: boolean
+  recoveryState: LcmOwnerLockRecoveryState
+  diagnosticCode: string
+  canRecover: boolean
+  forceRequired: boolean
+  retryable: boolean
+  lockAgeMs?: number
+  retryAfterMs?: number
 }
 
 interface LcmDbDiagnoseReport {
@@ -612,6 +633,22 @@ interface LcmDbDiagnoseReport {
   checks: LcmDbDiagnosticCheck[]
   safeErrors: LcmSafeError[]
   quarantineRecommended: boolean
+  ownerLock?: LcmOwnerLockSupportReport
+}
+
+interface LcmDbRecoverLockInput {
+  dryRun?: boolean
+  force?: boolean
+}
+
+interface LcmDbRecoverLockReport {
+  operationID: OperationID
+  dataDir: string
+  dryRun: boolean
+  force: boolean
+  status: LcmDbRecoverLockStatus
+  ownerLock: LcmOwnerLockSupportReport
+  safeErrors: LcmSafeError[]
 }
 
 interface LcmDbRebuildReport {
@@ -1781,11 +1818,13 @@ Runtime route and generated SDK surfaces must preserve these DTOs exactly:
 - `PATCH /session/:sessionID/lcm/settings` accepts `LcmUpdateSettingsInput` and returns `LcmSettingsState`.
 - `POST /session/:sessionID/lcm/maintenance/cancel` accepts `LcmCancelMaintenanceInput` and returns `LcmMaintenanceResult`.
 - `POST /session/:sessionID/lcm/db/diagnose` returns `LcmDbDiagnoseReport`.
+- `POST /session/:sessionID/lcm/db/recover-lock` accepts optional `LcmDbRecoverLockInput` and returns `LcmDbRecoverLockReport`.
 - `POST /session/:sessionID/lcm/db/rebuild` accepts optional `LcmDbRebuildInput` and returns `LcmDbRebuildReport`.
 - `POST /session/:sessionID/lcm/prompts/export` returns `LcmPromptExportReport`.
 
 The generated SDK must expose the primary sessionless settings methods as `client.lcm.settings.get/update`; compatibility session settings methods may remain but must not be the only generated settings surface. The generated session maintenance cancel method is `client.session.lcm.maintenance.cancel(...)` and uses the path `sessionID`; clients must not supply a conversation ID for this operation.
 The generated session DB diagnose method is `client.session.lcm.db.diagnose(...)`; clients must not supply a family data directory or conversation ID for this operation.
+The generated session DB recover-lock method is `client.session.lcm.db.recoverLock(...)`; clients may pass only `dryRun` and `force` in the body and must not supply a family data directory or conversation ID. Omitted bodies are equivalent to `{ dryRun: true, force: false }`.
 The generated session DB rebuild method is `client.session.lcm.db.rebuild(...)`; clients may pass only `dryRun` in the body and must not supply a family data directory or conversation ID. Omitted bodies are equivalent to `{ dryRun: true }`.
 The generated session prompt export method is `client.session.lcm.prompts.export(...)`; clients must not supply a family data directory or conversation ID.
 
@@ -1800,9 +1839,9 @@ Runtime route failures that are request-level failures return `LcmRouteErrorResp
 | `db_unavailable`, `db_migration_failed`, `db_corrupt`, `settings_unavailable`, `provider_unavailable`, `hard_limit_unresolved` | `503` |
 | `timeout`, `canceled` | `504` |
 
-The VSCode settings webview uses `LcmWebviewRequestEnvelope` and `LcmWebviewResponseEnvelope` with message types `requestLcmSettings`, `updateLcmSettings`, `cancelLcmMaintenance`, `diagnoseLcmDb`, `rebuildLcmDb`, and `exportLcmPrompts`, forwarded through the extension to the generated runtime SDK. Response envelopes preserve the original `requestID`; failures use `ok = false` with `LcmSafeError`. The settings page must use session-scoped settings routes when a current or inherited local session is available and sessionless settings routes when no session is open. Reused Settings panels and webview reloads must preserve the latest inherited local session context before sending Memory settings/actions. Prompt export requires a current trusted session; the Memory UI keeps `Export prompts` visible but disabled for session-backed states until `dbStatus.status = "ready"`, and omits it for purely sessionless state. The VSCode extension host remains a client and must not open any family LCM DB.
+The VSCode settings webview uses `LcmWebviewRequestEnvelope` and `LcmWebviewResponseEnvelope` with message types `requestLcmSettings`, `updateLcmSettings`, `cancelLcmMaintenance`, `diagnoseLcmDb`, `recoverLcmDbLock`, `rebuildLcmDb`, and `exportLcmPrompts`, forwarded through the extension to the generated runtime SDK. Response envelopes preserve the original `requestID`; failures use `ok = false` with `LcmSafeError`. The settings page must use session-scoped settings routes when a current or inherited local session is available and sessionless settings routes when no session is open. Reused Settings panels and webview reloads must preserve the latest inherited local session context before sending Memory settings/actions. Prompt export requires a current trusted session; the Memory UI keeps `Export prompts` visible but disabled for session-backed states until `dbStatus.status = "ready"`, and omits it for purely sessionless state. The VSCode extension host remains a client and must not open any family LCM DB.
 
-Prompt and command dispatch failures continue to use the normal extension-to-webview `sendMessageFailed` message so the composer draft and file attachments are restored through the existing prompt input recovery path. Advisory extension-side LCM prewarm failures must not produce `sendMessageFailed` or block prompt submission. If the prompt or command dispatch itself fails with a structured runtime `LcmSafeError`, the payload may include optional `safeError?: LcmSafeError` preserving the runtime code, retryability, action, safe message, and diagnostic code. The webview must prefer `safeError.safeMessage` for user-facing memory recovery copy and must not expose raw DB paths or memory content.
+Prompt and command dispatch failures continue to use the normal extension-to-webview `sendMessageFailed` message so the composer draft and file attachments are restored through the existing prompt input recovery path. Advisory extension-side LCM prewarm failures must not produce `sendMessageFailed`. Prompt and command sends may perform a bounded readiness wait before submitting the SDK prompt/command request so transient retryable owner-lock startup states can clear; while waiting, the extension uses the existing `sessionStatus: retry` shape and must honor user abort. If readiness remains blocked or the prompt/command dispatch itself fails with a structured runtime `LcmSafeError`, the payload may include optional `safeError?: LcmSafeError` preserving the runtime code, retryability, action, safe message, and diagnostic code. The webview must prefer `safeError.safeMessage` for user-facing memory recovery copy and must not expose raw DB paths or memory content.
 
 The settings page must not expose `lcm.enabled`, an encryption toggle, raw memory inspection/export, LCM-only memory deletion, or pre-beta schema conversion controls.
 

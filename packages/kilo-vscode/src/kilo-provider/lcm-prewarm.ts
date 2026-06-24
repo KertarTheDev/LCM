@@ -16,11 +16,14 @@ export type LcmPrewarmInput = {
 type LcmPrewarmTimers = {
   setTimeout: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>
   clearTimeout: (handle: ReturnType<typeof setTimeout>) => void
+  now?: () => number
 }
 
 type LcmPrewarmOptions = {
   retryDelaysMs?: readonly number[]
+  waitRetryDelaysMs?: readonly number[]
   readinessTimeoutMs?: number
+  waitTimeoutMs?: number
   timers?: LcmPrewarmTimers
   logger?: Pick<Console, "warn">
 }
@@ -36,11 +39,27 @@ export type LcmPrewarmReadiness =
       safeError?: LcmSafeError
     }
 
+export type LcmPrewarmWaitRetry = {
+  attempt: number
+  delayMs: number
+  next: number
+  safeMessage: string
+  safeError?: LcmSafeError
+}
+
+export type LcmPrewarmWaitInput = LcmPrewarmInput & {
+  abortSignal?: AbortSignal
+  onRetry?: (retry: LcmPrewarmWaitRetry) => void
+}
+
 const defaultRetryDelaysMs = [750, 2_000, 5_000] as const
+const defaultWaitRetryDelaysMs = [750, 2_000, 5_000] as const
 const defaultReadinessTimeoutMs = 30_000
+const defaultWaitTimeoutMs = 60_000
 const defaultTimers: LcmPrewarmTimers = {
   setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
   clearTimeout: (handle) => clearTimeout(handle),
+  now: () => Date.now(),
 }
 
 function lcmPrewarmKey(input: Pick<LcmPrewarmInput, "sessionID" | "directory" | "workspace">): string {
@@ -67,14 +86,18 @@ export class LcmPrewarmer {
   private readonly activeRequests = new Map<string, number>()
   private readonly inFlightRequests = new Map<string, Promise<LcmPrewarmReadiness>>()
   private readonly retryDelaysMs: readonly number[]
+  private readonly waitRetryDelaysMs: readonly number[]
   private readonly readinessTimeoutMs: number
+  private readonly waitTimeoutMs: number
   private readonly timers: LcmPrewarmTimers
   private readonly logger: Pick<Console, "warn">
   private requestSequence = 0
 
   constructor(options: LcmPrewarmOptions = {}) {
     this.retryDelaysMs = options.retryDelaysMs ?? defaultRetryDelaysMs
+    this.waitRetryDelaysMs = options.waitRetryDelaysMs ?? defaultWaitRetryDelaysMs
     this.readinessTimeoutMs = options.readinessTimeoutMs ?? defaultReadinessTimeoutMs
+    this.waitTimeoutMs = options.waitTimeoutMs ?? defaultWaitTimeoutMs
     this.timers = options.timers ?? defaultTimers
     this.logger = options.logger ?? console
   }
@@ -132,7 +155,46 @@ export class LcmPrewarmer {
     return this.checkReadiness(input, key, true)
   }
 
-  private checkReadiness(input: LcmPrewarmInput, key: string, retryFailures: boolean): Promise<LcmPrewarmReadiness> {
+  async waitUntilReady(input: LcmPrewarmWaitInput): Promise<LcmPrewarmReadiness> {
+    if (!input.client || input.connectionState !== "connected") {
+      return {
+        ok: false,
+        retryable: true,
+        safeMessage: "Memory is waiting for the CLI backend connection.",
+      }
+    }
+    const key = lcmPrewarmKey(input)
+    const timer = this.retryTimers.get(key)
+    if (timer) this.timers.clearTimeout(timer)
+    this.retryTimers.delete(key)
+    const startedAt = this.now()
+    for (let attempt = 1; ; attempt++) {
+      if (input.abortSignal?.aborted) return this.notReady("Memory readiness wait was canceled.", false)
+      const readiness = await this.checkReadiness(input, key, false, false)
+      if (readiness.ok) return readiness
+      if (!readiness.retryable) return readiness
+      const elapsedMs = Math.max(0, this.now() - startedAt)
+      const remainingMs = Math.max(0, this.waitTimeoutMs - elapsedMs)
+      if (remainingMs <= 0) return readiness
+      const delayMs = Math.min(this.waitDelayMs(attempt), remainingMs)
+      input.onRetry?.({
+        attempt,
+        delayMs,
+        next: this.now() + delayMs,
+        safeMessage: readiness.safeMessage,
+        ...(readiness.safeError ? { safeError: readiness.safeError } : {}),
+      })
+      const slept = await this.sleep(delayMs, input.abortSignal)
+      if (!slept) return this.notReady("Memory readiness wait was canceled.", false)
+    }
+  }
+
+  private checkReadiness(
+    input: LcmPrewarmInput,
+    key: string,
+    retryFailures: boolean,
+    warnFailures = true,
+  ): Promise<LcmPrewarmReadiness> {
     const existing = this.inFlightRequests.get(key)
     if (existing) return existing
     this.inFlight.add(key)
@@ -152,7 +214,7 @@ export class LcmPrewarmer {
           const safeError = extractLcmSafeError(result.error)
           const retryable = safeError?.retryable === true
           const retrying = retryFailures && retryable ? this.scheduleRetry(key, input) : false
-          this.warnReadinessFailure(input, result.error, retrying)
+          if (warnFailures) this.warnReadinessFailure(input, result.error, retrying)
           return this.notReady(safeError?.safeMessage ?? "Memory is not ready.", retryable, safeError)
         }
         if (result.data?.dbReady) {
@@ -175,7 +237,7 @@ export class LcmPrewarmer {
         const safeError = extractLcmSafeError(error)
         const retryable = safeError?.retryable ?? true
         const retrying = retryFailures && retryable ? this.scheduleRetry(key, input) : false
-        this.warnReadinessFailure(input, error, retrying)
+        if (warnFailures) this.warnReadinessFailure(input, error, retrying)
         return this.notReady(readinessFailureMessage(error), retryable, safeError)
       })
       .finally(() => {
@@ -187,6 +249,31 @@ export class LcmPrewarmer {
       })
     this.inFlightRequests.set(key, request)
     return request
+  }
+
+  private now(): number {
+    return this.timers.now?.() ?? Date.now()
+  }
+
+  private waitDelayMs(attempt: number): number {
+    const index = Math.max(0, attempt - 1)
+    return this.waitRetryDelaysMs[index] ?? this.waitRetryDelaysMs[this.waitRetryDelaysMs.length - 1] ?? 1_000
+  }
+
+  private sleep(delayMs: number, abortSignal: AbortSignal | undefined): Promise<boolean> {
+    if (delayMs <= 0) return Promise.resolve(true)
+    if (abortSignal?.aborted) return Promise.resolve(false)
+    return new Promise<boolean>((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const done = (completed: boolean) => {
+        if (timer) this.timers.clearTimeout(timer)
+        abortSignal?.removeEventListener("abort", onAbort)
+        resolve(completed)
+      }
+      const onAbort = () => done(false)
+      timer = this.timers.setTimeout(() => done(true), delayMs)
+      abortSignal?.addEventListener("abort", onAbort, { once: true })
+    })
   }
 
   private withReadinessTimeout<T>(operation: Promise<T>): Promise<T> {

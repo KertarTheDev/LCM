@@ -5,7 +5,13 @@ import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
 import { createLcmDbWorker } from "../../src/session/lcm/db-worker"
 import { resolveLcmDbLayout, resolveLcmFamilyRoot } from "../../src/session/lcm/db-layout"
-import { LCM_DB_GATE_SCHEMA_VERSION, diagnoseLcmDb, rebuildLcmDb, runLcmDbSmoke } from "../../src/session/lcm/db-smoke"
+import {
+  LCM_DB_GATE_SCHEMA_VERSION,
+  diagnoseLcmDb,
+  rebuildLcmDb,
+  recoverLcmDbLock,
+  runLcmDbSmoke,
+} from "../../src/session/lcm/db-smoke"
 import { deriveLcmFamilyID } from "../../src/session/lcm/family"
 import { LCM_PGLITE_GATE_TEST_SCALE } from "../../src/session/lcm/pglite-gate"
 
@@ -100,4 +106,42 @@ test("lcm-db support commands diagnose and dry-run rebuild using the LCM root", 
   expect(rebuild.status).toBe("would_rebuild")
   expect(rebuild.dryRun).toBe(true)
   expect(rebuild.rebuiltConversations).toBe(0)
+})
+
+test("lcm-db lock recovery requires explicit force for uncheckable owner locks", async () => {
+  await using tmp = await tmpdir()
+  const { kiloDataDir, familyRoot: dataDir } = testFamilyRoot(tmp.path, "ses_m31_lock_recovery_root")
+  const layout = resolveLcmDbLayout(dataDir)
+  await fs.mkdir(layout.rootDir, { recursive: true })
+  await fs.writeFile(layout.ownerLockPath, "{ not valid json")
+
+  const diagnose = await withKiloDataDir(kiloDataDir, () => diagnoseLcmDb({ dataDir }))
+  expect(diagnose.status).toBe("locked")
+  expect(diagnose.ownerLock).toMatchObject({
+    present: true,
+    recoveryState: "force_required",
+    diagnosticCode: "lcm_owner_lock_malformed",
+    canRecover: true,
+    forceRequired: true,
+  })
+
+  const refused = await withKiloDataDir(kiloDataDir, () => recoverLcmDbLock({ dataDir, dryRun: true, force: false }))
+  expect(refused.status).toBe("refused")
+  expect(refused.ownerLock.forceRequired).toBe(true)
+  expect(refused.safeErrors[0]).toMatchObject({
+    code: "db_locked",
+    diagnosticCode: "lcm_owner_lock_recovery_force_required",
+  })
+
+  const preview = await withKiloDataDir(kiloDataDir, () => recoverLcmDbLock({ dataDir, dryRun: true, force: true }))
+  expect(preview.status).toBe("would_recover")
+  expect(preview.ownerLock.forceRequired).toBe(true)
+
+  const recovered = await withKiloDataDir(kiloDataDir, () => recoverLcmDbLock({ dataDir, dryRun: false, force: true }))
+  expect(recovered.status).toBe("recovered")
+  expect(recovered.safeErrors).toEqual([])
+  expect(await exists(layout.ownerLockPath)).toBe(false)
+  expect(
+    (await fs.readdir(layout.rootDir)).some((entry) => entry.startsWith("owner.lock.quarantine.uncheckable.")),
+  ).toBe(true)
 })

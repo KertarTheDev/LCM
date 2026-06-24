@@ -289,6 +289,7 @@ export type LcmWebviewMessageName =
   | "updateLcmSettings"
   | "cancelLcmMaintenance"
   | "diagnoseLcmDb"
+  | "recoverLcmDbLock"
   | "rebuildLcmDb"
   | "exportLcmPrompts"
 
@@ -350,6 +351,7 @@ export interface LcmRuntime {
   cancelDeferredMaintenance(input: LcmCancelDeferredMaintenanceInput): Promise<LcmMaintenanceResult>
   diagnoseDb(input: { sessionID: SessionID }): Promise<LcmDbDiagnoseReport>
   rebuildDb(input: { sessionID: SessionID; dryRun: boolean }): Promise<LcmDbRebuildReport>
+  recoverDbLock(input: { sessionID: SessionID; dryRun: boolean; force: boolean }): Promise<LcmDbRecoverLockReport>
   runManualMaintenance(input: LcmManualMaintenanceInput): Promise<LcmMaintenanceResult>
   getSettingsState(input: {
     sessionID?: SessionID
@@ -520,12 +522,32 @@ export interface LcmDbQueueStatus {
 
 export type LcmDebugCheckStatus = "passed" | "failed" | "skipped"
 export type LcmDbRebuildStatus = "would_rebuild" | "rebuilt" | "partial" | "failed"
+export type LcmDbRecoverLockStatus = "would_recover" | "recovered" | "not_needed" | "refused" | "failed"
 export type LcmDbSmokeRuntimeMode = "source" | "compiled-bin" | "serve" | "vscode-bundled"
+export type LcmOwnerLockRecoveryState =
+  | "absent"
+  | "fresh"
+  | "wait"
+  | "recoverable"
+  | "force_required"
+  | "blocked"
+  | "unavailable"
 
 export interface LcmDbDiagnosticCheck {
   name: string
   status: LcmDebugCheckStatus
   code?: LcmSafeErrorCode
+}
+
+export interface LcmOwnerLockSupportReport {
+  present: boolean
+  recoveryState: LcmOwnerLockRecoveryState
+  diagnosticCode: string
+  canRecover: boolean
+  forceRequired: boolean
+  retryable: boolean
+  lockAgeMs?: number
+  retryAfterMs?: number
 }
 
 export interface LcmDbDiagnoseReport {
@@ -536,6 +558,7 @@ export interface LcmDbDiagnoseReport {
   checks: LcmDbDiagnosticCheck[]
   safeErrors: LcmSafeError[]
   quarantineRecommended: boolean
+  ownerLock?: LcmOwnerLockSupportReport
 }
 
 export interface LcmDbRebuildReport {
@@ -548,6 +571,16 @@ export interface LcmDbRebuildReport {
   readOnlyConversations: number
   skippedConversations: number
   failedConversations: number
+  safeErrors: LcmSafeError[]
+}
+
+export interface LcmDbRecoverLockReport {
+  operationID: OperationID
+  dataDir: string
+  dryRun: boolean
+  force: boolean
+  status: LcmDbRecoverLockStatus
+  ownerLock: LcmOwnerLockSupportReport
   safeErrors: LcmSafeError[]
 }
 

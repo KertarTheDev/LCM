@@ -1,6 +1,7 @@
 import type {
   Event,
   LcmDbDiagnoseReport,
+  LcmDbRecoverLockReport,
   LcmDbRebuildReport,
   LcmMaintenanceResult,
   LcmPromptExportReport,
@@ -175,6 +176,7 @@ export type RequestLcmSettingsResultMessage = LcmWebviewResultMessage<"requestLc
 export type UpdateLcmSettingsResultMessage = LcmWebviewResultMessage<"updateLcmSettings", LcmSettingsState>
 export type CancelLcmMaintenanceResultMessage = LcmWebviewResultMessage<"cancelLcmMaintenance", LcmMaintenanceResult>
 export type DiagnoseLcmDbResultMessage = LcmWebviewResultMessage<"diagnoseLcmDb", LcmDbDiagnoseReport>
+export type RecoverLcmDbLockResultMessage = LcmWebviewResultMessage<"recoverLcmDbLock", LcmDbRecoverLockReport>
 export type RebuildLcmDbResultMessage = LcmWebviewResultMessage<"rebuildLcmDb", LcmDbRebuildReport>
 export type ExportLcmPromptsResultMessage = LcmWebviewResultMessage<"exportLcmPrompts", LcmPromptExportReport>
 
@@ -1021,6 +1023,7 @@ export type ExtensionMessage =
   | UpdateLcmSettingsResultMessage
   | CancelLcmMaintenanceResultMessage
   | DiagnoseLcmDbResultMessage
+  | RecoverLcmDbLockResultMessage
   | RebuildLcmDbResultMessage
   | ExportLcmPromptsResultMessage
   | PermissionRequestMessage

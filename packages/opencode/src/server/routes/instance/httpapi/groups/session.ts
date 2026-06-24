@@ -274,6 +274,24 @@ const LcmDbDiagnosticCheckSchema = Schema.Struct({
   status: Schema.Literals(["passed", "failed", "skipped"]),
   code: Schema.optional(LcmSafeErrorSchema.fields.code),
 }).annotate({ identifier: "LcmDbDiagnosticCheck" })
+const LcmOwnerLockSupportReportSchema = Schema.Struct({
+  present: Schema.Boolean,
+  recoveryState: Schema.Literals([
+    "absent",
+    "fresh",
+    "wait",
+    "recoverable",
+    "force_required",
+    "blocked",
+    "unavailable",
+  ]),
+  diagnosticCode: Schema.String,
+  canRecover: Schema.Boolean,
+  forceRequired: Schema.Boolean,
+  retryable: Schema.Boolean,
+  lockAgeMs: Schema.optional(Schema.Number),
+  retryAfterMs: Schema.optional(Schema.Number),
+}).annotate({ identifier: "LcmOwnerLockSupportReport" })
 export const LcmDbDiagnoseReportSchema = Schema.Struct({
   operationID: Schema.String,
   dataDir: Schema.String,
@@ -282,11 +300,28 @@ export const LcmDbDiagnoseReportSchema = Schema.Struct({
   checks: Schema.Array(LcmDbDiagnosticCheckSchema),
   safeErrors: Schema.Array(LcmSafeErrorSchema),
   quarantineRecommended: Schema.Boolean,
+  ownerLock: Schema.optional(LcmOwnerLockSupportReportSchema),
 }).annotate({ identifier: "LcmDbDiagnoseReport" })
 const LcmDbRebuildInputFields = Schema.Struct({
   dryRun: Schema.optional(Schema.Boolean),
 })
 export const LcmDbRebuildInput = LcmDbRebuildInputFields.annotate({ identifier: "LcmDbRebuildInput" })
+const LcmDbRecoverLockInputFields = Schema.Struct({
+  dryRun: Schema.optional(Schema.Boolean),
+  force: Schema.optional(Schema.Boolean),
+})
+export const LcmDbRecoverLockInput = LcmDbRecoverLockInputFields.annotate({
+  identifier: "LcmDbRecoverLockInput",
+})
+export const LcmDbRecoverLockReportSchema = Schema.Struct({
+  operationID: Schema.String,
+  dataDir: Schema.String,
+  dryRun: Schema.Boolean,
+  force: Schema.Boolean,
+  status: Schema.Literals(["would_recover", "recovered", "not_needed", "refused", "failed"]),
+  ownerLock: LcmOwnerLockSupportReportSchema,
+  safeErrors: Schema.Array(LcmSafeErrorSchema),
+}).annotate({ identifier: "LcmDbRecoverLockReport" })
 export const LcmDbRebuildReportSchema = Schema.Struct({
   operationID: Schema.String,
   dataDir: Schema.String,
@@ -331,6 +366,7 @@ export const SessionPaths = {
   lcmSettings: `${root}/:sessionID/lcm/settings`,
   lcmMaintenanceCancel: `${root}/:sessionID/lcm/maintenance/cancel`,
   lcmDbDiagnose: `${root}/:sessionID/lcm/db/diagnose`,
+  lcmDbRecoverLock: `${root}/:sessionID/lcm/db/recover-lock`,
   lcmDbRebuild: `${root}/:sessionID/lcm/db/rebuild`,
   lcmPromptsExport: `${root}/:sessionID/lcm/prompts/export`,
   // kilocode_change end
@@ -619,6 +655,20 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.lcm.db.diagnose",
             summary: "Diagnose LCM database",
             description: "Run a content-safe, read-only LCM database diagnosis for the trusted session family.",
+          }),
+        ),
+        HttpApiEndpoint.post("lcmDbRecoverLock", SessionPaths.lcmDbRecoverLock, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: [HttpApiSchema.NoContent, LcmDbRecoverLockInput],
+          success: described(LcmDbRecoverLockReportSchema, "LCM database owner-lock recovery report"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.db.recoverLock",
+            summary: "Recover LCM database owner lock",
+            description:
+              "Run a content-safe owner-lock recovery preview or apply-mode repair for the trusted session family.",
           }),
         ),
         HttpApiEndpoint.post("lcmDbRebuild", SessionPaths.lcmDbRebuild, {

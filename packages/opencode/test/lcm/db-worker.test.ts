@@ -7,7 +7,12 @@ import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
 import { createLcmDbWorker, LCM_DB_REQUEST_TIMEOUTS_BY_PURPOSE } from "../../src/session/lcm/db-worker"
 import { ensureLcmRoot, resolveLcmDbLayout } from "../../src/session/lcm/db-layout"
-import { acquireOwnerLock, type LcmOwnerLockMetadata } from "../../src/session/lcm/owner-lock"
+import {
+  acquireOwnerLock,
+  diagnoseOwnerLock,
+  recoverOwnerLock,
+  type LcmOwnerLockMetadata,
+} from "../../src/session/lcm/owner-lock"
 import type { LcmDbRequest, OperationID } from "../../src/session/lcm/types"
 
 const schemaVersion = 2
@@ -622,6 +627,89 @@ test("owner-lock-platform-protocol-v1 stale takeover quarantines the observed ow
   expect((await readJson<LcmOwnerLockMetadata>(quarantine)).ownerID).toBe("owner_stale")
 
   await worker.close()
+})
+
+test("owner-lock support recovery quarantines stale locks and refuses live owners", async () => {
+  await using tmp = await tmpdir()
+  const dataDir = path.join(tmp.path, "lcm")
+  const layout = resolveLcmDbLayout(dataDir)
+  await ensureLcmRoot(layout)
+  const now = Date.parse("2026-04-29T12:00:00.000Z")
+  const stale: LcmOwnerLockMetadata = {
+    version: 1,
+    ownerID: "owner_support_stale",
+    pid: findDeadPid(),
+    hostname: os.hostname(),
+    runtimeMode: "source",
+    startedAt: new Date(now - 60_000).toISOString(),
+    heartbeatAt: new Date(now - 60_000).toISOString(),
+    schemaVersion,
+    dataDir: layout.rootDir,
+  }
+  await fs.writeFile(layout.ownerLockPath, JSON.stringify(stale, null, 2) + "\n")
+
+  const options = {
+    now: () => now,
+    staleMs: 1_000,
+    deadPidGraceMs: 2_000,
+    livePidStaleVetoMs: 45_000,
+  }
+  const diagnosis = await diagnoseOwnerLock({ layout, options })
+  expect(diagnosis).toMatchObject({
+    present: true,
+    recoveryState: "recoverable",
+    canRecover: true,
+    forceRequired: false,
+  })
+
+  const preview = await recoverOwnerLock({
+    layout,
+    operationID: operationID("support_preview"),
+    dryRun: true,
+    force: false,
+    options,
+  })
+  expect(preview).toMatchObject({ ok: true, recovered: false })
+  expect(await exists(layout.ownerLockPath)).toBe(true)
+
+  const recovered = await recoverOwnerLock({
+    layout,
+    operationID: operationID("support_apply"),
+    dryRun: false,
+    force: false,
+    options,
+  })
+  expect(recovered).toMatchObject({ ok: true, recovered: true, quarantined: true })
+  expect(await exists(layout.ownerLockPath)).toBe(false)
+  expect(await exists(`${layout.ownerLockPath}.quarantine.owner_support_stale.op_support_apply`)).toBe(true)
+
+  const live: LcmOwnerLockMetadata = {
+    ...stale,
+    ownerID: "owner_support_live",
+    pid: process.pid,
+    heartbeatAt: new Date(now).toISOString(),
+  }
+  await fs.writeFile(layout.ownerLockPath, JSON.stringify(live, null, 2) + "\n")
+  const refused = await recoverOwnerLock({
+    layout,
+    operationID: operationID("support_live_refused"),
+    dryRun: false,
+    force: true,
+    options,
+  })
+  expect(refused.ok).toBe(false)
+  if (!refused.ok) {
+    expect(refused.ownerLock).toMatchObject({
+      present: true,
+      canRecover: false,
+      diagnosticCode: "lcm_owner_lock_same_process_conflict",
+    })
+    expect(refused.safeError).toMatchObject({
+      code: "db_locked",
+      diagnosticCode: "lcm_owner_lock_same_process_conflict",
+    })
+  }
+  expect((await readJson<LcmOwnerLockMetadata>(layout.ownerLockPath)).ownerID).toBe("owner_support_live")
 })
 
 test("uncheckable owner lock conflicts remain locked until a valid stale lock can be proven", async () => {

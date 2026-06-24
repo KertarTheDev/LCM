@@ -6,6 +6,7 @@ import { createLcmDbWorker } from "./db-worker"
 import { resolveLcmDbLayout } from "./db-layout"
 import { lcmDbContentDiagnosticChecks } from "./db-diagnostics"
 import { resolveDebugFamilyTarget } from "./family"
+import { diagnoseOwnerLock, recoverOwnerLock } from "./owner-lock"
 import {
   coerceDbRequestError,
   createDbCorruptError,
@@ -20,6 +21,7 @@ import { runPgliteRegexCancellationProbe } from "./pglite-regex-cancel"
 import type {
   LcmDbDiagnoseReport,
   LcmDbDiagnosticCheck,
+  LcmDbRecoverLockReport,
   LcmDbRebuildReport,
   LcmDbSmokeReport,
   LcmDbSmokeRuntimeMode,
@@ -450,6 +452,90 @@ export async function diagnoseLcmDb(input: RunLcmDbSupportInput): Promise<LcmDbD
     checks,
     safeErrors,
     quarantineRecommended: status === "corrupt",
+    ownerLock: await diagnoseOwnerLock({ layout }),
+  }
+}
+
+export async function recoverLcmDbLock(
+  input: RunLcmDbSupportInput & { dryRun: boolean; force: boolean },
+): Promise<LcmDbRecoverLockReport> {
+  const operation = operationID("lcm_db_recover_lock")
+  const schemaVersion = input.schemaVersion ?? LCM_DB_GATE_SCHEMA_VERSION
+  const target = await resolveDebugFamilyTarget({ familyRoot: input.dataDir, schemaVersion })
+  const layout = resolveLcmDbLayout(target.familyRoot)
+  const recovery = await recoverOwnerLock({
+    layout,
+    operationID: operation,
+    dryRun: input.dryRun,
+    force: input.force,
+  })
+  const safeErrors = recovery.ok ? [] : [recovery.safeError]
+
+  if (!recovery.ok) {
+    return {
+      operationID: operation,
+      dataDir: layout.rootDir,
+      dryRun: input.dryRun,
+      force: input.force,
+      status: recovery.safeError.code === "db_unavailable" ? "failed" : "refused",
+      ownerLock: recovery.ownerLock,
+      safeErrors,
+    }
+  }
+
+  if (!recovery.ownerLock.present) {
+    return {
+      operationID: operation,
+      dataDir: layout.rootDir,
+      dryRun: input.dryRun,
+      force: input.force,
+      status: "not_needed",
+      ownerLock: recovery.ownerLock,
+      safeErrors,
+    }
+  }
+
+  if (input.dryRun) {
+    return {
+      operationID: operation,
+      dataDir: layout.rootDir,
+      dryRun: true,
+      force: input.force,
+      status: "would_recover",
+      ownerLock: recovery.ownerLock,
+      safeErrors,
+    }
+  }
+
+  const worker = createLcmDbWorker()
+  const status = await worker.initialize({
+    dataDir: layout.rootDir,
+    runtimeMode: target.runtimeMode,
+    schemaVersion,
+    smokeMode: true,
+  })
+  await worker.close().catch(() => undefined)
+  if (status.status !== "ready") {
+    if (status.safeError) safeErrors.push(status.safeError)
+    return {
+      operationID: operation,
+      dataDir: layout.rootDir,
+      dryRun: false,
+      force: input.force,
+      status: "failed",
+      ownerLock: recovery.ownerLock,
+      safeErrors,
+    }
+  }
+
+  return {
+    operationID: operation,
+    dataDir: layout.rootDir,
+    dryRun: false,
+    force: input.force,
+    status: "recovered",
+    ownerLock: recovery.ownerLock,
+    safeErrors,
   }
 }
 

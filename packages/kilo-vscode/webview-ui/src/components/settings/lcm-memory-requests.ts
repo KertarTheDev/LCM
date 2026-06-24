@@ -3,6 +3,7 @@ export type LcmSettingsRequestKind =
   | "update"
   | "cancelMaintenance"
   | "diagnoseDb"
+  | "recoverDbLock"
   | "rebuildDb"
   | "exportPrompts"
 
@@ -11,6 +12,7 @@ export type LcmSettingsPendingRequests = {
   update?: string
   cancelMaintenance?: string
   diagnoseDb?: string
+  recoverDbLock?: string
   rebuildDb?: string
   exportPrompts?: string
 }
@@ -40,6 +42,7 @@ function pendingRequests(
   update?: string,
   cancelMaintenance?: string,
   diagnoseDb?: string,
+  recoverDbLock?: string,
   rebuildDb?: string,
   exportPrompts?: string,
 ): LcmSettingsPendingRequests {
@@ -48,6 +51,7 @@ function pendingRequests(
   if (update) next.update = update
   if (cancelMaintenance) next.cancelMaintenance = cancelMaintenance
   if (diagnoseDb) next.diagnoseDb = diagnoseDb
+  if (recoverDbLock) next.recoverDbLock = recoverDbLock
   if (rebuildDb) next.rebuildDb = rebuildDb
   if (exportPrompts) next.exportPrompts = exportPrompts
   return next
@@ -60,6 +64,7 @@ function clearRequest(pending: LcmSettingsPendingRequests, kind: LcmSettingsRequ
       pending.update,
       pending.cancelMaintenance,
       pending.diagnoseDb,
+      pending.recoverDbLock,
       pending.rebuildDb,
       pending.exportPrompts,
     )
@@ -70,6 +75,7 @@ function clearRequest(pending: LcmSettingsPendingRequests, kind: LcmSettingsRequ
       undefined,
       pending.cancelMaintenance,
       pending.diagnoseDb,
+      pending.recoverDbLock,
       pending.rebuildDb,
       pending.exportPrompts,
     )
@@ -80,6 +86,7 @@ function clearRequest(pending: LcmSettingsPendingRequests, kind: LcmSettingsRequ
       pending.update,
       undefined,
       pending.diagnoseDb,
+      pending.recoverDbLock,
       pending.rebuildDb,
       pending.exportPrompts,
     )
@@ -89,6 +96,18 @@ function clearRequest(pending: LcmSettingsPendingRequests, kind: LcmSettingsRequ
       pending.read,
       pending.update,
       pending.cancelMaintenance,
+      undefined,
+      pending.recoverDbLock,
+      pending.rebuildDb,
+      pending.exportPrompts,
+    )
+  }
+  if (kind === "recoverDbLock") {
+    return pendingRequests(
+      pending.read,
+      pending.update,
+      pending.cancelMaintenance,
+      pending.diagnoseDb,
       undefined,
       pending.rebuildDb,
       pending.exportPrompts,
@@ -100,18 +119,33 @@ function clearRequest(pending: LcmSettingsPendingRequests, kind: LcmSettingsRequ
       pending.update,
       pending.cancelMaintenance,
       pending.diagnoseDb,
+      pending.recoverDbLock,
       undefined,
       pending.exportPrompts,
     )
   }
-  return pendingRequests(pending.read, pending.update, pending.cancelMaintenance, pending.diagnoseDb, pending.rebuildDb)
+  return pendingRequests(
+    pending.read,
+    pending.update,
+    pending.cancelMaintenance,
+    pending.diagnoseDb,
+    pending.recoverDbLock,
+    pending.rebuildDb,
+  )
 }
 
 export function beginLcmSettingsRead(
   pending: LcmSettingsPendingRequests,
   requestID: string,
 ): BeginLcmSettingsRequestResult {
-  if (pending.update || pending.cancelMaintenance || pending.diagnoseDb || pending.rebuildDb || pending.exportPrompts) {
+  if (
+    pending.update ||
+    pending.cancelMaintenance ||
+    pending.diagnoseDb ||
+    pending.recoverDbLock ||
+    pending.rebuildDb ||
+    pending.exportPrompts
+  ) {
     return { pending, started: false }
   }
   return { pending: { ...pending, read: requestID }, started: true }
@@ -121,7 +155,13 @@ export function beginLcmSettingsUpdate(
   pending: LcmSettingsPendingRequests,
   requestID: string,
 ): BeginLcmSettingsRequestResult {
-  if (pending.cancelMaintenance || pending.diagnoseDb || pending.rebuildDb || pending.exportPrompts) {
+  if (
+    pending.cancelMaintenance ||
+    pending.diagnoseDb ||
+    pending.recoverDbLock ||
+    pending.rebuildDb ||
+    pending.exportPrompts
+  ) {
     return { pending, started: false }
   }
   return { pending: { update: requestID }, started: true }
@@ -131,7 +171,13 @@ export function beginLcmMaintenanceCancel(
   pending: LcmSettingsPendingRequests,
   requestID: string,
 ): BeginLcmSettingsRequestResult {
-  if (pending.cancelMaintenance || pending.diagnoseDb || pending.rebuildDb || pending.exportPrompts) {
+  if (
+    pending.cancelMaintenance ||
+    pending.diagnoseDb ||
+    pending.recoverDbLock ||
+    pending.rebuildDb ||
+    pending.exportPrompts
+  ) {
     return { pending, started: false }
   }
   return { pending: { cancelMaintenance: requestID }, started: true }
@@ -141,7 +187,13 @@ export function beginLcmDbDiagnose(
   pending: LcmSettingsPendingRequests,
   requestID: string,
 ): BeginLcmSettingsRequestResult {
-  if (pending.cancelMaintenance || pending.diagnoseDb || pending.rebuildDb || pending.exportPrompts) {
+  if (
+    pending.cancelMaintenance ||
+    pending.diagnoseDb ||
+    pending.recoverDbLock ||
+    pending.rebuildDb ||
+    pending.exportPrompts
+  ) {
     return { pending, started: false }
   }
   return { pending: { diagnoseDb: requestID }, started: true }
@@ -151,17 +203,45 @@ export function beginLcmDbRebuild(
   pending: LcmSettingsPendingRequests,
   requestID: string,
 ): BeginLcmSettingsRequestResult {
-  if (pending.cancelMaintenance || pending.diagnoseDb || pending.rebuildDb || pending.exportPrompts) {
+  if (
+    pending.cancelMaintenance ||
+    pending.diagnoseDb ||
+    pending.recoverDbLock ||
+    pending.rebuildDb ||
+    pending.exportPrompts
+  ) {
     return { pending, started: false }
   }
   return { pending: { rebuildDb: requestID }, started: true }
+}
+
+export function beginLcmDbRecoverLock(
+  pending: LcmSettingsPendingRequests,
+  requestID: string,
+): BeginLcmSettingsRequestResult {
+  if (
+    pending.cancelMaintenance ||
+    pending.diagnoseDb ||
+    pending.recoverDbLock ||
+    pending.rebuildDb ||
+    pending.exportPrompts
+  ) {
+    return { pending, started: false }
+  }
+  return { pending: { recoverDbLock: requestID }, started: true }
 }
 
 export function beginLcmPromptsExport(
   pending: LcmSettingsPendingRequests,
   requestID: string,
 ): BeginLcmSettingsRequestResult {
-  if (pending.cancelMaintenance || pending.diagnoseDb || pending.rebuildDb || pending.exportPrompts) {
+  if (
+    pending.cancelMaintenance ||
+    pending.diagnoseDb ||
+    pending.recoverDbLock ||
+    pending.rebuildDb ||
+    pending.exportPrompts
+  ) {
     return { pending, started: false }
   }
   return { pending: { exportPrompts: requestID }, started: true }

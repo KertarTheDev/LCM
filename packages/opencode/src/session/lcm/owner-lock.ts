@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { createDbLockedError, createDbUnavailableError } from "./db-errors"
-import type { LcmDbInitializeInput, LcmSafeError, OperationID } from "./types"
+import type { LcmDbInitializeInput, LcmOwnerLockSupportReport, LcmSafeError, OperationID } from "./types"
 import type { LcmDbLayout } from "./db-layout"
 import { createLcmOwnerID, createOperationID } from "./id"
 
@@ -58,6 +58,21 @@ type AcquireOwnerLockResult =
   | { readonly ok: true; readonly handle: LcmOwnerLockHandle }
   | { readonly ok: false; readonly status: "locked" | "unavailable"; readonly safeError: LcmSafeError }
 
+type OwnerLockSupportRead =
+  | { readonly kind: "absent" }
+  | { readonly kind: "valid"; readonly raw: string; readonly metadata: LcmOwnerLockMetadata }
+  | { readonly kind: "malformed"; readonly raw: string }
+  | { readonly kind: "unavailable" }
+
+type RecoverOwnerLockResult =
+  | {
+      readonly ok: true
+      readonly recovered: boolean
+      readonly ownerLock: LcmOwnerLockSupportReport
+      readonly quarantined?: boolean
+    }
+  | { readonly ok: false; readonly ownerLock: LcmOwnerLockSupportReport; readonly safeError: LcmSafeError }
+
 interface LockRead {
   readonly raw: string
   readonly metadata: LcmOwnerLockMetadata
@@ -97,6 +112,29 @@ function parseLock(raw: string): LockRead | undefined {
 
 async function readLock(lockPath: string): Promise<LockRead | undefined> {
   return parseLock(await fs.readFile(lockPath, "utf8"))
+}
+
+async function readOwnerLockForSupport(lockPath: string): Promise<OwnerLockSupportRead> {
+  try {
+    const raw = await fs.readFile(lockPath, "utf8")
+    try {
+      const parsed = parseLock(raw)
+      if (!parsed) return { kind: "malformed", raw }
+      return { kind: "valid", raw: parsed.raw, metadata: parsed.metadata }
+    } catch {
+      return { kind: "malformed", raw }
+    }
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "ENOENT"
+    ) {
+      return { kind: "absent" }
+    }
+    return { kind: "unavailable" }
+  }
 }
 
 function processIsLive(pid: number) {
@@ -179,6 +217,221 @@ function lockedDiagnosticCode(input: {
   const fallback = conflictDiagnosticCode(input)
   if (!input.freshness || input.freshness.diagnosticCode === "lcm_owner_lock_conflict") return fallback
   return input.freshness.diagnosticCode
+}
+
+function ownerLockReport(input: {
+  read: OwnerLockSupportRead
+  now: number
+  staleMs: number
+  deadPidGraceMs: number
+  livePidStaleVetoMs: number
+  hostname: string
+  pid?: number
+}): LcmOwnerLockSupportReport {
+  if (input.read.kind === "absent") {
+    return {
+      present: false,
+      recoveryState: "absent",
+      diagnosticCode: "lcm_owner_lock_absent",
+      canRecover: false,
+      forceRequired: false,
+      retryable: false,
+    }
+  }
+  if (input.read.kind === "unavailable") {
+    return {
+      present: false,
+      recoveryState: "unavailable",
+      diagnosticCode: "lcm_owner_lock_read_unavailable",
+      canRecover: false,
+      forceRequired: false,
+      retryable: true,
+    }
+  }
+  if (input.read.kind === "malformed") {
+    return {
+      present: true,
+      recoveryState: "force_required",
+      diagnosticCode: "lcm_owner_lock_malformed",
+      canRecover: true,
+      forceRequired: true,
+      retryable: false,
+    }
+  }
+
+  const heartbeatMs = Date.parse(input.read.metadata.heartbeatAt)
+  if (!Number.isFinite(heartbeatMs)) {
+    return {
+      present: true,
+      recoveryState: "force_required",
+      diagnosticCode: "lcm_owner_lock_invalid_heartbeat",
+      canRecover: true,
+      forceRequired: true,
+      retryable: false,
+    }
+  }
+
+  const lockAgeMs = Math.max(0, input.now - heartbeatMs)
+  const freshness = classifyLockFreshness(input.read.metadata, {
+    now: input.now,
+    staleMs: input.staleMs,
+    deadPidGraceMs: input.deadPidGraceMs,
+    livePidStaleVetoMs: input.livePidStaleVetoMs,
+    hostname: input.hostname,
+  })
+  if (freshness.stale) {
+    return {
+      present: true,
+      recoveryState: "recoverable",
+      diagnosticCode: freshness.diagnosticCode,
+      canRecover: true,
+      forceRequired: false,
+      retryable: false,
+      lockAgeMs,
+    }
+  }
+
+  const retryAfterMs =
+    freshness.diagnosticCode === "lcm_owner_lock_dead_pid_grace"
+      ? Math.max(0, input.deadPidGraceMs - lockAgeMs)
+      : Math.max(0, Math.min(input.staleMs, input.livePidStaleVetoMs) - lockAgeMs)
+  const sameProcess =
+    input.read.metadata.hostname === input.hostname && input.pid !== undefined && input.read.metadata.pid === input.pid
+  const recoveryState =
+    freshness.diagnosticCode === "lcm_owner_lock_conflict"
+      ? "fresh"
+      : freshness.diagnosticCode === "lcm_owner_lock_live_pid_stale_veto" || sameProcess
+        ? "blocked"
+        : "wait"
+  return {
+    present: true,
+    recoveryState,
+    diagnosticCode: sameProcess ? "lcm_owner_lock_same_process_conflict" : freshness.diagnosticCode,
+    canRecover: false,
+    forceRequired: false,
+    retryable: true,
+    lockAgeMs,
+    retryAfterMs,
+  }
+}
+
+export async function diagnoseOwnerLock(input: {
+  layout: LcmDbLayout
+  options?: LcmOwnerLockOptions
+}): Promise<LcmOwnerLockSupportReport> {
+  const now = input.options?.now ?? Date.now
+  const hostname = input.options?.hostname ?? os.hostname()
+  const pid = input.options?.pid ?? process.pid
+  const read = await readOwnerLockForSupport(input.layout.ownerLockPath)
+  return ownerLockReport({
+    read,
+    now: now(),
+    staleMs: input.options?.staleMs ?? LCM_OWNER_LOCK_STALE_MS,
+    deadPidGraceMs: input.options?.deadPidGraceMs ?? LCM_OWNER_LOCK_DEAD_PID_GRACE_MS,
+    livePidStaleVetoMs: input.options?.livePidStaleVetoMs ?? LCM_OWNER_LOCK_LIVE_PID_STALE_VETO_MS,
+    hostname,
+    pid,
+  })
+}
+
+export async function recoverOwnerLock(input: {
+  layout: LcmDbLayout
+  operationID: OperationID
+  force: boolean
+  dryRun: boolean
+  options?: LcmOwnerLockOptions
+}): Promise<RecoverOwnerLockResult> {
+  const now = input.options?.now ?? Date.now
+  const hostname = input.options?.hostname ?? os.hostname()
+  const pid = input.options?.pid ?? process.pid
+  const reportInput = {
+    now: now(),
+    staleMs: input.options?.staleMs ?? LCM_OWNER_LOCK_STALE_MS,
+    deadPidGraceMs: input.options?.deadPidGraceMs ?? LCM_OWNER_LOCK_DEAD_PID_GRACE_MS,
+    livePidStaleVetoMs: input.options?.livePidStaleVetoMs ?? LCM_OWNER_LOCK_LIVE_PID_STALE_VETO_MS,
+    hostname,
+    pid,
+  }
+  const read = await readOwnerLockForSupport(input.layout.ownerLockPath)
+  const ownerLock = ownerLockReport({ read, ...reportInput })
+  if (read.kind === "absent") return { ok: true, recovered: false, ownerLock }
+  if (read.kind === "unavailable") {
+    return {
+      ok: false,
+      ownerLock,
+      safeError: createDbUnavailableError({
+        operationID: input.operationID,
+        diagnosticCode: "lcm_owner_lock_recovery_read_unavailable",
+        retryable: true,
+      }),
+    }
+  }
+  if (!ownerLock.canRecover) {
+    return {
+      ok: false,
+      ownerLock,
+      safeError: createDbLockedError({
+        operationID: input.operationID,
+        diagnosticCode: ownerLock.diagnosticCode,
+      }),
+    }
+  }
+  if (ownerLock.forceRequired && !input.force) {
+    return {
+      ok: false,
+      ownerLock,
+      safeError: createDbLockedError({
+        operationID: input.operationID,
+        diagnosticCode: "lcm_owner_lock_recovery_force_required",
+      }),
+    }
+  }
+  if (input.dryRun) return { ok: true, recovered: false, ownerLock }
+
+  const reread = await readOwnerLockForSupport(input.layout.ownerLockPath)
+  const sameObserved =
+    reread.kind === read.kind &&
+    (read.kind === "valid" || read.kind === "malformed") &&
+    (reread.kind === "valid" || reread.kind === "malformed") &&
+    reread.raw === read.raw
+  if (!sameObserved) {
+    return {
+      ok: false,
+      ownerLock,
+      safeError: createDbLockedError({
+        operationID: input.operationID,
+        diagnosticCode: "lcm_owner_lock_recovery_race",
+      }),
+    }
+  }
+
+  const ownerSegment = read.kind === "valid" ? safeFilenameSegment(read.metadata.ownerID) : "uncheckable"
+  const quarantinePath = `${input.layout.ownerLockPath}.quarantine.${ownerSegment}.${safeFilenameSegment(
+    input.operationID,
+  )}`
+  try {
+    if (await pathExists(quarantinePath)) {
+      return {
+        ok: false,
+        ownerLock,
+        safeError: createDbLockedError({
+          operationID: input.operationID,
+          diagnosticCode: "lcm_owner_lock_recovery_quarantine_exists",
+        }),
+      }
+    }
+    await fs.rename(input.layout.ownerLockPath, quarantinePath)
+    return { ok: true, recovered: true, ownerLock, quarantined: true }
+  } catch {
+    return {
+      ok: false,
+      ownerLock,
+      safeError: createDbLockedError({
+        operationID: input.operationID,
+        diagnosticCode: "lcm_owner_lock_recovery_failed",
+      }),
+    }
+  }
 }
 
 async function writeLockExclusive(lockPath: string, metadata: LcmOwnerLockMetadata) {

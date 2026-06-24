@@ -924,7 +924,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           getWorkspaceDirectory: (sessionID) => this.getWorkspaceDirectory(sessionID),
           postMessage: (msg) => this.postMessage(msg),
         })
-        if (message.type === "updateLcmSettings") this.lcmPrewarmer.reset()
+        if (message.type === "updateLcmSettings" || message.type === "recoverLcmDbLock") this.lcmPrewarmer.reset()
         return
       }
       switch (message.type) {
@@ -1673,6 +1673,37 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
   private prewarmLcmSession(sessionID: string, reason: string, directory?: string): void {
     this.lcmPrewarmer.prewarm(this.lcmPrewarmInput(sessionID, reason, directory))
+  }
+
+  private async waitForLcmReadyToSend(sessionID: string, directory: string, reason: string): Promise<boolean> {
+    const abortController = new AbortController()
+    this.retryAbortControllers.set(sessionID, abortController)
+    try {
+      const readiness = await this.lcmPrewarmer.waitUntilReady({
+        ...this.lcmPrewarmInput(sessionID, reason, directory),
+        abortSignal: abortController.signal,
+        onRetry: (retry) => {
+          this.postMessage({
+            type: "sessionStatus",
+            sessionID,
+            status: "retry",
+            attempt: retry.attempt,
+            message: "Memory storage is starting. Waiting for lock to clear...",
+            next: retry.next,
+          })
+        },
+      })
+      if (abortController.signal.aborted) return false
+      this.postMessage({ type: "sessionStatus", sessionID, status: "idle" })
+      if (readiness.ok) return true
+      if (!readiness.retryable && readiness.safeMessage === "Memory readiness wait was canceled.") return false
+      if (readiness.safeError) throw readiness.safeError
+      throw new Error(readiness.safeMessage)
+    } finally {
+      if (this.retryAbortControllers.get(sessionID) === abortController) {
+        this.retryAbortControllers.delete(sessionID)
+      }
+    }
   }
 
   private async handleLoadMessages(
@@ -2798,6 +2829,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
         this.connectionService.recordMessageSessionId(messageID, sid)
       }
       await this.checkpoints.get(sid)
+      if (!(await this.waitForLcmReadyToSend(sid, dir, "promptSend"))) return
       await runWithMessageConfirmation(this.confirmations, messageID, "KiloProvider: Message request", () =>
         this.withRetry(
           () =>
@@ -2878,6 +2910,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
 
       const { sid, dir } = resolved
       await this.checkpoints.get(sid)
+      if (!(await this.waitForLcmReadyToSend(sid, dir, "commandSend"))) return
       await runWithMessageConfirmation(this.confirmations, messageID, "KiloProvider: Command request", () =>
         this.withRetry(
           () =>

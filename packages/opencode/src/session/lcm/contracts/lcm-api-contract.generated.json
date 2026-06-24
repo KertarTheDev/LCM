@@ -392,6 +392,10 @@
             "optional": false,
             "type": "OperationID"
           },
+          "ownerLock": {
+            "optional": true,
+            "type": "LcmOwnerLockSupportReport"
+          },
           "quarantineRecommended": {
             "optional": false,
             "type": "boolean"
@@ -410,7 +414,7 @@
           }
         },
         "methods": {},
-        "source": "interface LcmDbDiagnoseReport {\n operationID: OperationID\n dataDir: string\n status: LcmDbStatusCode\n schemaVersion?: number\n checks: LcmDbDiagnosticCheck[]\n safeErrors: LcmSafeError[]\n quarantineRecommended: boolean\n}"
+        "source": "interface LcmDbDiagnoseReport {\n operationID: OperationID\n dataDir: string\n status: LcmDbStatusCode\n schemaVersion?: number\n checks: LcmDbDiagnosticCheck[]\n safeErrors: LcmSafeError[]\n quarantineRecommended: boolean\n ownerLock?: LcmOwnerLockSupportReport\n}"
       },
       "LcmDbDiagnosticCheck": {
         "fields": {
@@ -553,6 +557,54 @@
         },
         "methods": {},
         "source": "interface LcmDbRebuildReport {\n operationID: OperationID\n dataDir: string\n dryRun: boolean\n status: LcmDbRebuildStatus\n quarantinedDataDir?: string\n rebuiltConversations: number\n readOnlyConversations: number\n skippedConversations: number\n failedConversations: number\n safeErrors: LcmSafeError[]\n}"
+      },
+      "LcmDbRecoverLockInput": {
+        "fields": {
+          "dryRun": {
+            "optional": true,
+            "type": "boolean"
+          },
+          "force": {
+            "optional": true,
+            "type": "boolean"
+          }
+        },
+        "methods": {},
+        "source": "interface LcmDbRecoverLockInput {\n dryRun?: boolean\n force?: boolean\n}"
+      },
+      "LcmDbRecoverLockReport": {
+        "fields": {
+          "dataDir": {
+            "optional": false,
+            "type": "string"
+          },
+          "dryRun": {
+            "optional": false,
+            "type": "boolean"
+          },
+          "force": {
+            "optional": false,
+            "type": "boolean"
+          },
+          "operationID": {
+            "optional": false,
+            "type": "OperationID"
+          },
+          "ownerLock": {
+            "optional": false,
+            "type": "LcmOwnerLockSupportReport"
+          },
+          "safeErrors": {
+            "optional": false,
+            "type": "LcmSafeError[]"
+          },
+          "status": {
+            "optional": false,
+            "type": "LcmDbRecoverLockStatus"
+          }
+        },
+        "methods": {},
+        "source": "interface LcmDbRecoverLockReport {\n operationID: OperationID\n dataDir: string\n dryRun: boolean\n force: boolean\n status: LcmDbRecoverLockStatus\n ownerLock: LcmOwnerLockSupportReport\n safeErrors: LcmSafeError[]\n}"
       },
       "LcmDbRequest": {
         "fields": {
@@ -1938,6 +1990,44 @@
         },
         "methods": {},
         "source": "interface LcmNormalizedProviderProjectionItem {\n itemIndex: number\n kind: LcmNormalizedProviderProjectionKind\n providerFamily: LcmRenderedSpanProviderFamily\n messageIndex?: number\n partIndex?: number\n role?: \"system\" | \"user\" | \"assistant\" | \"tool\"\n partKind?: string\n toolCallID?: LcmSafeOrHashedID\n toolResultID?: LcmSafeOrHashedID\n toolName?: LcmSafeOrHashedID\n adjacencyGroupID?: string\n protocolSpanID?: string\n renderUnitID?: string\n sourceHandle?: string\n spanHash?: string\n markerHandle?: string\n markerKind?: \"media_fallback\" | \"reasoning_marker\" | \"large_file_marker\" | \"tool_placeholder\" | \"provider_transform_overhead\"\n reasoningKind?: \"native\" | \"interleaved\" | \"fallback_marker\"\n mediaFallbackKind?: \"provider_text_fallback\" | \"synthetic_attachment\" | \"tool_result_media\"\n providerTransformOverheadID?: string\n transformStage: LcmRenderedSpanTransformStage\n}"
+      },
+      "LcmOwnerLockSupportReport": {
+        "fields": {
+          "canRecover": {
+            "optional": false,
+            "type": "boolean"
+          },
+          "diagnosticCode": {
+            "optional": false,
+            "type": "string"
+          },
+          "forceRequired": {
+            "optional": false,
+            "type": "boolean"
+          },
+          "lockAgeMs": {
+            "optional": true,
+            "type": "number"
+          },
+          "present": {
+            "optional": false,
+            "type": "boolean"
+          },
+          "recoveryState": {
+            "optional": false,
+            "type": "LcmOwnerLockRecoveryState"
+          },
+          "retryable": {
+            "optional": false,
+            "type": "boolean"
+          },
+          "retryAfterMs": {
+            "optional": true,
+            "type": "number"
+          }
+        },
+        "methods": {},
+        "source": "interface LcmOwnerLockSupportReport {\n present: boolean\n recoveryState: LcmOwnerLockRecoveryState\n diagnosticCode: string\n canRecover: boolean\n forceRequired: boolean\n retryable: boolean\n lockAgeMs?: number\n retryAfterMs?: number\n}"
       },
       "LcmPageInfo": {
         "fields": {
@@ -3557,6 +3647,16 @@
         ],
         "source": "type LcmDbRebuildStatus = \"would_rebuild\" | \"rebuilt\" | \"partial\" | \"failed\""
       },
+      "LcmDbRecoverLockStatus": {
+        "literals": [
+          "failed",
+          "not_needed",
+          "recovered",
+          "refused",
+          "would_recover"
+        ],
+        "source": "type LcmDbRecoverLockStatus = \"would_recover\" | \"recovered\" | \"not_needed\" | \"refused\" | \"failed\""
+      },
       "LcmDbSmokeRuntimeMode": {
         "literals": [
           "compiled-bin",
@@ -3784,6 +3884,18 @@
           "tool_result"
         ],
         "source": "type LcmNormalizedProviderProjectionKind =\n | \"message\"\n | \"text_part\"\n | \"reasoning_part\"\n | \"tool_call\"\n | \"tool_result\"\n | \"media_fallback\"\n | \"large_file_marker\"\n | \"provider_transform_overhead\""
+      },
+      "LcmOwnerLockRecoveryState": {
+        "literals": [
+          "absent",
+          "blocked",
+          "force_required",
+          "fresh",
+          "recoverable",
+          "unavailable",
+          "wait"
+        ],
+        "source": "type LcmOwnerLockRecoveryState =\n | \"absent\"\n | \"fresh\"\n | \"wait\"\n | \"recoverable\"\n | \"force_required\"\n | \"blocked\"\n | \"unavailable\""
       },
       "LcmPreflightResult": {
         "literals": [],
@@ -4038,10 +4150,11 @@
           "diagnoseLcmDb",
           "exportLcmPrompts",
           "rebuildLcmDb",
+          "recoverLcmDbLock",
           "requestLcmSettings",
           "updateLcmSettings"
         ],
-        "source": "type LcmWebviewMessageName =\n | \"requestLcmSettings\"\n | \"updateLcmSettings\"\n | \"cancelLcmMaintenance\"\n | \"diagnoseLcmDb\"\n | \"rebuildLcmDb\"\n | \"exportLcmPrompts\""
+        "source": "type LcmWebviewMessageName =\n | \"requestLcmSettings\"\n | \"updateLcmSettings\"\n | \"cancelLcmMaintenance\"\n | \"diagnoseLcmDb\"\n | \"recoverLcmDbLock\"\n | \"rebuildLcmDb\"\n | \"exportLcmPrompts\""
       },
       "LcmWebviewResponseEnvelope": {
         "literals": [
@@ -4290,7 +4403,7 @@
     }
   },
   "source": {
-    "sha256": "2b9f398fe1a95f5a8ad1122c619588ba3e5597918e6a0c0c7871b9026c85b52c"
+    "sha256": "8d7a66ef7d12db587cda2a5137ab0e8480fd47efb943130920fa2aea7c2a95b4"
   },
   "surfaceClassifications": {
     "LcmAssemblyBlockedResult": {
@@ -4362,6 +4475,7 @@
     "diagnoseLcmDb",
     "exportLcmPrompts",
     "rebuildLcmDb",
+    "recoverLcmDbLock",
     "requestLcmSettings",
     "updateLcmSettings"
   ]

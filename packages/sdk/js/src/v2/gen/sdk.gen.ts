@@ -168,6 +168,7 @@ import type {
   KiloProfileResponses,
   LcmCancelMaintenanceInput,
   LcmDbRebuildInput,
+  LcmDbRecoverLockInput,
   LcmSettingsGetErrors,
   LcmSettingsGetResponses,
   LcmSettingsUpdateErrors,
@@ -291,6 +292,8 @@ import type {
   SessionLcmDbDiagnoseResponses,
   SessionLcmDbRebuildErrors,
   SessionLcmDbRebuildResponses,
+  SessionLcmDbRecoverLockErrors,
+  SessionLcmDbRecoverLockResponses,
   SessionLcmMaintenanceCancelErrors,
   SessionLcmMaintenanceCancelResponses,
   SessionLcmPromptsExportErrors,
@@ -3939,6 +3942,49 @@ export class Db extends HeyApiClient {
       url: "/session/{sessionID}/lcm/db/diagnose",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Recover LCM database owner lock
+   *
+   * Run a content-safe owner-lock recovery preview or apply-mode repair for the trusted session family.
+   */
+  public recoverLock<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      lcmDbRecoverLockInput?: LcmDbRecoverLockInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "lcmDbRecoverLockInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionLcmDbRecoverLockResponses,
+      SessionLcmDbRecoverLockErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/lcm/db/recover-lock",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

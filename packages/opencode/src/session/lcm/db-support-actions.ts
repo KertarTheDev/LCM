@@ -3,14 +3,15 @@ import type { PGlite } from "@electric-sql/pglite"
 import { Effect } from "effect"
 import { LcmDb } from "./db"
 import { diagnoseOpenLcmDb } from "./db-diagnostics"
-import { isLcmSafeError } from "./db-errors"
-import { diagnoseLcmDb, rebuildLcmDb } from "./db-smoke"
+import { isLcmSafeError, safeErrorForDbStatus } from "./db-errors"
+import { diagnoseLcmDb, rebuildLcmDb, recoverLcmDbLock } from "./db-smoke"
 import { resolveSessionFamilyTargetEffect } from "./family"
 import { createOperationID } from "./id"
 import { syncFinalizedMessages as syncFinalizedSourceMessages } from "./source-sync"
 import {
   createLcmSafeError,
   type LcmDbDiagnoseReport,
+  type LcmDbRecoverLockReport,
   type LcmDbRebuildReport,
   type LcmDbStatus,
   type LcmSafeAction,
@@ -38,6 +39,13 @@ function invalidDbSupportRequest(
   })
 }
 
+function getCurrentFamilyStatus(input: {
+  lcmDb: LcmDb.Interface
+  target: Parameters<NonNullable<LcmDb.Interface["getFamilyStatus"]>>[0]
+}) {
+  return input.lcmDb.getFamilyStatus?.(input.target) ?? Effect.succeed<LcmDbStatus | undefined>(undefined)
+}
+
 export const diagnoseRuntimeLcmDb = Effect.fn("LcmDbSupportActions.diagnoseRuntimeLcmDb")(function* (input: {
   lcmDb: LcmDb.Interface
   sessionID: string
@@ -45,8 +53,7 @@ export const diagnoseRuntimeLcmDb = Effect.fn("LcmDbSupportActions.diagnoseRunti
   const operationID = createOperationID()
   const resolved = yield* resolveSessionFamilyTargetEffect({ sessionID: input.sessionID })
   const target = resolved.target
-  const currentStatus = yield* input.lcmDb.getFamilyStatus?.(target) ??
-    Effect.succeed<LcmDbStatus | undefined>(undefined)
+  const currentStatus = yield* getCurrentFamilyStatus({ lcmDb: input.lcmDb, target })
 
   if (currentStatus?.status === "ready") {
     const scopedDb = LcmDb.scoped(input.lcmDb, target)
@@ -78,8 +85,7 @@ export const rebuildRuntimeLcmDb = Effect.fn("LcmDbSupportActions.rebuildRuntime
   const operationID = createOperationID()
   const resolved = yield* resolveSessionFamilyTargetEffect({ sessionID: input.sessionID })
   const target = resolved.target
-  const currentStatus = yield* input.lcmDb.getFamilyStatus?.(target) ??
-    Effect.succeed<LcmDbStatus | undefined>(undefined)
+  const currentStatus = yield* getCurrentFamilyStatus({ lcmDb: input.lcmDb, target })
 
   const currentStatusCode = currentStatus?.status ?? "uninitialized"
   let repairStatus = currentStatusCode
@@ -147,5 +153,74 @@ export const rebuildRuntimeLcmDb = Effect.fn("LcmDbSupportActions.rebuildRuntime
   return {
     ...report,
     rebuiltConversations: Math.max(report.rebuiltConversations, 1),
+  }
+})
+
+function notNeededOwnerLockReport() {
+  return {
+    present: false,
+    recoveryState: "absent" as const,
+    diagnosticCode: "lcm_owner_lock_absent",
+    canRecover: false,
+    forceRequired: false,
+    retryable: false,
+  }
+}
+
+export const recoverRuntimeLcmDbLock = Effect.fn("LcmDbSupportActions.recoverRuntimeLcmDbLock")(function* (input: {
+  lcmDb: LcmDb.Interface
+  sessionID: string
+  dryRun: boolean
+  force: boolean
+}) {
+  const operationID = createOperationID()
+  const resolved = yield* resolveSessionFamilyTargetEffect({ sessionID: input.sessionID })
+  const target = resolved.target
+  const currentStatus = yield* getCurrentFamilyStatus({ lcmDb: input.lcmDb, target })
+
+  if (currentStatus?.status === "ready") {
+    return {
+      operationID,
+      dataDir: target.familyRoot,
+      dryRun: input.dryRun,
+      force: input.force,
+      status: "not_needed",
+      ownerLock: notNeededOwnerLockReport(),
+      safeErrors: [],
+    } satisfies LcmDbRecoverLockReport
+  }
+
+  if (!input.dryRun && input.lcmDb.closeFamily) {
+    yield* input.lcmDb
+      .closeFamily(target)
+      .pipe(
+        Effect.catch((safeError) =>
+          Effect.fail(
+            isLcmSafeError(safeError) ? safeError : invalidDbSupportRequest("lcm_db_recover_lock_close_failed"),
+          ),
+        ),
+      )
+  }
+
+  const report = yield* Effect.tryPromise({
+    try: () =>
+      recoverLcmDbLock({
+        dataDir: target.familyRoot,
+        schemaVersion: target.schemaVersion,
+        dryRun: input.dryRun,
+        force: input.force,
+      }),
+    catch: (error) =>
+      isLcmSafeError(error) ? error : invalidDbSupportRequest("lcm_db_recover_lock_failed", { operationID }),
+  })
+
+  if (input.dryRun || report.status !== "recovered" || !input.lcmDb.initializeFamily) return report
+
+  const status = yield* input.lcmDb.initializeFamily(target)
+  if (status.status === "ready") return report
+  return {
+    ...report,
+    status: "failed" as const,
+    safeErrors: [...report.safeErrors, status.safeError ?? safeErrorForDbStatus(status)],
   }
 })

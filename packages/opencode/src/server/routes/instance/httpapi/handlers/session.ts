@@ -37,6 +37,7 @@ import {
   LcmBadRequestError,
   LcmCancelMaintenanceInput,
   LcmConflictError,
+  LcmDbRecoverLockInput,
   LcmDbRebuildInput,
   LcmForbiddenError,
   LcmNotFoundError,
@@ -122,6 +123,15 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     function validateLcmDbRebuildPayloadKeys(payload: typeof LcmDbRebuildInput.Type) {
       for (const key of Object.keys(payload)) {
         if (key !== "dryRun") return createLcmRouteInvalidRequest("lcm_db_rebuild_unsupported_field")
+      }
+      return undefined
+    }
+
+    function validateLcmDbRecoverLockPayloadKeys(payload: typeof LcmDbRecoverLockInput.Type) {
+      for (const key of Object.keys(payload)) {
+        if (key !== "dryRun" && key !== "force") {
+          return createLcmRouteInvalidRequest("lcm_db_recover_lock_unsupported_field")
+        }
       }
       return undefined
     }
@@ -445,6 +455,45 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* mapLcmError(lcmRuntime.diagnoseDb({ sessionID: ctx.params.sessionID }))
     })
 
+    const lcmDbRecoverLock = Effect.fn("SessionHttpApi.lcmDbRecoverLock")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof LcmDbRecoverLockInput.Type
+    }) {
+      const assertionError = validateLcmDbRecoverLockPayloadKeys(ctx.payload)
+      if (assertionError) return yield* Effect.fail(lcmHttpError(assertionError))
+      return yield* mapLcmError(
+        lcmRuntime.recoverDbLock({
+          sessionID: ctx.params.sessionID,
+          dryRun: ctx.payload.dryRun ?? true,
+          force: ctx.payload.force ?? false,
+        }),
+      )
+    })
+
+    const lcmDbRecoverLockRaw = Effect.fn("SessionHttpApi.lcmDbRecoverLockRaw")(function* (ctx: {
+      params: { sessionID: SessionID }
+      request: HttpServerRequest.HttpServerRequest
+    }) {
+      const body = yield* Effect.orDie(ctx.request.text)
+      if (body.trim().length === 0) return yield* lcmDbRecoverLock({ params: ctx.params, payload: {} })
+
+      const json = yield* Effect.try({
+        try: () => JSON.parse(body) as unknown,
+        catch: () => lcmHttpError(createLcmRouteInvalidRequest("lcm_db_recover_lock_invalid_payload")),
+      })
+      if (!json || typeof json !== "object" || Array.isArray(json)) {
+        return yield* Effect.fail(lcmHttpError(createLcmRouteInvalidRequest("lcm_db_recover_lock_invalid_payload")))
+      }
+      const unsupportedKey = Object.keys(json).find((key) => key !== "dryRun" && key !== "force")
+      if (unsupportedKey) {
+        return yield* Effect.fail(lcmHttpError(createLcmRouteInvalidRequest("lcm_db_recover_lock_unsupported_field")))
+      }
+      const payload = yield* Schema.decodeUnknownEffect(LcmDbRecoverLockInput)(json).pipe(
+        Effect.mapError(() => lcmHttpError(createLcmRouteInvalidRequest("lcm_db_recover_lock_invalid_payload"))),
+      )
+      return yield* lcmDbRecoverLock({ params: ctx.params, payload })
+    })
+
     const lcmDbRebuild = Effect.fn("SessionHttpApi.lcmDbRebuild")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof LcmDbRebuildInput.Type
@@ -638,43 +687,46 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
     // kilocode_change end
 
-    return handlers
-      .handle("list", list)
-      .handle("status", status)
-      .handle("get", get)
-      .handle("children", children)
-      .handle("todo", todo)
-      .handle("diff", diff)
-      .handle("messages", messages)
-      // kilocode_change start
-      .handle("message", message)
-      .handleRaw("create", createRaw)
-      .handle("remove", remove)
-      .handle("update", update)
-      .handleRaw("fork", forkRaw) // carry upstream bodyless full-session fork support
-      .handle("abort", abort)
-      .handle("init", init)
-      .handle("share", share)
-      .handle("unshare", unshare)
-      .handle("summarize", summarize)
-      .handle("lcmCapabilities", lcmCapabilities)
-      .handle("lcmSettingsGet", lcmSettingsGet)
-      .handle("lcmSettingsUpdate", lcmSettingsUpdate)
-      .handle("lcmMaintenanceCancel", lcmMaintenanceCancel)
-      .handle("lcmDbDiagnose", lcmDbDiagnose)
-      .handleRaw("lcmDbRebuild", lcmDbRebuildRaw)
-      .handle("lcmPromptsExport", lcmPromptsExport)
-      // kilocode_change end
-      .handle("prompt", prompt)
-      .handle("promptAsync", promptAsync)
-      .handle("command", command)
-      .handle("shell", shell)
-      .handle("revert", revert)
-      .handle("unrevert", unrevert)
-      .handle("permissionRespond", permissionRespond)
-      .handle("deleteMessage", deleteMessage)
-      .handle("deletePart", deletePart)
-      .handle("updatePart", updatePart)
-      .handle("viewed", viewed) // kilocode_change
+    return (
+      handlers
+        .handle("list", list)
+        .handle("status", status)
+        .handle("get", get)
+        .handle("children", children)
+        .handle("todo", todo)
+        .handle("diff", diff)
+        .handle("messages", messages)
+        // kilocode_change start
+        .handle("message", message)
+        .handleRaw("create", createRaw)
+        .handle("remove", remove)
+        .handle("update", update)
+        .handleRaw("fork", forkRaw) // carry upstream bodyless full-session fork support
+        .handle("abort", abort)
+        .handle("init", init)
+        .handle("share", share)
+        .handle("unshare", unshare)
+        .handle("summarize", summarize)
+        .handle("lcmCapabilities", lcmCapabilities)
+        .handle("lcmSettingsGet", lcmSettingsGet)
+        .handle("lcmSettingsUpdate", lcmSettingsUpdate)
+        .handle("lcmMaintenanceCancel", lcmMaintenanceCancel)
+        .handle("lcmDbDiagnose", lcmDbDiagnose)
+        .handleRaw("lcmDbRecoverLock", lcmDbRecoverLockRaw)
+        .handleRaw("lcmDbRebuild", lcmDbRebuildRaw)
+        .handle("lcmPromptsExport", lcmPromptsExport)
+        // kilocode_change end
+        .handle("prompt", prompt)
+        .handle("promptAsync", promptAsync)
+        .handle("command", command)
+        .handle("shell", shell)
+        .handle("revert", revert)
+        .handle("unrevert", unrevert)
+        .handle("permissionRespond", permissionRespond)
+        .handle("deleteMessage", deleteMessage)
+        .handle("deletePart", deletePart)
+        .handle("updatePart", updatePart)
+        .handle("viewed", viewed)
+    ) // kilocode_change
   }),
 )

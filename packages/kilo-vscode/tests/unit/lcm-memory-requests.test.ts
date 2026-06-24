@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import {
   beginLcmDbDiagnose,
+  beginLcmDbRecoverLock,
   beginLcmDbRebuild,
   beginLcmMaintenanceCancel,
   beginLcmPromptsExport,
@@ -132,12 +133,41 @@ describe("LCM/Memory settings request tracking", () => {
     expect(current.pending).toEqual({})
   })
 
+  it("tracks DB lock recovery as an exclusive DB repair request", () => {
+    const recovering = beginLcmDbRecoverLock({}, "recover-1").pending
+    const read = beginLcmSettingsRead(recovering, "read-1")
+    const update = beginLcmSettingsUpdate(recovering, "write-1")
+    const cancel = beginLcmMaintenanceCancel(recovering, "cancel-1")
+    const diagnose = beginLcmDbDiagnose(recovering, "diagnose-1")
+    const rebuild = beginLcmDbRebuild(recovering, "rebuild-1")
+
+    expect(read.started).toBe(false)
+    expect(read.pending).toEqual({ recoverDbLock: "recover-1" })
+    expect(update.started).toBe(false)
+    expect(update.pending).toEqual({ recoverDbLock: "recover-1" })
+    expect(cancel.started).toBe(false)
+    expect(cancel.pending).toEqual({ recoverDbLock: "recover-1" })
+    expect(diagnose.started).toBe(false)
+    expect(diagnose.pending).toEqual({ recoverDbLock: "recover-1" })
+    expect(rebuild.started).toBe(false)
+    expect(rebuild.pending).toEqual({ recoverDbLock: "recover-1" })
+
+    const stale = finishLcmSettingsRequest(recovering, "recoverDbLock", "recover-old")
+    expect(stale.accepted).toBe(false)
+    expect(stale.pending).toEqual({ recoverDbLock: "recover-1" })
+
+    const current = finishLcmSettingsRequest(stale.pending, "recoverDbLock", "recover-1")
+    expect(current.accepted).toBe(true)
+    expect(current.pending).toEqual({})
+  })
+
   it("tracks prompt export as an exclusive DB-backed request", () => {
     const exporting = beginLcmPromptsExport({}, "export-1").pending
     const read = beginLcmSettingsRead(exporting, "read-1")
     const update = beginLcmSettingsUpdate(exporting, "write-1")
     const cancel = beginLcmMaintenanceCancel(exporting, "cancel-1")
     const diagnose = beginLcmDbDiagnose(exporting, "diagnose-1")
+    const recover = beginLcmDbRecoverLock(exporting, "recover-1")
     const rebuild = beginLcmDbRebuild(exporting, "rebuild-1")
 
     expect(read.started).toBe(false)
@@ -148,6 +178,8 @@ describe("LCM/Memory settings request tracking", () => {
     expect(cancel.pending).toEqual({ exportPrompts: "export-1" })
     expect(diagnose.started).toBe(false)
     expect(diagnose.pending).toEqual({ exportPrompts: "export-1" })
+    expect(recover.started).toBe(false)
+    expect(recover.pending).toEqual({ exportPrompts: "export-1" })
     expect(rebuild.started).toBe(false)
     expect(rebuild.pending).toEqual({ exportPrompts: "export-1" })
 

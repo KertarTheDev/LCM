@@ -511,6 +511,77 @@ describe("LCM webview transport", () => {
     ])
   })
 
+  it("runs DB lock recovery previews through the trusted session route", async () => {
+    const calls: unknown[] = []
+    const client = {
+      session: {
+        lcm: {
+          db: {
+            async recoverLock(input: unknown) {
+              calls.push(input)
+              return {
+                data: {
+                  operationID: "op-webview-recover-lock",
+                  dataDir: "/safe/lcm/family",
+                  dryRun: true,
+                  force: true,
+                  status: "would_recover",
+                  ownerLock: {
+                    present: true,
+                    recoveryState: "force_required",
+                    diagnosticCode: "lcm_owner_lock_malformed",
+                    canRecover: true,
+                    forceRequired: true,
+                    retryable: false,
+                  },
+                  safeErrors: [],
+                },
+              }
+            },
+          },
+        },
+      },
+    }
+    const posts: unknown[] = []
+
+    await handleLcmWebviewRequest(
+      { type: "recoverLcmDbLock", requestID: "req-recover-lock", body: { dryRun: true, force: true } },
+      createContext({ client, posts }),
+    )
+
+    expect(calls).toEqual([
+      {
+        sessionID: "sess-1",
+        directory: "/workspace/sess-1",
+        workspace: "workspace-1",
+        lcmDbRecoverLockInput: { dryRun: true, force: true },
+      },
+    ])
+    expect(posts).toEqual([
+      {
+        type: "recoverLcmDbLock.result",
+        requestID: "req-recover-lock",
+        ok: true,
+        body: {
+          operationID: "op-webview-recover-lock",
+          dataDir: "/safe/lcm/family",
+          dryRun: true,
+          force: true,
+          status: "would_recover",
+          ownerLock: {
+            present: true,
+            recoveryState: "force_required",
+            diagnosticCode: "lcm_owner_lock_malformed",
+            canRecover: true,
+            forceRequired: true,
+            retryable: false,
+          },
+          safeErrors: [],
+        },
+      },
+    ])
+  })
+
   it("exports reconstructed prompts through the trusted session route", async () => {
     const calls: unknown[] = []
     const client = {

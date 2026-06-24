@@ -1,6 +1,7 @@
 import type {
   KiloClient,
   LcmDbDiagnoseReport,
+  LcmDbRecoverLockReport,
   LcmDbRebuildReport,
   LcmMaintenanceResult,
   LcmPromptExportReport,
@@ -43,6 +44,11 @@ export type LcmWebviewRequest =
       body?: { sessionID?: string; dryRun?: boolean }
     }
   | {
+      type: "recoverLcmDbLock"
+      requestID?: string
+      body?: { sessionID?: string; dryRun?: boolean; force?: boolean }
+    }
+  | {
       type: "exportLcmPrompts"
       requestID?: string
       body?: { sessionID?: string }
@@ -66,6 +72,7 @@ const LCM_WEBVIEW_REQUEST_TYPES = new Set<LcmWebviewRequest["type"]>([
   "updateLcmSettings",
   "cancelLcmMaintenance",
   "diagnoseLcmDb",
+  "recoverLcmDbLock",
   "rebuildLcmDb",
   "exportLcmPrompts",
 ])
@@ -269,6 +276,36 @@ async function handleRebuildDb(
   postLcmResult(request.ctx, request.responseType, request.requestID, { ok: true, body: result.data })
 }
 
+async function handleRecoverDbLock(
+  message: Extract<LcmWebviewRequest, { type: "recoverLcmDbLock" }>,
+  request: LcmConnectedRequest,
+): Promise<void> {
+  if (!request.sessionID) {
+    postLcmResult<LcmDbRecoverLockReport>(request.ctx, request.responseType, request.requestID, {
+      ok: false,
+      error: createLcmTransportError({
+        safeMessage: "Open a Kilo task before recovering memory storage.",
+        diagnosticCode: "lcm_webview_db_recover_lock_session_missing",
+      }),
+    })
+    return
+  }
+  const result = await request.client.session.lcm.db.recoverLock({
+    sessionID: request.sessionID,
+    directory: request.directory,
+    ...(request.currentWorkspaceID ? { workspace: request.currentWorkspaceID } : {}),
+    lcmDbRecoverLockInput: { dryRun: message.body?.dryRun ?? true, force: message.body?.force ?? false },
+  })
+  if (result.error || !result.data) {
+    postLcmResult(request.ctx, request.responseType, request.requestID, {
+      ok: false,
+      error: normalizeLcmTransportError(result.error, "lcm_webview_db_recover_lock_failed"),
+    })
+    return
+  }
+  postLcmResult(request.ctx, request.responseType, request.requestID, { ok: true, body: result.data })
+}
+
 async function handleExportPrompts(request: LcmConnectedRequest): Promise<void> {
   if (!request.sessionID) {
     postLcmResult<LcmPromptExportReport>(request.ctx, request.responseType, request.requestID, {
@@ -335,6 +372,9 @@ export async function handleLcmWebviewRequest(message: LcmWebviewRequest, ctx: L
         return
       case "rebuildLcmDb":
         await handleRebuildDb(message, request)
+        return
+      case "recoverLcmDbLock":
+        await handleRecoverDbLock(message, request)
         return
       case "exportLcmPrompts":
         await handleExportPrompts(request)

@@ -5974,6 +5974,9 @@
                     "required": ["id", "providerID"],
                     "additionalProperties": false
                   },
+                  "metadata": {
+                    "type": "object"
+                  },
                   "permission": {
                     "$ref": "#/components/schemas/PermissionRuleset"
                   },
@@ -6300,6 +6303,9 @@
                 "properties": {
                   "title": {
                     "type": "string"
+                  },
+                  "metadata": {
+                    "type": "object"
                   },
                   "permission": {
                     "$ref": "#/components/schemas/PermissionRuleset"
@@ -8265,6 +8271,135 @@
           {
             "lang": "js",
             "source": "import { createKiloClient } from \"@kilocode/sdk\n\nconst client = createKiloClient()\nawait client.session.lcm.db.diagnose({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/lcm/db/recover-lock": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "session.lcm.db.recoverLock",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "LCM database owner-lock recovery report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LcmDbRecoverLockReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "LcmBadRequestError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LcmBadRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LcmForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LcmForbiddenError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LcmNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LcmNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "LcmConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LcmConflictError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LcmServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LcmServiceUnavailableError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "LcmTimeoutError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LcmTimeoutError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Run a content-safe owner-lock recovery preview or apply-mode repair for the trusted session family.",
+        "summary": "Recover LCM database owner lock",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LcmDbRecoverLockInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\n\nconst client = createKiloClient()\nawait client.session.lcm.db.recoverLock({\n  ...\n})"
           }
         ]
       }
@@ -11874,11 +12009,14 @@
             }
           },
           "400": {
-            "description": "BadRequest | InvalidRequestError",
+            "description": "WorkspaceCreateError | BadRequest | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WorkspaceCreateError"
+                    },
                     {
                       "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
                     },
@@ -17569,20 +17707,32 @@
             "required": true
           },
           {
-            "name": "directory",
             "in": "query",
+            "name": "directory",
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
           },
           {
-            "name": "workspace",
             "in": "query",
+            "name": "workspace",
             "schema": {
               "type": "string"
-            },
-            "required": false
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ticket",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -17914,6 +18064,9 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
+          },
+          {
+            "$ref": "#/components/schemas/EventPluginAdded"
           },
           {
             "$ref": "#/components/schemas/EventCatalogModelUpdated"
@@ -19177,7 +19330,7 @@
           },
           "pid": {
             "type": "integer",
-            "exclusiveMinimum": 0
+            "minimum": 0
           },
           "sessionID": {
             "anyOf": [
@@ -20456,6 +20609,9 @@
           "version": {
             "type": "string"
           },
+          "metadata": {
+            "type": "object"
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -20829,6 +20985,9 @@
               },
               {
                 "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
+              },
+              {
+                "$ref": "#/components/schemas/EventPluginAdded"
               },
               {
                 "$ref": "#/components/schemas/EventCatalogModelUpdated"
@@ -21504,7 +21663,20 @@
                     "enum": [false]
                   }
                 ],
-                "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout."
+                "description": "Timeout in milliseconds for full requests to this provider. Set to false to disable timeout."
+              },
+              "headerTimeout": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "type": "boolean",
+                    "enum": [false]
+                  }
+                ],
+                "description": "Timeout in milliseconds to wait for response headers. Provider integrations may set defaults. Set to false to disable timeout."
               },
               "chunkTimeout": {
                 "type": "integer",
@@ -21653,7 +21825,6 @@
                       }
                     }
                   },
-                  "required": ["input", "output"],
                   "additionalProperties": false
                 },
                 "experimental": {
@@ -22316,7 +22487,10 @@
             },
             "additionalProperties": false
           },
-          "lcm": {},
+          "lcm": {
+            "anyOf": [],
+            "description": "LCM public settings and deployment defaults persisted through normal Kilo config storage."
+          },
           "experimental": {
             "type": "object",
             "properties": {
@@ -22347,6 +22521,12 @@
               "mcp_timeout": {
                 "type": "integer",
                 "exclusiveMinimum": 0
+              },
+              "policies": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ConfigV2ExperimentalPolicy"
+                }
               }
             },
             "additionalProperties": false
@@ -23021,6 +23201,9 @@
           },
           "version": {
             "type": "string"
+          },
+          "metadata": {
+            "type": "object"
           },
           "time": {
             "type": "object",
@@ -24813,6 +24996,78 @@
         "required": ["name", "status"],
         "additionalProperties": false
       },
+      "LcmOwnerLockSupportReport": {
+        "type": "object",
+        "properties": {
+          "present": {
+            "type": "boolean"
+          },
+          "recoveryState": {
+            "type": "string",
+            "enum": ["absent", "fresh", "wait", "recoverable", "force_required", "blocked", "unavailable"]
+          },
+          "diagnosticCode": {
+            "type": "string"
+          },
+          "canRecover": {
+            "type": "boolean"
+          },
+          "forceRequired": {
+            "type": "boolean"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "lockAgeMs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "retryAfterMs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          }
+        },
+        "required": ["present", "recoveryState", "diagnosticCode", "canRecover", "forceRequired", "retryable"],
+        "additionalProperties": false
+      },
       "LcmDbDiagnoseReport": {
         "type": "object",
         "properties": {
@@ -24863,9 +25118,56 @@
           },
           "quarantineRecommended": {
             "type": "boolean"
+          },
+          "ownerLock": {
+            "$ref": "#/components/schemas/LcmOwnerLockSupportReport"
           }
         },
         "required": ["operationID", "dataDir", "status", "checks", "safeErrors", "quarantineRecommended"],
+        "additionalProperties": false
+      },
+      "LcmDbRecoverLockInput": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LcmDbRecoverLockReport": {
+        "type": "object",
+        "properties": {
+          "operationID": {
+            "type": "string"
+          },
+          "dataDir": {
+            "type": "string"
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "force": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["would_recover", "recovered", "not_needed", "refused", "failed"]
+          },
+          "ownerLock": {
+            "$ref": "#/components/schemas/LcmOwnerLockSupportReport"
+          },
+          "safeErrors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LcmSafeError"
+            }
+          }
+        },
+        "required": ["operationID", "dataDir", "dryRun", "force", "status", "ownerLock", "safeErrors"],
         "additionalProperties": false
       },
       "LcmDbRebuildInput": {
@@ -25555,6 +25857,27 @@
           }
         },
         "required": ["id", "type", "name", "projectID", "timeUsed"],
+        "additionalProperties": false
+      },
+      "WorkspaceCreateError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["WorkspaceCreateError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
         "additionalProperties": false
       },
       "WorkspaceWarpError": {
@@ -26758,6 +27081,16 @@
                       }
                     ]
                   },
+                  "metadata": {
+                    "anyOf": [
+                      {
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "time": {
                     "type": "object",
                     "properties": {
@@ -26981,7 +27314,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID", "variant"],
+                "required": ["id", "providerID"],
                 "additionalProperties": false
               }
             },
@@ -27213,7 +27546,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID", "variant"],
+                "required": ["id", "providerID"],
                 "additionalProperties": false
               },
               "snapshot": {
@@ -34320,7 +34653,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID", "variant"],
+                "required": ["id", "providerID"],
                 "additionalProperties": false
               }
             },
@@ -34583,7 +34916,7 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "providerID", "variant"],
+                "required": ["id", "providerID"],
                 "additionalProperties": false
               },
               "snapshot": {
@@ -35399,6 +35732,30 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventPluginAdded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["plugin.added"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "ModelV2Info": {
         "type": "object",
         "properties": {
@@ -35916,6 +36273,27 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "PolicyEffect": {
+        "type": "string",
+        "enum": ["allow", "deny"]
+      },
+      "ConfigV2ExperimentalPolicy": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["provider.use"]
+          },
+          "effect": {
+            "$ref": "#/components/schemas/PolicyEffect"
+          },
+          "resource": {
+            "type": "string"
+          }
+        },
+        "required": ["action", "effect", "resource"],
+        "additionalProperties": false
+      },
       "SessionInfo": {
         "type": "object",
         "properties": {
@@ -35953,7 +36331,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID", "variant"],
+            "required": ["id", "providerID"],
             "additionalProperties": false
           },
           "cost": {
@@ -36081,7 +36459,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID", "variant"],
+            "required": ["id", "providerID"],
             "additionalProperties": false
           }
         },
@@ -36460,7 +36838,7 @@
                 "type": "string"
               }
             },
-            "required": ["id", "providerID", "variant"],
+            "required": ["id", "providerID"],
             "additionalProperties": false
           },
           "content": {
