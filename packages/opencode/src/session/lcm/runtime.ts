@@ -3610,6 +3610,8 @@ export const layer = Layer.effect(
         ...(publicResult.coverage ? { coverage: publicResult.coverage } : {}),
         ...(publicResult.truncated !== undefined ? { truncated: publicResult.truncated } : {}),
         ...(publicResult.noAnswerReason ? { noAnswerReason: publicResult.noAnswerReason } : {}),
+        ...(publicResult.answerSource ? { answerSource: publicResult.answerSource } : {}),
+        ...(publicResult.fallbackReason ? { fallbackReason: publicResult.fallbackReason } : {}),
         ...(publicResult.searchedExcerptCount !== undefined
           ? { searchedExcerptCount: publicResult.searchedExcerptCount }
           : {}),
@@ -4078,7 +4080,7 @@ export const layer = Layer.effect(
         scope,
         scheduler: mapScheduler,
         modelSelection: resolved.modelSelection,
-        generator: async ({ prompt, request }) => {
+        generator: async ({ prompt, request, abortSignal }) => {
           const language = await (languagePromise ??= Effect.runPromise(provider!.getLanguage(resolved.model)))
           const generated = await runProviderGeneration(
             resolved.model,
@@ -4094,10 +4096,10 @@ export const layer = Layer.effect(
                   4096,
                 ),
                 maxRetries: 0,
-                abortSignal: input.abortSignal,
+                abortSignal,
                 messages: lcmGenerationMessages({ prompt, request }),
               }),
-            { abortSignal: input.abortSignal },
+            abortSignal ? { abortSignal } : undefined,
           )
           return {
             text: generated.text,
@@ -4297,10 +4299,10 @@ export const layer = Layer.effect(
                       4096,
                     ),
                     maxRetries: 0,
-                    abortSignal: abortSignal ?? input.abortSignal,
+                    abortSignal,
                     messages: lcmGenerationMessages({ prompt, request }),
                   }),
-                { abortSignal: abortSignal ?? input.abortSignal },
+                abortSignal ? { abortSignal } : undefined,
               )
               return {
                 text: generated.text,

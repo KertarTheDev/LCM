@@ -568,13 +568,13 @@ test("lcm:retrieval-tools expand_query answers only with authorized citations", 
     )
     expect(unsupported).toMatchObject({
       ok: true,
-      answer: "",
-      citations: [],
-      coverage: "none",
-      truncated: false,
-      noAnswerReason: "provider_citation_rejected",
+      coverage: "partial",
+      answerSource: "extractive_fallback",
+      fallbackReason: "provider_citation_rejected",
     })
     if (!unsupported.ok) throw new Error(unsupported.error.safeMessage)
+    expect(unsupported.answer).toContain("AlphaCode")
+    expect(unsupported.citations.length).toBeGreaterThan(0)
     expect(unsupported.searchedExcerptCount).toBeGreaterThan(0)
 
     let structuredHandle = ""
@@ -648,16 +648,17 @@ test("lcm:retrieval-tools expand_query answers only with authorized citations", 
         }),
       }),
     )
-    expect(unsupportedStructured).toEqual({
+    expect(unsupportedStructured).toMatchObject({
       ok: true,
-      answer: "",
-      citations: [],
-      coverage: "none",
-      truncated: false,
-      noAnswerReason: "provider_citation_rejected",
+      coverage: "partial",
+      answerSource: "extractive_fallback",
+      fallbackReason: "provider_citation_rejected",
       searchedExcerptCount: expect.any(Number),
       rejectedCitationCount: 1,
     })
+    if (!unsupportedStructured.ok) throw new Error(unsupportedStructured.error.safeMessage)
+    expect(unsupportedStructured.answer).toContain("AlphaCode")
+    expect(unsupportedStructured.citations.length).toBeGreaterThan(0)
 
     const nonVisibleCitation = await runRetrieval(
       worker,
@@ -692,12 +693,60 @@ test("lcm:retrieval-tools expand_query answers only with authorized citations", 
     )
     expect(malformedStructured).toMatchObject({
       ok: true,
-      answer: "",
-      citations: [],
-      coverage: "none",
-      truncated: false,
-      noAnswerReason: "provider_malformed_json",
+      coverage: "partial",
+      answerSource: "extractive_fallback",
+      fallbackReason: "provider_malformed_json",
     })
+    if (!malformedStructured.ok) throw new Error(malformedStructured.error.safeMessage)
+    expect(malformedStructured.answer).toContain("AlphaCode")
+    expect(malformedStructured.citations.length).toBeGreaterThan(0)
+
+    const emptyProviderFallback = await runRetrieval(
+      worker,
+      LcmRetrieval.expandQuery({
+        sessionID: retrievalIDs.rootSession,
+        dataDir,
+        query: "What oven temperature correction was made, and what reason was given?",
+        summaryID: retrievalIDs.recipeSummary,
+        generator: async () => ({ text: "" }),
+      }),
+    )
+    expect(emptyProviderFallback).toMatchObject({
+      ok: true,
+      coverage: "partial",
+      answerSource: "extractive_fallback",
+      fallbackReason: "provider_empty",
+      searchedExcerptCount: expect.any(Number),
+    })
+    if (!emptyProviderFallback.ok) throw new Error(emptyProviderFallback.error.safeMessage)
+    expect(emptyProviderFallback.answer).toContain("350F")
+    expect(emptyProviderFallback.answer).toContain("scorches")
+    expect(emptyProviderFallback.citations.length).toBeGreaterThan(0)
+    expect(JSON.stringify(emptyProviderFallback)).not.toContain("SIBLING_SECRET")
+
+    const malformedProviderFallback = await runRetrieval(
+      worker,
+      LcmRetrieval.expandQuery({
+        sessionID: retrievalIDs.rootSession,
+        dataDir,
+        query: "Recover the CacheLoader option rename and default TTL change.",
+        summaryID: retrievalIDs.changelogSummary,
+        generator: async () => ({ text: '{"answer":"CacheLoader"' }),
+      }),
+    )
+    expect(malformedProviderFallback).toMatchObject({
+      ok: true,
+      coverage: "partial",
+      answerSource: "extractive_fallback",
+      fallbackReason: "provider_malformed_json",
+      searchedExcerptCount: expect.any(Number),
+    })
+    if (!malformedProviderFallback.ok) throw new Error(malformedProviderFallback.error.safeMessage)
+    expect(malformedProviderFallback.answer).toContain("maxAgeSeconds")
+    expect(malformedProviderFallback.answer).toContain("ttlSeconds")
+    expect(malformedProviderFallback.answer).toContain("300")
+    expect(malformedProviderFallback.citations.length).toBeGreaterThan(0)
+    expect(JSON.stringify(malformedProviderFallback)).not.toContain("SIBLING_SECRET")
 
     let fileExcerpt = ""
     const fileResult = await runRetrieval(

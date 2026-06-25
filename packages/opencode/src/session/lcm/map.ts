@@ -2059,17 +2059,6 @@ export function createLcmMapScheduler(lcmDb: LcmDb.Interface): LcmMapScheduler {
       if (delayed.has(input.mapID)) return
       const controller = new AbortController()
       const runDb = input.lcmDb ?? lcmDb
-      const abortFromCaller = () => {
-        controller.abort()
-        void cancelRunning({
-          mapID: input.mapID,
-          operationID: input.operationID,
-          lcmDb: runDb,
-          safeError: canceledError({ operationID: input.operationID, diagnosticCode: "lcm_map_run_aborted" }),
-        })
-      }
-      if (input.abortSignal?.aborted) abortFromCaller()
-      else input.abortSignal?.addEventListener("abort", abortFromCaller, { once: true })
       let retryAfterMs: number | undefined
       const task = processMapRun({ ...input, abortSignal: controller.signal, lcmDb: runDb })
         .then((result) => {
@@ -2101,7 +2090,6 @@ export function createLcmMapScheduler(lcmDb: LcmDb.Interface): LcmMapScheduler {
           ).catch(() => {})
         })
         .finally(() => {
-          input.abortSignal?.removeEventListener("abort", abortFromCaller)
           running.delete(input.mapID)
           if (retryAfterMs !== undefined && !controller.signal.aborted) scheduleDelayed(input, retryAfterMs)
         })
@@ -2192,7 +2180,6 @@ export const llmMap = Effect.fn("LcmMap.llmMap")(function* (input: LlmMapInterna
     dataDir: input.dataDir,
     operationID,
     lcmDb,
-    abortSignal: input.abortSignal,
     processor: input.generator,
     permissionCheck: input.permissionCheck,
     recordUsage: input.recordUsage,
@@ -2261,7 +2248,6 @@ export const agenticMap = Effect.fn("LcmMap.agenticMap")(function* (input: Agent
     dataDir: input.dataDir,
     operationID,
     lcmDb,
-    abortSignal: input.abortSignal,
     processor: (itemInput) =>
       input.childRunner({
         promptVersion: itemInput.promptVersion,
@@ -2369,7 +2355,6 @@ export const resumeMap = Effect.fn("LcmMap.resumeMap")(function* (
     dataDir: input.dataDir,
     operationID,
     lcmDb,
-    abortSignal: input.abortSignal,
     processor: input.processor,
     permissionCheck: input.permissionCheck,
     recordUsage: input.recordUsage,

@@ -36,9 +36,15 @@ export const retrievalIDs = {
   currentPart: "part_m21_current_1",
   fallbackMessage: "msg_m21_fallback_source",
   fallbackPart: "part_m21_fallback_source",
+  recipeMessage: "msg_m21_recipe_source",
+  recipePart: "part_m21_recipe_source",
+  changelogMessage: "msg_m21_changelog_source",
+  changelogPart: "part_m21_changelog_source",
   targetSummary: "sum_m21_target",
   parentSummary: "sum_m21_parent",
   fallbackSummary: "sum_m21_fallback",
+  recipeSummary: "sum_m21_recipe",
+  changelogSummary: "sum_m21_changelog",
   siblingSummary: "sum_m21_sibling",
   foreignSummary: "sum_m21_foreign",
   file: "file_m21_artifact",
@@ -578,6 +584,22 @@ export async function seedRetrievalFixture(worker: ReturnType<typeof createLcmDb
           text: "FALLBACK_NEEDLE original source text is complete and should outrank fallback memory.",
         })
         await insertMessagePart(typedDb, {
+          conversationID: retrievalIDs.rootConversation,
+          sessionID: retrievalIDs.rootSession,
+          messageRowID: retrievalIDs.recipeMessage,
+          partRowID: retrievalIDs.recipePart,
+          messageOrder: 5,
+          text: "Recipe correction: replace bake at 500F with bake at 350F for 25 minutes because the hotter oven scorches the crust before the center sets.",
+        })
+        await insertMessagePart(typedDb, {
+          conversationID: retrievalIDs.rootConversation,
+          sessionID: retrievalIDs.rootSession,
+          messageRowID: retrievalIDs.changelogMessage,
+          partRowID: retrievalIDs.changelogPart,
+          messageOrder: 6,
+          text: "Public changelog: CacheLoader option maxAgeSeconds was renamed to ttlSeconds, and the default TTL changed from 60 to 300 seconds.",
+        })
+        await insertMessagePart(typedDb, {
           conversationID: retrievalIDs.siblingConversation,
           sessionID: retrievalIDs.siblingSession,
           messageRowID: "msg_m21_sibling_1",
@@ -607,6 +629,18 @@ export async function seedRetrievalFixture(worker: ReturnType<typeof createLcmDb
           fallbackMode: "truncated_prefix",
         })
         await insertSummary(typedDb, {
+          summaryID: retrievalIDs.recipeSummary,
+          conversationID: retrievalIDs.rootConversation,
+          content: "Recipe note records an oven temperature correction.",
+          createdOffset: 26,
+        })
+        await insertSummary(typedDb, {
+          summaryID: retrievalIDs.changelogSummary,
+          conversationID: retrievalIDs.rootConversation,
+          content: "Changelog note records a CacheLoader option rename and TTL default change.",
+          createdOffset: 27,
+        })
+        await insertSummary(typedDb, {
           summaryID: retrievalIDs.siblingSummary,
           conversationID: retrievalIDs.siblingConversation,
           content: "SIBLING_SECRET summary outside the current child lineage.",
@@ -629,6 +663,14 @@ export async function seedRetrievalFixture(worker: ReturnType<typeof createLcmDb
         await typedDb.query(
           "INSERT INTO lcm_summary_messages (summary_id, message_row_id, source_order) VALUES ($1, $2, 1)",
           [retrievalIDs.fallbackSummary, retrievalIDs.fallbackMessage],
+        )
+        await typedDb.query(
+          "INSERT INTO lcm_summary_messages (summary_id, message_row_id, source_order) VALUES ($1, $2, 1)",
+          [retrievalIDs.recipeSummary, retrievalIDs.recipeMessage],
+        )
+        await typedDb.query(
+          "INSERT INTO lcm_summary_messages (summary_id, message_row_id, source_order) VALUES ($1, $2, 1)",
+          [retrievalIDs.changelogSummary, retrievalIDs.changelogMessage],
         )
         await typedDb.query(
           "INSERT INTO lcm_id_aliases (alias_id, canonical_id, id_kind, conversation_id, created_at_ms) VALUES ($1, $2, 'summary', $3, $4)",

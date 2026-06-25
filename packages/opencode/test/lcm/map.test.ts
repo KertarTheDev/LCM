@@ -536,6 +536,57 @@ test("llm_map defers local provider capacity without consuming retries or failin
   await worker.close()
 })
 
+test("llm_map caller abort after run creation does not cancel durable work", async () => {
+  await using tmp = await tmpdir()
+  const dataDir = path.join(tmp.path, "lcm")
+  const worker = await initialize(dataDir)
+  const service = dbService(worker)
+  const scheduler = createLcmMapScheduler(service)
+  await insertConversation({ worker, sessionID, conversationID, rootPath: tmp.path })
+  const callerAbort = new AbortController()
+  let markItemStarted: (() => void) | undefined
+  let releaseItem: (() => void) | undefined
+  const itemStarted = new Promise<void>((resolve) => {
+    markItemStarted = resolve
+  })
+  const itemRelease = new Promise<void>((resolve) => {
+    releaseItem = resolve
+  })
+
+  const started = await runMap(
+    service,
+    llmMap({
+      sessionID,
+      dataDir,
+      scheduler,
+      modelSelection,
+      inputJsonl: '{"name":"alpha","value":3}',
+      itemSchema: true,
+      prompt: "Double the value field.",
+      abortSignal: callerAbort.signal,
+      generator: async ({ item }) => {
+        markItemStarted?.()
+        await itemRelease
+        return { text: JSON.stringify({ result: (item as { value: number }).value * 2 }) }
+      },
+    }),
+  )
+  expect(started.ok).toBe(true)
+  expectMapResult(started)
+  await itemStarted
+  callerAbort.abort()
+  releaseItem?.()
+  await scheduler.drain(started.mapID)
+
+  const status = await runMap(service, mapStatus({ sessionID, dataDir, mapID: started.mapID }))
+  expect(status.ok).toBe(true)
+  expectMapResult(status)
+  expect(status.status).toBe("completed")
+  expect(status.completedItems).toBe(1)
+  expect(status.safeError).toBeUndefined()
+  await worker.close()
+})
+
 test("pre-run validation rejects malformed inputs before map run and item rows are created", async () => {
   await using tmp = await tmpdir()
   const dataDir = path.join(tmp.path, "lcm")

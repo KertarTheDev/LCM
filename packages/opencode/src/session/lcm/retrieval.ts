@@ -195,6 +195,8 @@ type NormalizedExpandQueryAnswer = Pick<
   | "coverage"
   | "truncated"
   | "noAnswerReason"
+  | "answerSource"
+  | "fallbackReason"
   | "searchedExcerptCount"
   | "rejectedCitationCount"
 >
@@ -1502,28 +1504,100 @@ function noExpandQueryAnswer(
   }
 }
 
+function oneLineExcerpt(text: string) {
+  return text.replace(/\s+/g, " ").trim()
+}
+
+function extractiveExpandQueryFallback(input: {
+  readonly excerpts: readonly LcmExpandQueryExcerpt[]
+  readonly fallbackReason: NonNullable<LcmExpandQueryResult["fallbackReason"]>
+  readonly maxAnswerTokens: number
+}): NormalizedExpandQueryAnswer {
+  const cited = input.excerpts
+    .flatMap((excerpt) => {
+      const citation = citationObject(excerpt.handle)
+      const text = oneLineExcerpt(excerpt.text)
+      return citation && text ? [{ ...excerpt, citation, text }] : []
+    })
+    .slice(0, 3)
+  if (cited.length === 0) return noExpandQueryAnswer(input.fallbackReason)
+
+  const maxAnswerBytes = Math.max(240, Math.min(input.maxAnswerTokens * 4, 4000))
+  const perExcerptBytes = Math.max(120, Math.floor((maxAnswerBytes - cited.length * 32) / cited.length))
+  const lines = cited.map((excerpt) => {
+    const text = truncateUtf8(excerpt.text, Math.max(80, perExcerptBytes - Buffer.byteLength(excerpt.handle, "utf8") - 8))
+    return `- ${text} (${excerpt.handle})`
+  })
+  const answer = lines.join("\n")
+  return {
+    answer,
+    citations: cited.map((excerpt) => excerpt.citation),
+    coverage: "partial",
+    truncated: input.excerpts.length > cited.length,
+    answerSource: "extractive_fallback",
+    fallbackReason: input.fallbackReason,
+  }
+}
+
 function normalizeGeneratedAnswer(input: {
   readonly answer: string
   readonly excerpts: readonly LcmExpandQueryExcerpt[]
+  readonly maxAnswerTokens: number
 }): NormalizedExpandQueryAnswer {
   const answer = input.answer.trim()
-  if (!answer) return noExpandQueryAnswer("provider_empty")
+  if (!answer) {
+    return extractiveExpandQueryFallback({
+      excerpts: input.excerpts,
+      fallbackReason: "provider_empty",
+      maxAnswerTokens: input.maxAnswerTokens,
+    })
+  }
   const structured = normalizeStructuredGeneratedAnswer({ answer, excerpts: input.excerpts })
-  if (structured) return structured
+  if (structured) {
+    if (structured.noAnswerReason) {
+      return {
+        ...extractiveExpandQueryFallback({
+          excerpts: input.excerpts,
+          fallbackReason: structured.noAnswerReason,
+          maxAnswerTokens: input.maxAnswerTokens,
+        }),
+        ...(structured.rejectedCitationCount !== undefined
+          ? { rejectedCitationCount: structured.rejectedCitationCount }
+          : {}),
+      }
+    }
+    return structured
+  }
   const allowed = new Set(input.excerpts.map((excerpt) => excerpt.handle))
   const stableHandles = uniqueOrdered(extractStableHandles(answer))
   const citedHandles = stableHandles.filter((handle) => allowed.has(handle as never))
   if (citedHandles.length === 0) {
-    return noExpandQueryAnswer("provider_citation_rejected", {
+    return {
+      ...extractiveExpandQueryFallback({
+        excerpts: input.excerpts,
+        fallbackReason: "provider_citation_rejected",
+        maxAnswerTokens: input.maxAnswerTokens,
+      }),
       rejectedCitationCount: stableHandles.length,
-    })
+    }
+  }
+  const citations = citedHandles.flatMap((handle) => {
+    const citation = citationObject(handle)
+    return citation ? [citation] : []
+  })
+  if (citations.length === 0) {
+    return {
+      ...extractiveExpandQueryFallback({
+        excerpts: input.excerpts,
+        fallbackReason: "provider_citation_rejected",
+        maxAnswerTokens: input.maxAnswerTokens,
+      }),
+      rejectedCitationCount: stableHandles.length,
+    }
   }
   return {
     answer,
-    citations: citedHandles.flatMap((handle) => {
-      const citation = citationObject(handle)
-      return citation ? [citation] : []
-    }),
+    citations,
   }
 }
 
@@ -2319,11 +2393,11 @@ const expandQueryInner = Effect.fn("LcmRetrieval.expandQueryInner")(function* (i
           .map((excerpt) => `${excerpt.text} (${excerpt.handle})`)
           .join("\n"),
       }
-  const normalized = normalizeGeneratedAnswer({ answer: generated.text, excerpts: search })
+  const normalized = normalizeGeneratedAnswer({ answer: generated.text, excerpts: search, maxAnswerTokens })
   return {
     ok: true,
     ...normalized,
-    ...(normalized.noAnswerReason ? { searchedExcerptCount: search.length } : {}),
+    ...(normalized.noAnswerReason || normalized.fallbackReason ? { searchedExcerptCount: search.length } : {}),
     ...(generated.usage ? { usage: generated.usage } : {}),
   } as LcmExpandQueryResult & { usage?: LcmExpandQueryUsage }
 })

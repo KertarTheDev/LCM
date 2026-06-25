@@ -1356,6 +1356,8 @@ export interface LcmExpandQueryResult {
   coverage?: "full" | "partial" | "none"
   truncated?: boolean
   noAnswerReason?: LcmExpandQueryNoAnswerReason
+  answerSource?: "extractive_fallback"
+  fallbackReason?: LcmExpandQueryNoAnswerReason
   searchedExcerptCount?: number
   rejectedCitationCount?: number
 }
