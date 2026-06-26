@@ -1,12 +1,14 @@
 # LCM Current-Code Verification
 
-Status date: 2026-06-20.
+Status date: 2026-06-26.
 
 This document records the verification surface for the LCM implementation on the `kilocode-lcm` branch. It is descriptive of the current code and package scripts.
 
 ## Verification Principle
 
 Run the smallest script that owns the subsystem being changed, then run the package typecheck and VSCode compile path before packaging. Do not run root `bun test`; the workspace intentionally does not use it as the LCM gate.
+
+Do not run test or typecheck groups for code that the current change did not affect. Select the owning suite or compiler slice first, and reserve broad package/root gates for cross-package dependency/config/build changes, generated contract/SDK drift, packaging/release work, or when the touched surface is too broad for a slice to isolate.
 
 All commands below are intended to run from the repository root unless a package path is included in the command.
 
@@ -37,7 +39,7 @@ Run `bun run --cwd packages/opencode lcm:contracts:generate` before the contract
 
 ## Targeted Typecheck Gates
 
-The root `bun run typecheck` Turbo gate can take close to an hour on constrained machines. Prefer these smaller package gates while developing, then use the broader gate only when packaging or when a cross-package change needs it:
+The root `bun run typecheck` Turbo gate can take close to an hour on constrained machines and repeatedly checks unchanged packages. Prefer these smaller package gates while developing, then use the broader gate only when packaging or when a cross-package change needs it:
 
 - Core shared package: `bun run typecheck:core`
 - Generated SDK: `bun run typecheck:sdk`
@@ -46,7 +48,15 @@ The root `bun run typecheck` Turbo gate can take close to an hour on constrained
 - VSCode extension host only: `bun run typecheck:vscode:extension`
 - VSCode webview only: `bun run typecheck:vscode:webview`
 
-For LCM runtime-only changes, run the focused owning tests first, then `bun run typecheck:opencode`. For VSCode-only changes, run the focused unit tests plus the extension or webview typecheck that owns the touched files. Avoid starting the full root typecheck as the first check in agent sessions because it causes long polling without narrowing failures.
+The opencode package also exposes narrower slices for ordinary investigation:
+
+- LCM runtime/retrieval/map slice: `bun run --cwd packages/opencode typecheck:lcm`
+- Session/provider/prompt slice: `bun run --cwd packages/opencode typecheck:session-provider`
+- Tool/server/ACP slice: `bun run --cwd packages/opencode typecheck:tool-server`
+- CLI and Kilo-specific slice: `bun run --cwd packages/opencode typecheck:cli-kilocode`
+- Storage/project/utility slice: `bun run --cwd packages/opencode typecheck:storage-project`
+
+For LCM runtime-only changes, run the focused owning tests first, then `bun run --cwd packages/opencode typecheck:lcm`. For non-LCM session/provider, tool/server, CLI/Kilo, or storage/project changes, use the matching opencode slice. For VSCode-only changes, run the focused unit tests plus the extension or webview typecheck that owns the touched files. Avoid starting the full root typecheck as the first check in agent sessions because it causes long polling without narrowing failures.
 
 ## Runtime And Storage Suites
 

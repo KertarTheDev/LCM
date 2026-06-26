@@ -1053,7 +1053,7 @@ export const layer = Layer.effect(
       operationID?: OperationID
       reason: LcmContextUpdatedEventPayload["reason"]
       lastMaintenance?: LcmMaintenanceResult
-    }): Effect.Effect<LcmMetricsSnapshot | undefined> {
+    }) {
       if (!bus) return undefined
       const settings = yield* effectiveSettings({ sessionID: input.sessionID }).pipe(
         Effect.catch(() => Effect.succeed(undefined)),

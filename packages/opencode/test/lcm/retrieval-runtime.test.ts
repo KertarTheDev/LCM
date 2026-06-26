@@ -75,6 +75,7 @@ test("lcm:retrieval-runtime expand query keeps root session scope after child-sl
       Config.Service,
       Config.Service.of({
         get: () => Effect.succeed({}),
+        getLocal: () => Effect.succeed({}),
         getGlobal: () => Effect.succeed({}),
         getConsoleState: () =>
           Effect.succeed({

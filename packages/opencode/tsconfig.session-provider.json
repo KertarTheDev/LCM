@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.d.ts",
+    "src/session/**/*.ts",
+    "src/provider/**/*.ts",
+    "src/kilocode/provider/**/*.ts",
+    "src/kilocode/session/**/*.ts",
+    "test/session/**/*.ts",
+    "test/provider/**/*.ts",
+    "test/kilocode/provider/**/*.ts",
+    "test/kilocode/provider*.test.ts",
+    "test/kilocode/session*.test.ts",
+    "test/kilocode/session/**/*.ts",
+    "test/kilocode/model*.test.ts",
+    "test/kilocode/local-model.test.ts"
+  ]
+}
