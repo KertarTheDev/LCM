@@ -52,6 +52,8 @@ function renderResult(result: LcmExpandQueryResult | LcmToolErrorResult) {
             coverage: result.coverage,
             noAnswerReason: result.noAnswerReason,
             searchedExcerptCount: result.searchedExcerptCount,
+            providerFinishReason: result.providerDiagnostics?.finishReason,
+            providerEmptyText: result.providerDiagnostics?.emptyText,
           }
         : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),
       truncated: result.ok ? result.truncated === true : false,

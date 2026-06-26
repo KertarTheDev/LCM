@@ -244,6 +244,28 @@ test("lcm:retrieval-runtime expand query keeps root session scope after child-sl
     if (!result.ok) throw new Error(`${result.error.diagnosticCode}: ${result.error.safeMessage}`)
     expect(result.answer).toContain("AlphaRuntime")
     expect(result.citations).toContainEqual({ summaryID })
+
+    const missingModel = await Effect.runPromise(
+      LcmRuntime.Service.use((runtime) =>
+        runtime.expandQuery({
+          sessionID: session.id,
+          summaryID,
+          query: "What exact AlphaRuntime detail was recovered?",
+          providerID: "missing-provider",
+          modelID: "missing-model",
+        }),
+      ).pipe(
+        Effect.ensuring(LcmRuntime.Service.use((runtime) => runtime.close()).pipe(Effect.ignore)),
+        Effect.provide(LcmRuntime.layer.pipe(Layer.provide(LcmDb.defaultLayer), Layer.provide(configLayer))),
+      ),
+    )
+    expect(missingModel).toMatchObject({
+      ok: false,
+      error: {
+        code: "invalid_request",
+        diagnosticCode: "lcm_expand_query_model_unavailable",
+      },
+    })
   } finally {
     restoreEnv()
   }

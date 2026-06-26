@@ -939,11 +939,41 @@
         "methods": {},
         "source": "interface LcmExpandQueryInput {\n query: string\n summaryID?: SummaryID\n maxAnswerTokens?: number\n}"
       },
+      "LcmExpandQueryProviderDiagnostics": {
+        "fields": {
+          "emptyText": {
+            "optional": false,
+            "type": "boolean"
+          },
+          "finishReason": {
+            "optional": true,
+            "type": "string"
+          },
+          "outputTokens": {
+            "optional": true,
+            "type": "number"
+          },
+          "reasoningTokens": {
+            "optional": true,
+            "type": "number"
+          },
+          "textByteCount": {
+            "optional": false,
+            "type": "number"
+          }
+        },
+        "methods": {},
+        "source": "interface LcmExpandQueryProviderDiagnostics {\n finishReason?: string\n textByteCount: number\n outputTokens?: number\n reasoningTokens?: number\n emptyText: boolean\n}"
+      },
       "LcmExpandQueryResult": {
         "fields": {
           "answer": {
             "optional": false,
             "type": "string"
+          },
+          "answerSource": {
+            "optional": true,
+            "type": "\"extractive_fallback\""
           },
           "citations": {
             "optional": false,
@@ -953,9 +983,29 @@
             "optional": true,
             "type": "\"full\" | \"partial\" | \"none\""
           },
+          "fallbackReason": {
+            "optional": true,
+            "type": "LcmExpandQueryNoAnswerReason"
+          },
+          "noAnswerReason": {
+            "optional": true,
+            "type": "LcmExpandQueryNoAnswerReason"
+          },
           "ok": {
             "optional": false,
             "type": "true"
+          },
+          "providerDiagnostics": {
+            "optional": true,
+            "type": "LcmExpandQueryProviderDiagnostics"
+          },
+          "rejectedCitationCount": {
+            "optional": true,
+            "type": "number"
+          },
+          "searchedExcerptCount": {
+            "optional": true,
+            "type": "number"
           },
           "truncated": {
             "optional": true,
@@ -963,7 +1013,7 @@
           }
         },
         "methods": {},
-        "source": "interface LcmExpandQueryResult {\n ok: true\n answer: string\n citations: Array<{ summaryID?: SummaryID; fileID?: LcmFileID; messageRowID?: MessageRowID; partRowID?: PartRowID }>\n coverage?: \"full\" | \"partial\" | \"none\"\n truncated?: boolean\n}"
+        "source": "interface LcmExpandQueryResult {\n ok: true\n answer: string\n citations: Array<{ summaryID?: SummaryID; fileID?: LcmFileID; messageRowID?: MessageRowID; partRowID?: PartRowID }>\n coverage?: \"full\" | \"partial\" | \"none\"\n truncated?: boolean\n noAnswerReason?: LcmExpandQueryNoAnswerReason\n answerSource?: \"extractive_fallback\"\n fallbackReason?: LcmExpandQueryNoAnswerReason\n searchedExcerptCount?: number\n rejectedCitationCount?: number\n providerDiagnostics?: LcmExpandQueryProviderDiagnostics\n}"
       },
       "LcmExpandResult": {
         "fields": {
@@ -3699,6 +3749,16 @@
         ],
         "source": "type LcmEventName =\n | \"lcm.db.status\"\n | \"lcm.context.updated\"\n | \"lcm.metrics.updated\"\n | \"lcm.file.status\"\n | \"lcm.maintenance.started\"\n | \"lcm.maintenance.ended\"\n | \"lcm.maintenance.failed\""
       },
+      "LcmExpandQueryNoAnswerReason": {
+        "literals": [
+          "no_excerpts",
+          "provider_citation_rejected",
+          "provider_declined",
+          "provider_empty",
+          "provider_malformed_json"
+        ],
+        "source": "type LcmExpandQueryNoAnswerReason =\n | \"no_excerpts\"\n | \"provider_empty\"\n | \"provider_malformed_json\"\n | \"provider_citation_rejected\"\n | \"provider_declined\""
+      },
       "LcmFileExplorationStatus": {
         "literals": [
           "canceled",
@@ -4403,7 +4463,7 @@
     }
   },
   "source": {
-    "sha256": "897f73b8075550f131b06c8ed8ecbabb7abbb2b4eb7cfb339840d94df0511826"
+    "sha256": "2fe5531aeac65532aa162cc0d524c73c2adcabe83f619d64cc84fdc3c40f1677"
   },
   "surfaceClassifications": {
     "LcmAssemblyBlockedResult": {

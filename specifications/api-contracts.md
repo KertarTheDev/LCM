@@ -1607,12 +1607,33 @@ interface LcmExpandQueryInput {
   maxAnswerTokens?: number
 }
 
+type LcmExpandQueryNoAnswerReason =
+  | "no_excerpts"
+  | "provider_empty"
+  | "provider_malformed_json"
+  | "provider_citation_rejected"
+  | "provider_declined"
+
 interface LcmExpandQueryResult {
   ok: true
   answer: string
   citations: Array<{ summaryID?: SummaryID; fileID?: LcmFileID; messageRowID?: MessageRowID; partRowID?: PartRowID }>
   coverage?: "full" | "partial" | "none"
   truncated?: boolean
+  noAnswerReason?: LcmExpandQueryNoAnswerReason
+  answerSource?: "extractive_fallback"
+  fallbackReason?: LcmExpandQueryNoAnswerReason
+  searchedExcerptCount?: number
+  rejectedCitationCount?: number
+  providerDiagnostics?: LcmExpandQueryProviderDiagnostics
+}
+
+interface LcmExpandQueryProviderDiagnostics {
+  finishReason?: string
+  textByteCount: number
+  outputTokens?: number
+  reasoningTokens?: number
+  emptyText: boolean
 }
 
 interface LcmReadInput {
@@ -1658,9 +1679,9 @@ Canonical v1 retrieval tool descriptions are part of the prompt-boundary contrac
 
 In these canonical descriptions, "trusted child, explore, or map session" refers only to runtime-derived capability classes with proven lineage. Direct `lcm_expand` is available to trusted task, explore, and map children. `lcm_read` availability is stricter: a task child also needs trusted read-capable metadata, while explore and map children follow their own runtime-derived authority and provenance checks. The canonical sentence text above remains unchanged for provider/tool-description compatibility.
 
-`lcm_expand_query` no-answer is a successful empty answer, not a synthetic uncited claim: return `LcmExpandQueryResult` with `ok = true`, `answer = ""`, and `citations = []` when authorized retrieval/explore results cannot support an answer with stable `sum_...`, `file_...`, `msg_...`, or `part_...` citations. When `summaryID` is present, the runtime authorizes that summary in the current lineage and loads covered-source excerpts for that handle before query-derived handles or broad query matches. When the query text explicitly names authorized `file_...` handles, the runtime may include bounded UTF-8 excerpts from LCM-owned artifact-backed file rows, including `tool_output` artifacts, after artifact validation. Framed inline-part artifacts are decoded into logical text/reasoning/tool input/output/error/media sections before becoming model-visible excerpts; raw frame headers and length fields are not exposed. Path-backed file rows remain preview-only through `lcm_expand_query` and require authorized `lcm_read` for exact bytes.
+`lcm_expand_query` no-answer is a successful empty answer, not a synthetic uncited claim: return `LcmExpandQueryResult` with `ok = true`, `answer = ""`, `citations = []`, `coverage = "none"`, and `truncated = false` when authorized retrieval/explore results cannot support an answer with stable `sum_...`, `file_...`, `msg_...`, or `part_...` citations. True no-answer results include content-safe `noAnswerReason` and may include excerpt/citation counts so weak agents can distinguish no matches from provider behavior. When authorized excerpts do exist but provider synthesis returns empty output, malformed JSON, unsupported citations, or a provider-declared no-answer, the runtime returns a bounded deterministic extractive fallback instead of blank: `coverage = "partial"`, `answerSource = "extractive_fallback"`, `fallbackReason` identifies the provider failure class, and every excerpt-derived line is backed by stable citations. When `summaryID` is present, the runtime authorizes that summary in the current lineage and loads covered-source excerpts for that handle before query-derived handles or broad query matches. When the query text explicitly names authorized `file_...` handles, the runtime may include bounded UTF-8 excerpts from LCM-owned artifact-backed file rows, including `tool_output` artifacts, after artifact validation. Framed inline-part artifacts are decoded into logical text/reasoning/tool input/output/error/media sections before becoming model-visible excerpts; raw frame headers and length fields are not exposed. Path-backed file rows remain preview-only through `lcm_expand_query` and require authorized `lcm_read` for exact bytes.
 
-Provider-backed `lcm_expand_query` uses prompt version `retrieval-expand-query-v3`. The provider is asked for an internal JSON envelope with `answer`, `citedHandles`, `coverage`, `truncated`, and optional diagnostic fields such as `confidenceNotes`, `expandedSummaryCount`, and `sourceTokenEstimate`. Public output preserves `answer` plus typed `citations` and may include optional content-safe `coverage`/`truncated` diagnostics from a valid structured envelope. JSON-looking malformed output, unsupported cited handles, missing cited handles, or answers whose text does not visibly contain every `citedHandles` handle fail closed to the successful empty no-answer shape. Non-JSON legacy prose is normalized by the older citation extractor for local/test generators, but production prompt instructions require the structured envelope. `confidenceNotes`, expanded summary counts, and source token estimates remain parser inputs only unless this contract is deliberately expanded later.
+Provider-backed `lcm_expand_query` uses prompt version `retrieval-expand-query-v3`. The provider is asked for an internal JSON envelope with `answer`, `citedHandles`, `coverage`, `truncated`, and optional diagnostic fields such as `confidenceNotes`, `expandedSummaryCount`, and `sourceTokenEstimate`. Public output preserves `answer` plus typed `citations` and may include optional content-safe `coverage`/`truncated` diagnostics from a valid structured envelope. When synthesis is provider-backed, public output may also include content-safe `providerDiagnostics` containing finish reason, generated text byte count, output token count, reasoning token count, and whether the provider returned empty text; it must not include prompts, excerpts, raw provider text, raw request bodies, or provider-specific payloads. JSON wrapped in Markdown fences or harmless surrounding prose may be extracted before schema validation. JSON-looking malformed output, unsupported cited handles, missing cited handles, or an explicit envelope `coverage = "none"` are content-safe provider synthesis failures; if authorized excerpts are present, the runtime returns the cited extractive fallback, otherwise it returns the successful empty no-answer shape. Non-JSON legacy prose is normalized by the older citation extractor for local/test generators, but production prompt instructions require the structured envelope. `confidenceNotes`, expanded summary counts, and source token estimates remain parser inputs only unless this contract is deliberately expanded later.
 
 `lcm_describe` is metadata-only. For summaries it may return summary topology, type, token counts, and coverage counts. For files it may return only the `LcmDescribeResult` fields above that are already stored on an authorized `lcm_large_files` row or derived from current-lineage summary/file edges: `fileSourceKind`, `byteCount`, bounded `preview`, `staleState`, and `explorationStatus`. A file `preview` is allowed only when bounded `preview_text` is already stored on that authorized file row; `lcm_describe` must not read artifact/path bytes to create or refresh it. It must not synthesize file IDs, create placeholder file rows, read artifact/path bytes, expose raw path/provenance metadata, or return fields outside `LcmDescribeResult`. Full bytes remain available only through authorized `lcm_read`, not `lcm_describe`.
 

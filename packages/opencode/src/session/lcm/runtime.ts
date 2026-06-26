@@ -7,8 +7,9 @@ import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelID, ProviderID } from "@/provider/schema"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { generateText } from "ai"
+import { generateText, type ModelMessage } from "ai"
 import { Context, Effect, Layer, Option } from "effect"
+import { mergeDeep } from "remeda"
 import { SessionID as RuntimeSessionID } from "../schema"
 import { SessionStatus } from "../status"
 import * as LcmConfig from "./config"
@@ -623,6 +624,66 @@ function lcmGenerationMessages(input: {
   readonly request?: { readonly messages: readonly LcmGenerationMessage[] }
 }) {
   return input.request ? [...input.request.messages] : [{ role: "user" as const, content: input.prompt }]
+}
+
+function mergeLcmProviderOptions(input: {
+  readonly model: Provider.Model
+  readonly sessionID: string
+  readonly providerOptions?: Record<string, unknown>
+}) {
+  const base = ProviderTransform.options({
+    model: input.model,
+    sessionID: input.sessionID,
+    ...(input.providerOptions ? { providerOptions: input.providerOptions } : {}),
+  })
+  return mergeDeep(base, input.model.options ?? {}) as Record<string, unknown>
+}
+
+function shouldOmitLcmMaxOutputTokens(model: Provider.Model) {
+  return model.api.npm === "@ai-sdk/openai-compatible" && model.api.id.toLowerCase().includes("gpt-5")
+}
+
+const LCM_REASONING_OUTPUT_RESERVE_TOKENS = 1024
+
+function lcmMaxOutputTokens(input: {
+  readonly model: Provider.Model
+  readonly maxOutputTokens?: number
+  readonly reserveReasoningTokens?: boolean
+}) {
+  if (shouldOmitLcmMaxOutputTokens(input.model)) return undefined
+  if (input.maxOutputTokens === undefined) return undefined
+  const reserve =
+    input.reserveReasoningTokens && input.model.capabilities.reasoning ? LCM_REASONING_OUTPUT_RESERVE_TOKENS : 0
+  const requested = input.maxOutputTokens + reserve
+  const limit = resolveLcmModelLimits(input.model).output ?? ProviderTransform.maxOutputTokens(input.model)
+  return Math.max(1, Math.min(requested, limit))
+}
+
+function stringField(value: unknown) {
+  return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+function objectField(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+}
+
+function lcmProviderDiagnostics(input: {
+  readonly generation: unknown
+  readonly text: string
+}): NonNullable<LcmExpandQueryResult["providerDiagnostics"]> {
+  const generation = objectField(input.generation)
+  const usage = objectField(generation?.usage)
+  const outputDetails = objectField(usage?.outputTokenDetails)
+  const outputTokens = numberField(usage?.outputTokens ?? usage?.completionTokens)
+  const reasoningTokens = numberField(usage?.reasoningTokens ?? outputDetails?.reasoningTokens)
+  const finishReason = stringField(generation?.finishReason)
+  return {
+    ...(finishReason ? { finishReason } : {}),
+    textByteCount: Buffer.byteLength(input.text, "utf8"),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    ...(reasoningTokens !== undefined ? { reasoningTokens } : {}),
+    emptyText: input.text.trim().length === 0,
+  }
 }
 
 function thresholdEventFields(threshold: LcmThresholdDecision) {
@@ -1336,8 +1397,68 @@ export const layer = Layer.effect(
       )
     }
 
+    const runLcmTextGeneration = async (input: {
+      readonly model: Provider.Model
+      readonly language: LanguageModelV3
+      readonly sessionID: string
+      readonly priority: LcmProviderCapacityPriority
+      readonly operationID?: OperationID
+      readonly prompt: string
+      readonly request?: { readonly messages: readonly LcmGenerationMessage[] }
+      readonly maxOutputTokens?: number
+      readonly reserveReasoningTokens?: boolean
+      readonly abortSignal?: AbortSignal
+    }) => {
+      const providerInfo = provider
+        ? await Effect.runPromise(
+            provider.getProvider(input.model.providerID).pipe(Effect.catch(() => Effect.succeed(undefined))),
+          )
+        : undefined
+      const options = mergeLcmProviderOptions({
+        model: input.model,
+        sessionID: input.sessionID,
+        ...(providerInfo ? { providerOptions: providerInfo.options } : {}),
+      })
+      const messages = ProviderTransform.message(
+        lcmGenerationMessages({
+          prompt: input.prompt,
+          ...(input.request ? { request: input.request } : {}),
+        }) as ModelMessage[],
+        input.model,
+        options,
+      )
+      const generated = await runProviderGeneration(
+        input.model,
+        input.priority,
+        input.operationID,
+        () =>
+          generateText({
+            model: input.language,
+            temperature: input.model.capabilities.temperature ? 0 : undefined,
+            topP: ProviderTransform.topP(input.model),
+            topK: ProviderTransform.topK(input.model),
+            providerOptions: ProviderTransform.providerOptions(input.model, options),
+            maxOutputTokens: lcmMaxOutputTokens({
+              model: input.model,
+              maxOutputTokens: input.maxOutputTokens,
+              reserveReasoningTokens: input.reserveReasoningTokens,
+            }),
+            maxRetries: 0,
+            abortSignal: input.abortSignal,
+            messages,
+          }),
+        input.abortSignal ? { abortSignal: input.abortSignal } : undefined,
+      )
+      return {
+        text: generated.text,
+        usage: generated.usage,
+        providerDiagnostics: lcmProviderDiagnostics({ generation: generated, text: generated.text }),
+      }
+    }
+
     const makeSummaryGenerator = (
       model: Provider.Model,
+      sessionID: string,
       renderOptions: LcmPreflightInput["renderOptions"],
       priority: LcmProviderCapacityPriority = "foreground",
       defaultMaxOutputTokens: number = LcmConfig.RUNTIME_DEFAULTS.performance.summaryGenerationMaxOutputTokens,
@@ -1358,22 +1479,17 @@ export const layer = Layer.effect(
       }) => {
         if (!provider) throw pending("lcm_preflight_provider_missing")
         const language = await (languagePromise ??= Effect.runPromise(provider.getLanguage(model)))
-        const result = await runProviderGeneration(
+        const result = await runLcmTextGeneration({
           model,
+          language,
+          sessionID,
           priority,
           operationID,
-          () =>
-            generateText({
-              model: language,
-              temperature: model.capabilities.temperature ? 0 : undefined,
-              providerOptions: ProviderTransform.providerOptions(model, model.options),
-              maxOutputTokens: maxOutputTokens ?? defaultMaxOutputTokens,
-              maxRetries: 0,
-              abortSignal,
-              messages: lcmGenerationMessages({ prompt, request }),
-            }),
-          abortSignal ? { abortSignal } : undefined,
-        )
+          prompt,
+          request,
+          maxOutputTokens: maxOutputTokens ?? defaultMaxOutputTokens,
+          abortSignal,
+        })
         return {
           text: result.text,
           usage: providerUsageFromGeneration({
@@ -1749,16 +1865,16 @@ export const layer = Layer.effect(
           maxOutputTokens?: number
         }) => {
           const language = await (languagePromise ??= Effect.runPromise(provider.getLanguage(model)))
-          const result = await runProviderGeneration(model, priority, operationID, () =>
-            generateText({
-              model: language,
-              temperature: model.capabilities.temperature ? 0 : undefined,
-              providerOptions: ProviderTransform.providerOptions(model, model.options),
-              maxOutputTokens: maxOutputTokens ?? summaryGenerationMaxOutputTokens,
-              maxRetries: 0,
-              messages: lcmGenerationMessages({ prompt, request }),
-            }),
-          )
+          const result = await runLcmTextGeneration({
+            model,
+            language,
+            sessionID: input.sessionID,
+            priority,
+            operationID,
+            prompt,
+            request,
+            maxOutputTokens: maxOutputTokens ?? summaryGenerationMaxOutputTokens,
+          })
           return {
             text: result.text,
             usage: providerUsageFromGeneration({
@@ -2541,7 +2657,13 @@ export const layer = Layer.effect(
             providerID: input.providerID,
             modelID: input.modelID,
             protectedCurrentUser: input.protectedCurrentUser,
-            generator: makeSummaryGenerator(model, input.renderOptions, "foreground", summaryGenerationMaxOutputTokens),
+            generator: makeSummaryGenerator(
+              model,
+              input.sessionID,
+              input.renderOptions,
+              "foreground",
+              summaryGenerationMaxOutputTokens,
+            ),
           } satisfies LcmLeafCompactionRuntimeInput)
           .pipe(
             Effect.catch((error: unknown) => {
@@ -3267,7 +3389,7 @@ export const layer = Layer.effect(
               )
             }
 
-            const generator = makeSummaryGenerator(model.model, input.renderOptions)
+            const generator = makeSummaryGenerator(model.model, input.sessionID, input.renderOptions)
             const result = yield* sessionContext
               .compactUntilUnderHardLimit({
                 sessionID: input.sessionID,
@@ -3517,6 +3639,15 @@ export const layer = Layer.effect(
               .getModel(ProviderID.make(providerID), ModelID.make(modelID))
               .pipe(Effect.catch(() => Effect.succeed(undefined)))
           : undefined
+      if (providerID && modelID && !model) {
+        return {
+          ok: false,
+          error: invalidRequest("lcm_expand_query_model_unavailable", {
+            operationID,
+            ...(rootScope ? { conversationID: rootScope.conversationID } : {}),
+          }),
+        } satisfies LcmToolErrorResult
+      }
       const providerInfo =
         provider && model
           ? yield* provider.getProvider(model.providerID).pipe(Effect.catch(() => Effect.succeed(undefined)))
@@ -3560,27 +3691,24 @@ export const layer = Layer.effect(
           provider && model && providerID && modelID
             ? async ({ prompt, request, maxAnswerTokens }) => {
                 const language = await (languagePromise ??= Effect.runPromise(provider.getLanguage(model)))
-                const generated = await runProviderGeneration(
+                const generated = await runLcmTextGeneration({
                   model,
-                  "foreground",
+                  language,
+                  sessionID: input.sessionID,
+                  priority: "foreground",
                   operationID,
-                  () =>
-                    generateText({
-                      model: language,
-                      temperature: model.capabilities.temperature ? 0 : undefined,
-                      providerOptions: ProviderTransform.providerOptions(model, model.options),
-                      maxOutputTokens: maxAnswerTokens,
-                      maxRetries: 0,
-                      messages: lcmGenerationMessages({ prompt, request }),
-                    }),
-                  { abortSignal: input.abortSignal },
-                )
+                  prompt,
+                  request,
+                  maxOutputTokens: maxAnswerTokens,
+                  reserveReasoningTokens: true,
+                  abortSignal: input.abortSignal,
+                })
                 usage = providerUsageFromGeneration({
                   usage: generated.usage,
                   providerID,
                   modelID,
                 })
-                return { text: generated.text, usage }
+                return { text: generated.text, usage, providerDiagnostics: generated.providerDiagnostics }
               }
             : undefined,
       }).pipe(Effect.provideService(LcmDb.Service, lcmDb))
@@ -3618,6 +3746,7 @@ export const layer = Layer.effect(
         ...(publicResult.rejectedCitationCount !== undefined
           ? { rejectedCitationCount: publicResult.rejectedCitationCount }
           : {}),
+        ...(publicResult.providerDiagnostics ? { providerDiagnostics: publicResult.providerDiagnostics } : {}),
       } satisfies LcmExpandQueryResult
     })
 
@@ -3893,21 +4022,17 @@ export const layer = Layer.effect(
               provider && model && providerID && modelID
                 ? async ({ prompt, request, abortSignal }) => {
                     const language = await (languagePromise ??= Effect.runPromise(provider.getLanguage(model)))
-                    const generated = await runProviderGeneration(
+                    const generated = await runLcmTextGeneration({
                       model,
-                      "background",
+                      language,
+                      sessionID: input.sessionID,
+                      priority: "background",
                       operationID,
-                      () =>
-                        generateText({
-                          model: language,
-                          temperature: model.capabilities.temperature ? 0 : undefined,
-                          providerOptions: ProviderTransform.providerOptions(model, model.options),
-                          maxOutputTokens: cfg.largePayloads.explorationMaxOutputTokens,
-                          maxRetries: 0,
-                          messages: lcmGenerationMessages({ prompt, request }),
-                        }),
-                      { abortSignal: abortSignal ?? input.abortSignal },
-                    )
+                      prompt,
+                      request,
+                      maxOutputTokens: cfg.largePayloads.explorationMaxOutputTokens,
+                      abortSignal: abortSignal ?? input.abortSignal,
+                    })
                     return {
                       text: generated.text,
                       usage: providerUsageFromGeneration({
@@ -4082,25 +4207,17 @@ export const layer = Layer.effect(
         modelSelection: resolved.modelSelection,
         generator: async ({ prompt, request, abortSignal }) => {
           const language = await (languagePromise ??= Effect.runPromise(provider!.getLanguage(resolved.model)))
-          const generated = await runProviderGeneration(
-            resolved.model,
-            "background",
+          const generated = await runLcmTextGeneration({
+            model: resolved.model,
+            language,
+            sessionID: input.sessionID,
+            priority: "background",
             operationID,
-            () =>
-              generateText({
-                model: language,
-                temperature: resolved.model.capabilities.temperature ? 0 : undefined,
-                providerOptions: ProviderTransform.providerOptions(resolved.model, resolved.model.options),
-                maxOutputTokens: Math.min(
-                  modelLimits.output ?? ProviderTransform.maxOutputTokens(resolved.model),
-                  4096,
-                ),
-                maxRetries: 0,
-                abortSignal,
-                messages: lcmGenerationMessages({ prompt, request }),
-              }),
-            abortSignal ? { abortSignal } : undefined,
-          )
+            prompt,
+            request,
+            maxOutputTokens: Math.min(modelLimits.output ?? ProviderTransform.maxOutputTokens(resolved.model), 4096),
+            abortSignal,
+          })
           return {
             text: generated.text,
             usage: providerUsageFromGeneration({
@@ -4285,25 +4402,20 @@ export const layer = Layer.effect(
                   languagePromises.set(key, promise)
                   return promise
                 })())
-              const generated = await runProviderGeneration(
+              const generated = await runLcmTextGeneration({
                 model,
-                "background",
+                language,
+                sessionID: input.sessionID,
+                priority: "background",
                 operationID,
-                () =>
-                  generateText({
-                    model: language,
-                    temperature: model.capabilities.temperature ? 0 : undefined,
-                    providerOptions: ProviderTransform.providerOptions(model, model.options),
-                    maxOutputTokens: Math.min(
-                      resolveLcmModelLimits(model).output ?? ProviderTransform.maxOutputTokens(model),
-                      4096,
-                    ),
-                    maxRetries: 0,
-                    abortSignal,
-                    messages: lcmGenerationMessages({ prompt, request }),
-                  }),
-                abortSignal ? { abortSignal } : undefined,
-              )
+                prompt,
+                request,
+                maxOutputTokens: Math.min(
+                  resolveLcmModelLimits(model).output ?? ProviderTransform.maxOutputTokens(model),
+                  4096,
+                ),
+                abortSignal,
+              })
               return {
                 text: generated.text,
                 usage: providerUsageFromGeneration({

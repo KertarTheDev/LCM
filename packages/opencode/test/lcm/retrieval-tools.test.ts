@@ -708,7 +708,16 @@ test("lcm:retrieval-tools expand_query answers only with authorized citations", 
         dataDir,
         query: "What oven temperature correction was made, and what reason was given?",
         summaryID: retrievalIDs.recipeSummary,
-        generator: async () => ({ text: "" }),
+        generator: async () => ({
+          text: "",
+          providerDiagnostics: {
+            finishReason: "length",
+            textByteCount: 0,
+            outputTokens: 64,
+            reasoningTokens: 64,
+            emptyText: true,
+          },
+        }),
       }),
     )
     expect(emptyProviderFallback).toMatchObject({
@@ -722,6 +731,13 @@ test("lcm:retrieval-tools expand_query answers only with authorized citations", 
     expect(emptyProviderFallback.answer).toContain("350F")
     expect(emptyProviderFallback.answer).toContain("scorches")
     expect(emptyProviderFallback.citations.length).toBeGreaterThan(0)
+    expect(emptyProviderFallback.providerDiagnostics).toEqual({
+      finishReason: "length",
+      textByteCount: 0,
+      outputTokens: 64,
+      reasoningTokens: 64,
+      emptyText: true,
+    })
     expect(JSON.stringify(emptyProviderFallback)).not.toContain("SIBLING_SECRET")
 
     const malformedProviderFallback = await runRetrieval(

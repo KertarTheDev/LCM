@@ -1349,6 +1349,14 @@ export type LcmExpandQueryNoAnswerReason =
   | "provider_citation_rejected"
   | "provider_declined"
 
+export interface LcmExpandQueryProviderDiagnostics {
+  finishReason?: string
+  textByteCount: number
+  outputTokens?: number
+  reasoningTokens?: number
+  emptyText: boolean
+}
+
 export interface LcmExpandQueryResult {
   ok: true
   answer: string
@@ -1360,6 +1368,7 @@ export interface LcmExpandQueryResult {
   fallbackReason?: LcmExpandQueryNoAnswerReason
   searchedExcerptCount?: number
   rejectedCitationCount?: number
+  providerDiagnostics?: LcmExpandQueryProviderDiagnostics
 }
 
 export interface LcmReadInput {

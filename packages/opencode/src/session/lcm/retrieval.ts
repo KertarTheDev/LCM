@@ -169,7 +169,11 @@ export type LcmExpandQueryGenerator = (input: {
   readonly query: string
   readonly maxAnswerTokens: number
   readonly excerpts: readonly LcmExpandQueryExcerpt[]
-}) => Promise<{ readonly text: string; readonly usage?: LcmExpandQueryUsage }>
+}) => Promise<{
+  readonly text: string
+  readonly usage?: LcmExpandQueryUsage
+  readonly providerDiagnostics?: LcmExpandQueryResult["providerDiagnostics"]
+}>
 
 export interface LcmExpandQueryExcerpt {
   readonly handle: SummaryID | LcmFileID | MessageRowID | PartRowID
@@ -199,6 +203,7 @@ type NormalizedExpandQueryAnswer = Pick<
   | "fallbackReason"
   | "searchedExcerptCount"
   | "rejectedCitationCount"
+  | "providerDiagnostics"
 >
 
 type ExpandQueryInternalInput = RetrievalInput<LcmExpandQueryInput> & {
@@ -2399,6 +2404,7 @@ const expandQueryInner = Effect.fn("LcmRetrieval.expandQueryInner")(function* (i
     ...normalized,
     ...(normalized.noAnswerReason || normalized.fallbackReason ? { searchedExcerptCount: search.length } : {}),
     ...(generated.usage ? { usage: generated.usage } : {}),
+    ...(generated.providerDiagnostics ? { providerDiagnostics: generated.providerDiagnostics } : {}),
   } as LcmExpandQueryResult & { usage?: LcmExpandQueryUsage }
 })
 
