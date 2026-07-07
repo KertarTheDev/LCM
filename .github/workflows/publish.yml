@@ -104,6 +104,15 @@ jobs:
             echo "tag=${tag}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Setup Zig for Linux sandbox helpers
+        run: |
+          curl --fail --location --retry 3 \
+            https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz \
+            --output "$RUNNER_TEMP/zig.tar.xz"
+          echo "473ec26806133cf4d1918caf1a410f8403a13d979726a9045b421b685031a982  $RUNNER_TEMP/zig.tar.xz" | sha256sum --check --status
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-linux-x86_64-0.14.0" >> "$GITHUB_PATH"
+
       - name: Create draft prerelease
         run: |
           notes="$RUNNER_TEMP/lcm-alpha-notes.md"
@@ -121,15 +130,6 @@ jobs:
             --title "LCM alpha ${{ steps.alpha.outputs.version }}" \
             --notes-file "$notes" \
             --repo "$GITHUB_REPOSITORY"
-
-      - name: Setup Zig for Linux sandbox helpers
-        run: |
-          curl --fail --location --retry 3 \
-            https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz \
-            --output "$RUNNER_TEMP/zig.tar.xz"
-          echo "473ec26806133cf4d1918caf1a410f8403a13d979726a9045b421b685031a982  $RUNNER_TEMP/zig.tar.xz" | sha256sum --check --status
-          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/zig-linux-x86_64-0.14.0" >> "$GITHUB_PATH"
 
       - name: Build CLI archives
         env:
@@ -176,6 +176,42 @@ jobs:
             --prerelease \
             --title "LCM alpha ${{ steps.alpha.outputs.version }}" \
             --repo "$GITHUB_REPOSITORY"
+
+      # kilocode_change start - failed alpha runs must not leave a blocking draft release
+      - name: Clean failed draft prerelease
+        if: failure() && steps.alpha.outputs.tag != ''
+        env:
+          TAG: ${{ steps.alpha.outputs.tag }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" 2>/dev/null || true)"
+          if [ -z "$release_json" ]; then
+            echo "No draft release found for ${TAG}"
+            exit 0
+          fi
+
+          release_id="$(node -e '
+          const release = JSON.parse(process.argv[1])
+          const expected = process.argv[2]
+          if (!release.draft) {
+            console.error(`Release ${release.tag_name} is already published; leaving it intact`)
+            process.exit(0)
+          }
+          if (release.target_commitish !== expected) {
+            console.error(`Draft ${release.tag_name} targets ${release.target_commitish}, not ${expected}; leaving it intact`)
+            process.exit(0)
+          }
+          process.stdout.write(String(release.id))
+          ' "$release_json" "$EXPECTED_SHA")"
+
+          if [ -z "$release_id" ]; then
+            exit 0
+          fi
+
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" >/dev/null 2>&1 || true
+      # kilocode_change end
 
   version:
     runs-on: blacksmith-4vcpu-ubuntu-2404
