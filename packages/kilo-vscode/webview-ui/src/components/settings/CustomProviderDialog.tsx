@@ -21,6 +21,7 @@ import {
   isCustomProviderPackage,
   type CustomProviderPackage,
 } from "../../../../src/shared/provider-model"
+import { CUSTOM_PROVIDER_DEFAULT_CONTEXT_LIMIT, CUSTOM_PROVIDER_DEFAULT_OUTPUT_LIMIT } from "./CustomProviderLimits"
 import { ModelCard } from "./CustomProviderModelCard"
 import type {
   ChatTemplateArgsValue,
@@ -53,8 +54,39 @@ function fuzzy(query: string, target: string) {
   return qi === q.length
 }
 
-type FetchedModel = { id: string; name: string }
-type RawModel = { name?: string; reasoning?: boolean; variants?: Record<string, Record<string, unknown>> }
+type FetchedModel = { id: string; name: string; contextLimit?: number; outputLimit?: number }
+type RawModel = {
+  name?: string
+  reasoning?: boolean
+  limit?: { context?: unknown; output?: unknown }
+  variants?: Record<string, Record<string, unknown>>
+}
+
+function modelLimitString(value: unknown, fallback: string) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? String(Math.floor(value)) : fallback
+}
+
+function emptyModel(): ModelEntry {
+  return {
+    id: "",
+    name: "",
+    contextLimit: CUSTOM_PROVIDER_DEFAULT_CONTEXT_LIMIT,
+    outputLimit: CUSTOM_PROVIDER_DEFAULT_OUTPUT_LIMIT,
+    reasoning: false,
+    variants: [],
+  }
+}
+
+function fetchedModelEntry(model: FetchedModel): ModelEntry {
+  return {
+    id: model.id,
+    name: model.name,
+    contextLimit: modelLimitString(model.contextLimit, CUSTOM_PROVIDER_DEFAULT_CONTEXT_LIMIT),
+    outputLimit: modelLimitString(model.outputLimit, CUSTOM_PROVIDER_DEFAULT_OUTPUT_LIMIT),
+    reasoning: false,
+    variants: [],
+  }
+}
 
 function parseVariant([name, cfg]: [string, Record<string, unknown>]): VariantEntry {
   return {
@@ -76,14 +108,16 @@ function parseVariant([name, cfg]: [string, Record<string, unknown>]): VariantEn
 }
 
 function initModels(cfg: ProviderConfig | undefined): ModelEntry[] {
-  if (!cfg?.models || typeof cfg.models !== "object") return [{ id: "", name: "", reasoning: false, variants: [] }]
+  if (!cfg?.models || typeof cfg.models !== "object") return [emptyModel()]
   const entries = Object.entries(cfg.models)
-  if (entries.length === 0) return [{ id: "", name: "", reasoning: false, variants: [] }]
+  if (entries.length === 0) return [emptyModel()]
   return entries.map(([id, model]) => {
     const raw = model as RawModel
     return {
       id,
       name: raw.name ?? id,
+      contextLimit: modelLimitString(raw.limit?.context, CUSTOM_PROVIDER_DEFAULT_CONTEXT_LIMIT),
+      outputLimit: modelLimitString(raw.limit?.output, CUSTOM_PROVIDER_DEFAULT_OUTPUT_LIMIT),
       reasoning: raw.reasoning ?? false,
       variants: Object.entries(raw.variants ?? {}).map(parseVariant),
     }
@@ -341,8 +375,7 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
       return true
     })
 
-    const defaults = (m: FetchedModel): ModelEntry => ({ ...m, reasoning: false, variants: [] })
-    const merged = empty ? toAdd.map(defaults) : [...form.models, ...toAdd.map(defaults)]
+    const merged = empty ? toAdd.map(fetchedModelEntry) : [...form.models, ...toAdd.map(fetchedModelEntry)]
 
     if (toAdd.length > 0) {
       setForm("models", merged)
@@ -396,7 +429,7 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
   }
 
   function addModel() {
-    setForm("models", (v) => [...v, { id: "", name: "", reasoning: false, variants: [] }])
+    setForm("models", (v) => [...v, emptyModel()])
     setErrors("models", (v) => [...v, { variants: [] }])
   }
 
@@ -636,6 +669,8 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
                   canRemove={form.models.length > 1}
                   onChangeId={(v) => setForm("models", i(), "id", v)}
                   onChangeName={(v) => setForm("models", i(), "name", v)}
+                  onChangeContextLimit={(v) => setForm("models", i(), "contextLimit", v)}
+                  onChangeOutputLimit={(v) => setForm("models", i(), "outputLimit", v)}
                   onChangeReasoning={(v) => setForm("models", i(), "reasoning", v)}
                   onRemove={() => removeModel(i())}
                   onAddVariant={() => addVariant(i())}

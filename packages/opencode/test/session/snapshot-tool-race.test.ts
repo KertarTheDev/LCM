@@ -17,6 +17,9 @@ import { FetchHttpClient } from "effect/unstable/http"
 import fs from "fs/promises"
 import path from "path"
 import { Session } from "@/session/session"
+// kilocode_change start
+import { LcmRuntime } from "@/session/lcm/runtime"
+// kilocode_change end
 import { LLM } from "../../src/session/llm"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
@@ -168,6 +171,9 @@ function makeHttp() {
       Layer.provide(SessionRevert.defaultLayer),
       Layer.provide(Image.defaultLayer),
       Layer.provide(Reference.defaultLayer),
+      // kilocode_change start
+      Layer.provide(LcmRuntime.defaultLayer),
+      // kilocode_change end
       Layer.provide(SessionSummary.defaultLayer),
       Layer.provideMerge(run),
       Layer.provideMerge(compact),
@@ -212,6 +218,13 @@ const providerCfg = (url: string) => ({
       },
     },
   },
+  // kilocode_change start
+  agent: {
+    build: {
+      model: "test/test-model",
+    },
+  },
+  // kilocode_change end
 })
 
 it.live("tool execution produces non-empty session diff (snapshot race)", () =>

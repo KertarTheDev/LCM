@@ -5,6 +5,7 @@ import { ProviderTransform } from "@/provider/transform"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Effect } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
+import { lcmProviderCapacityInputFromModel, runWithLcmProviderCapacity } from "@/session/lcm/provider-capacity"
 
 const log = Log.create({ service: "enhance-prompt" })
 
@@ -36,22 +37,31 @@ export async function enhancePrompt(text: string): Promise<string> {
         const ref = yield* svc.defaultModel()
         const model = (yield* svc.getSmallModel(ref.providerID)) ?? (yield* svc.getModel(ref.providerID, ref.modelID))
         const language = yield* svc.getLanguage(model)
-        return { model, language }
+        const provider = yield* svc.getProvider(model.providerID)
+        return { model, language, provider }
       }),
     ),
   )
 
-  const result = await generateText({
-    model: resolved.language,
-    temperature: resolved.model.capabilities.temperature ? 0.7 : undefined,
-    providerOptions: ProviderTransform.providerOptions(
-      resolved.model,
-      mergeDeep(ProviderTransform.smallOptions(resolved.model), resolved.model.options),
-    ),
-    maxRetries: 3,
-    system: INSTRUCTION,
-    messages: [{ role: "user" as const, content: `Draft prompt to enhance, not answer:\n\n${text}` }],
-  })
+  const result = await runWithLcmProviderCapacity(
+    lcmProviderCapacityInputFromModel({
+      model: resolved.model,
+      priority: "foreground",
+      provider: resolved.provider,
+    }),
+    () =>
+      generateText({
+        model: resolved.language,
+        temperature: resolved.model.capabilities.temperature ? 0.7 : undefined,
+        providerOptions: ProviderTransform.providerOptions(
+          resolved.model,
+          mergeDeep(ProviderTransform.smallOptions(resolved.model), resolved.model.options),
+        ),
+        maxRetries: 3,
+        system: INSTRUCTION,
+        messages: [{ role: "user" as const, content: `Draft prompt to enhance, not answer:\n\n${text}` }],
+      }),
+  )
 
   log.info("enhanced", { length: result.text.length })
   return clean(result.text)

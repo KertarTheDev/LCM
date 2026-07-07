@@ -1,6 +1,11 @@
 import { describe, it, expect } from "bun:test"
 import { parseServerPort } from "../../src/services/cli-backend/server-utils"
 import {
+  commandLooksLikeLegacyManagedServer,
+  commandMatchesManagedServerMarker,
+  managedServerMarkerDir,
+  managedServerMarkerPath,
+  parsePosixProcessList,
   resolveServerCwd,
   resolveIndexingEnv,
   resolveManagedServerEnv,
@@ -277,5 +282,51 @@ describe("server workspace helpers", () => {
       PATH: "/usr/bin",
       KILO_DISABLE_CHANNEL_DB: "true",
     })
+  })
+
+  it("stores managed backend markers below global storage", () => {
+    expect(managedServerMarkerDir("/global/storage")).toBe(path.join("/global/storage", "managed-server"))
+    expect(managedServerMarkerPath("/global/storage", "launch_a")).toBe(
+      path.join("/global/storage", "managed-server", "server-launch_a.json"),
+    )
+  })
+
+  it("matches marked managed server commands by bundled CLI path and port zero", () => {
+    const cliPath = "/Users/me/.vscode/extensions/kilocode.kilo-code-7.3.54-darwin-arm64/bin/kilo"
+    expect(commandMatchesManagedServerMarker(`${cliPath} serve --port 0`, { cliPath })).toBe(true)
+    expect(commandMatchesManagedServerMarker(`${cliPath} serve --port=0`, { cliPath })).toBe(true)
+    expect(commandMatchesManagedServerMarker(`${cliPath} serve --port 35555`, { cliPath })).toBe(false)
+    expect(commandMatchesManagedServerMarker("/usr/local/bin/kilo serve --port 0", { cliPath })).toBe(false)
+  })
+
+  it("recognizes legacy unmarked managed server commands for the same extension family", () => {
+    const input = {
+      cliPath: "/Users/me/.vscode/extensions/kilocode.kilo-code-7.3.55-darwin-arm64/bin/kilo",
+      extensionPath: "/Users/me/.vscode/extensions/kilocode.kilo-code-7.3.55-darwin-arm64",
+      extensionID: "kilocode.kilo-code",
+    }
+
+    expect(commandLooksLikeLegacyManagedServer(`${input.cliPath} serve --port 0`, input)).toBe(true)
+    expect(
+      commandLooksLikeLegacyManagedServer(
+        "/Users/me/.vscode/extensions/kilocode.kilo-code-7.3.54-darwin-arm64/bin/kilo serve --port 0",
+        input,
+      ),
+    ).toBe(true)
+    expect(commandLooksLikeLegacyManagedServer("/usr/local/bin/kilo serve --port 0", input)).toBe(false)
+    expect(commandLooksLikeLegacyManagedServer(`${input.cliPath} serve --port 35555`, input)).toBe(false)
+  })
+
+  it("parses pid, parent pid, and command from posix ps output", () => {
+    expect(
+      parsePosixProcessList(`
+          101     1 /path/to/kilo serve --port 0
+          202   101 helper process
+          bad row
+      `),
+    ).toEqual([
+      { pid: 101, ppid: 1, command: "/path/to/kilo serve --port 0" },
+      { pid: 202, ppid: 101, command: "helper process" },
+    ])
   })
 })

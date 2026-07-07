@@ -46,6 +46,21 @@ const lsp = Layer.succeed(
     workspaceSymbol: (query) =>
       Effect.sync(() => {
         workspaceSymbolQueries.push(query)
+        // kilocode_change start
+        if (query === "HugeSymbol") {
+          return Array.from({ length: 3000 }, (_, index) => ({
+            name: `HugeSymbol${index}`,
+            kind: 12,
+            location: {
+              uri: "file:///tmp/huge.ts",
+              range: {
+                start: { line: index, character: 0 },
+                end: { line: index, character: 10 },
+              },
+            },
+          }))
+        }
+        // kilocode_change end
         return []
       }),
     prepareCallHierarchy: () => Effect.succeed([]),
@@ -182,5 +197,42 @@ describe("tool.lsp", () => {
         { git: true },
       ),
     )
+// kilocode_change start
+
+    it.live("keeps LSP metadata bounded when output is truncated", () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            workspaceSymbolQueries.length = 0
+            const file = path.join(dir, "test.ts")
+            yield* put(file)
+
+            const result = yield* run({
+              operation: "workspaceSymbol",
+              filePath: file,
+              line: 3,
+              character: 7,
+              query: "HugeSymbol",
+            })
+
+            expect(result.metadata).toMatchObject({
+              operation: "workspaceSymbol",
+              resultCount: 3000,
+              truncated: true,
+            })
+            expect("result" in result.metadata).toBe(false)
+            const metadata = result.metadata as typeof result.metadata & {
+              outputPath: string
+              outputByteCount: number
+              outputSha256: string
+            }
+            expect(metadata.outputPath).toBeDefined()
+            expect(metadata.outputByteCount).toBeGreaterThan(50 * 1024)
+            expect(metadata.outputSha256).toMatch(/^[a-f0-9]{64}$/)
+          }),
+        { git: true },
+      ),
+    )
+// kilocode_change end
   })
 })

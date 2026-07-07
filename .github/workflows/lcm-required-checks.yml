@@ -1,0 +1,113 @@
+# kilocode_change - new file
+name: LCM required checks
+
+on:
+  pull_request:
+    paths:
+      - "packages/opencode/src/session/**"
+      - "packages/opencode/src/provider/**"
+      - "packages/opencode/src/plugin/**"
+      - "packages/opencode/src/server/**"
+      - "packages/opencode/src/config/**"
+      - "packages/opencode/src/effect/app-runtime.ts"
+      - "packages/opencode/src/kilocode/provider/**"
+      - "packages/opencode/src/kilocode/session/**"
+      - "packages/opencode/src/tool/**"
+      - "packages/opencode/test/lcm/**"
+      - "packages/opencode/test/session/prompt.test.ts"
+      - "packages/opencode/script/lcm-*.ts"
+      - "packages/opencode/package.json"
+      - "sdks/**"
+      - "packages/kilo-vscode/src/**"
+      - "packages/kilo-vscode/webview-ui/src/**"
+      - "packages/kilo-vscode/tests/unit/lcm-*.test.ts"
+      - "packages/kilo-vscode/package.json"
+      - ".github/workflows/lcm-required-checks.yml"
+      - ".github/workflows/lcm-macos-platform-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    name: runtime contracts and memory behavior
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Contract check
+        working-directory: packages/opencode
+        run: bun run lcm:contracts:check
+
+      - name: Migration smoke
+        working-directory: packages/opencode
+        run: bun run lcm:migration:smoke
+
+      - name: Activation and raw leaf parity
+        working-directory: packages/opencode
+        run: |
+          bun run lcm:activation
+          bun run lcm:raw-leaf-parity
+
+      - name: Provider-safe assembly and protocol
+        working-directory: packages/opencode
+        run: |
+          bun run lcm:provider-assembly
+          bun run lcm:provider-protocol
+
+      - name: Retrieval authorization and path provenance
+        working-directory: packages/opencode
+        run: |
+          bun run lcm:retrieval-auth
+          bun run lcm:path-provenance
+
+      - name: Hard-limit and prompt boundary
+        working-directory: packages/opencode
+        run: |
+          bun run lcm:hard-limit
+          bun run lcm:prompt-boundary
+
+      - name: Prompt static check
+        working-directory: packages/opencode
+        run: bun run lcm:prompt-static
+
+      - name: First-message prompt smoke
+        working-directory: packages/opencode
+        run: bun run lcm:prompt-first-message
+
+      - name: MCP prompt schema smoke
+        working-directory: packages/opencode
+        run: bun run lcm:prompt-mcp-schema
+
+      - name: Runtime typecheck
+        working-directory: packages/opencode
+        run: bun run typecheck
+
+  vscode:
+    name: vscode settings and compile
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: LCM settings UI tests
+        working-directory: packages/kilo-vscode
+        run: bun run lcm:settings-ui
+
+      - name: VSCode compile
+        working-directory: packages/kilo-vscode
+        run: bun run compile

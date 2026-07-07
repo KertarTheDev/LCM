@@ -84,6 +84,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // Session is busy only because a question tool call is pending — prompt should behave as idle
   const questioning = () => isQuestioning(blocked(), familyQuestions().length)
   const dock = () => !props.readonly || !!permissionRequest()
+  const lockRecovery = createMemo(() => {
+    const recovery = session.lcmLockRecovery()
+    return recovery?.sessionID === id() ? recovery : undefined
+  })
 
   onMount(() => {
     if (props.readonly) return
@@ -351,6 +355,39 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
       <Show when={dock()}>
         <div class="chat-input">
+          <Show when={lockRecovery()}>
+            {(recovery) => (
+              <div class="lcm-lock-recovery-banner" role="status">
+                <div class="lcm-lock-recovery-copy">
+                  <div class="lcm-lock-recovery-title">
+                    <Icon name="warning" size="small" />
+                    <span>Memory locked</span>
+                  </div>
+                  <div class="lcm-lock-recovery-detail">
+                    {recovery().safeMessage} {recovery().detail}
+                  </div>
+                </div>
+                <div class="lcm-lock-recovery-actions">
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    disabled={recovery().status === "recovering"}
+                    onClick={session.forceUnlockLcm}
+                  >
+                    {recovery().status === "recovering" ? "Unlocking..." : "Force unlock"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="small"
+                    disabled={recovery().status === "recovering"}
+                    onClick={session.dismissLcmLockRecovery}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Show>
           <Show when={server.connectionState() === "error" && server.errorMessage()}>
             <StartupErrorBanner errorMessage={server.errorMessage()!} errorDetails={server.errorDetails()!} />
           </Show>

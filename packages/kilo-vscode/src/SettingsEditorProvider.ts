@@ -1,5 +1,6 @@
 import * as vscode from "vscode"
 import { KiloProvider } from "./KiloProvider"
+import type { KiloProviderSessionContext } from "./kilo-provider/options"
 import { resolvePanelProjectDirectory } from "./project-directory"
 import type { KiloConnectionService } from "./services/cli-backend"
 import type { RemoteStatusService } from "./services/RemoteStatusService"
@@ -10,6 +11,35 @@ const PANEL_TITLES: Record<PanelView, string> = {
   settings: "Kilo Settings",
   profile: "Kilo Profile",
   indexing: "Codebase Indexing",
+}
+
+export type SettingsPanelOpenInput =
+  | string
+  | {
+      tab?: string
+      sessionID?: string
+      directory?: string
+    }
+
+export function settingsPanelOpenTab(input: SettingsPanelOpenInput | undefined): string | undefined {
+  return typeof input === "string" ? input : input?.tab
+}
+
+export function settingsPanelSessionContext(
+  input: SettingsPanelOpenInput | undefined,
+): KiloProviderSessionContext | undefined {
+  if (!input || typeof input === "string") return undefined
+  return normalizeSessionContext(input)
+}
+
+function normalizeSessionContext(input: KiloProviderSessionContext | undefined): KiloProviderSessionContext | undefined {
+  const sessionID = input?.sessionID?.trim()
+  if (!sessionID || sessionID.startsWith("cloud:")) return undefined
+  return { sessionID, ...(input?.directory ? { directory: input.directory } : {}) }
+}
+
+function sameSessionContext(a: KiloProviderSessionContext | undefined, b: KiloProviderSessionContext | undefined) {
+  return a?.sessionID === b?.sessionID && a?.directory === b?.directory
 }
 
 /**
@@ -28,6 +58,7 @@ export class SettingsEditorProvider implements vscode.Disposable {
   private providers = new Map<PanelView, KiloProvider>()
   private tabs = new Map<PanelView, string>()
   private remoteService: RemoteStatusService | null = null
+  private latestSessionContext: KiloProviderSessionContext | undefined
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -53,12 +84,18 @@ export class SettingsEditorProvider implements vscode.Disposable {
     return view
   }
 
-  openPanel(view: PanelView, tab?: string): void {
+  openPanel(view: PanelView, tab?: string, sessionContext?: KiloProviderSessionContext): void {
     if (tab) this.tabs.set(view, tab)
+
+    const normalizedSessionContext = normalizeSessionContext(sessionContext)
+    const inheritedSessionContext =
+      normalizedSessionContext ?? (view === "settings" ? this.latestSessionContext : undefined)
+    if (view === "settings" && inheritedSessionContext) this.latestSessionContext = inheritedSessionContext
 
     const projectDirectory = this.getProjectDirectory()
     const existing = this.panels.get(view)
     if (existing) {
+      this.providers.get(view)?.setInheritedSessionContext(inheritedSessionContext)
       this.providers.get(view)?.setProjectDirectory(projectDirectory)
       if (tab) {
         const provider = this.providers.get(view)
@@ -80,7 +117,14 @@ export class SettingsEditorProvider implements vscode.Disposable {
       },
     )
 
-    this.wirePanel(panel, view, projectDirectory)
+    this.wirePanel(panel, view, projectDirectory, inheritedSessionContext)
+  }
+
+  setLatestSessionContext(sessionContext: KiloProviderSessionContext | undefined): void {
+    const next = normalizeSessionContext(sessionContext)
+    if (sameSessionContext(this.latestSessionContext, next)) return
+    this.latestSessionContext = next
+    this.providers.get("settings")?.setInheritedSessionContext(next)
   }
 
   /** Re-wire a deserialized panel after extension restart. */
@@ -90,10 +134,15 @@ export class SettingsEditorProvider implements vscode.Disposable {
       panel.dispose()
       return
     }
-    this.wirePanel(panel, view, this.getProjectDirectory())
+    this.wirePanel(panel, view, this.getProjectDirectory(), view === "settings" ? this.latestSessionContext : undefined)
   }
 
-  private wirePanel(panel: vscode.WebviewPanel, view: PanelView, projectDirectory: string | null): void {
+  private wirePanel(
+    panel: vscode.WebviewPanel,
+    view: PanelView,
+    projectDirectory: string | null,
+    sessionContext?: KiloProviderSessionContext,
+  ): void {
     panel.iconPath = {
       light: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-light.svg"),
       dark: vscode.Uri.joinPath(this.extensionUri, "assets", "icons", "kilo-dark.svg"),
@@ -103,6 +152,7 @@ export class SettingsEditorProvider implements vscode.Disposable {
     // backend connectivity (config, providers, agents, profile, auth).
     const provider = new KiloProvider(this.extensionUri, this.connectionService, this.context, {
       projectDirectory,
+      initialSessionContext: sessionContext,
     })
     if (this.remoteService) {
       provider.setRemoteService(this.remoteService)

@@ -190,6 +190,11 @@ describe("Truncate", () => {
         const fsys = yield* AppFileSystem.Service
         const written = yield* fsys.readFileString(result.outputPath!)
         expect(written).toBe(lines)
+        // kilocode_change start
+        expect(result.outputByteCount).toBe(Buffer.byteLength(lines, "utf8"))
+        expect(result.outputSha256).toMatch(/^[a-f0-9]{64}$/)
+        expect(result.outputSidecarVersion).toBe(1)
+        // kilocode_change end
       }),
     )
 
@@ -203,6 +208,9 @@ describe("Truncate", () => {
         expect(result.truncated).toBe(true)
         expect(result.content).toContain("Grep")
         expect(result.content).toContain("Task tool")
+        // kilocode_change start
+        expect(result.content).toContain('subagent_type="explore"')
+        // kilocode_change end
       }),
     )
 

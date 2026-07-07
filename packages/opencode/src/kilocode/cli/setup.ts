@@ -18,6 +18,7 @@ import { DaemonCommand } from "@/kilocode/cli/cmd/daemon"
 import { DevSetupCommand, DevAliasCommand } from "@/kilocode/cli/dev-setup"
 import { RemoteCommand } from "@/cli/cmd/remote"
 import { ConfigCommand as ConfigCLICommand } from "@/cli/cmd/config"
+import { LcmCommand } from "@/cli/cmd/lcm"
 
 const log = Log.create({ service: "kilocode.cli" })
 
@@ -35,6 +36,7 @@ export namespace KiloCli {
       .command(RemoteCommand)
       .command(DaemonCommand)
       .command(ConfigCLICommand)
+      .command(LcmCommand)
     if (InstallationBuildKind !== "release") cli.command(DevSetupCommand).command(DevAliasCommand)
     // Safe self-reference: `cli` is a typed parameter and yargs `.command()` returns the same
     // instance, so the help command can resolve the fully-built root at handler time. This also

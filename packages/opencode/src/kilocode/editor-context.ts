@@ -7,6 +7,16 @@ export interface EditorContext {
   shell?: string
 }
 
+export interface RenderTimeInput {
+  now?: Date | number
+}
+
+function renderDate(input?: RenderTimeInput): Date {
+  if (input?.now instanceof Date) return new Date(input.now.getTime())
+  if (typeof input?.now === "number") return new Date(input.now)
+  return new Date()
+}
+
 /**
  * Build static <env> lines from editor context.
  * These rarely change during a session and belong in the system prompt
@@ -26,8 +36,8 @@ export function staticEnvLines(ctx?: EditorContext): string[] {
  * user message so the model always has fresh context.
  * Always includes at least the current timestamp.
  */
-function timestamp(): string {
-  const now = new Date()
+function timestamp(input?: RenderTimeInput): string {
+  const now = renderDate(input)
   const offset = -now.getTimezoneOffset()
   const sign = offset >= 0 ? "+" : "-"
   const h = Math.floor(Math.abs(offset) / 60)
@@ -38,8 +48,8 @@ function timestamp(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}${sign}${h}:${m}`
 }
 
-export function environmentDetails(ctx?: EditorContext): string {
-  const lines: string[] = [`Current time: ${timestamp()}`]
+export function environmentDetails(ctx?: EditorContext, input?: RenderTimeInput): string {
+  const lines: string[] = [`Current time: ${timestamp(input)}`]
   if (ctx?.directory) {
     lines.push(`Working directory: ${ctx.directory}`)
   }

@@ -17,6 +17,7 @@ import { Shell } from "@/shell/shell"
 import { ShellID } from "./shell/id"
 
 import * as Truncate from "./truncate"
+import { truncationOutputMetadata } from "./truncation-dir"
 import { Plugin } from "@/plugin"
 import { normalizeUrls } from "@/kilocode/util/url" // kilocode_change
 import { CommandTimeout } from "@/kilocode/command-timeout" // kilocode_change
@@ -422,7 +423,7 @@ function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv
   if (process.platform === "win32" && Shell.ps(shell)) {
     // kilocode_change start - PowerShell args
     return ChildProcess.make(shell, Shell.args(shell, command, cwd), {
-      // kilocode_change end
+      // kilocode_change - encoded PowerShell args
       cwd,
       env,
       stdin: "ignore",
@@ -474,6 +475,7 @@ export const ShellTool = Tool.define(
     const plugin = yield* Plugin.Service
     const flags = yield* RuntimeFlags.Service
     const permission = yield* ShellPermission // kilocode_change
+    const fs = yield* AppFileSystem.Service // kilocode_change - read persisted truncation sidecars for metadata
     const defaultTimeoutMs = flags.bashDefaultTimeoutMs ?? 2 * 60 * 1000
 
     const shellEnv = Effect.fn("ShellTool.shellEnv")(function* (ctx: Tool.Context, cwd: string) {
@@ -581,6 +583,7 @@ export const ShellTool = Tool.define(
                         metadata: {
                           output: last,
                           description: input.description,
+                          ...(file ? { truncated: true, outputPath: file } : {}), // kilocode_change - preserve sidecar during cancellation
                         },
                       }),
                     ),
@@ -592,6 +595,7 @@ export const ShellTool = Tool.define(
                 metadata: {
                   output: last,
                   description: input.description,
+                  ...(file ? { truncated: true, outputPath: file } : {}), // kilocode_change - preserve sidecar during cancellation
                 },
               })
             }),
@@ -658,6 +662,13 @@ export const ShellTool = Tool.define(
       if (meta.length > 0) {
         output += "\n\n<shell_metadata>\n" + meta.join("\n") + "\n</shell_metadata>"
       }
+      const sidecar =
+        cut && file
+          ? yield* fs.readFileString(file).pipe(
+              Effect.map((text) => truncationOutputMetadata({ outputPath: file, text })),
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+          : undefined
       return {
         title: input.description,
         metadata: {
@@ -665,7 +676,7 @@ export const ShellTool = Tool.define(
           exit: code,
           description: input.description,
           truncated: cut,
-          ...(cut && file ? { outputPath: file } : {}),
+          ...(sidecar ?? (cut && file ? { outputPath: file } : {})),
         },
         output,
       }

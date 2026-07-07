@@ -1,4 +1,5 @@
 import type { InstallMarketplaceItemOptions, MarketplaceFilters, MarketplaceItem } from "../marketplace"
+import type { LcmUpdateSettingsInput } from "@kilocode/sdk/v2/client"
 import type { FileAttachment } from "./parts"
 import type { MessageLoadMode } from "./sessions"
 import type { PermissionFileDiff } from "./permissions"
@@ -291,6 +292,65 @@ export interface RemoveMcpMessage {
 
 export interface RequestMcpStatusMessage {
   type: "requestMcpStatus"
+}
+
+export interface RequestLcmSettingsMessage {
+  type: "requestLcmSettings"
+  requestID: string
+  body?: {
+    sessionID?: string
+    projectID?: string
+    workspaceID?: string
+  }
+}
+
+export interface UpdateLcmSettingsMessage {
+  type: "updateLcmSettings"
+  requestID: string
+  body: LcmUpdateSettingsInput
+}
+
+export interface CancelLcmMaintenanceMessage {
+  type: "cancelLcmMaintenance"
+  requestID: string
+  body?: {
+    sessionID?: string
+  }
+}
+
+export interface DiagnoseLcmDbMessage {
+  type: "diagnoseLcmDb"
+  requestID: string
+  body?: {
+    sessionID?: string
+  }
+}
+
+export interface RebuildLcmDbMessage {
+  type: "rebuildLcmDb"
+  requestID: string
+  body?: {
+    sessionID?: string
+    dryRun?: boolean
+  }
+}
+
+export interface RecoverLcmDbLockMessage {
+  type: "recoverLcmDbLock"
+  requestID: string
+  body?: {
+    sessionID?: string
+    dryRun?: boolean
+    force?: boolean
+  }
+}
+
+export interface ExportLcmPromptsMessage {
+  type: "exportLcmPrompts"
+  requestID: string
+  body?: {
+    sessionID?: string
+  }
 }
 
 export interface ConnectMcpMessage {
@@ -1218,6 +1278,13 @@ export type WebviewMessage =
   | RemoveModeMessage
   | RemoveMcpMessage
   | RequestMcpStatusMessage
+  | RequestLcmSettingsMessage
+  | UpdateLcmSettingsMessage
+  | CancelLcmMaintenanceMessage
+  | DiagnoseLcmDbMessage
+  | RecoverLcmDbLockMessage
+  | RebuildLcmDbMessage
+  | ExportLcmPromptsMessage
   | ConnectMcpMessage
   | DisconnectMcpMessage
   | AuthenticateMcpMessage

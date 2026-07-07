@@ -1,5 +1,3 @@
-import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import * as Session from "./session"
 import { SessionID, MessageID, PartID } from "./schema"
 import { Provider } from "@/provider/provider"
@@ -12,7 +10,9 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/storage"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Effect, Layer, Context, Schema } from "effect"
+// kilocode_change start
+import { Effect, Layer, Context } from "effect"
+// kilocode_change end
 import * as DateTime from "effect/DateTime"
 import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
@@ -29,15 +29,6 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionEvent } from "@opencode-ai/core/session-event"
 
 const log = Log.create({ service: "session.compaction" })
-
-export const Event = {
-  Compacted: BusEvent.define(
-    "session.compacted",
-    Schema.Struct({
-      sessionID: SessionID,
-    }),
-  ),
-}
 
 export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
@@ -225,7 +216,6 @@ export const use = serviceUse(Service)
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
     const config = yield* Config.Service
     const session = yield* Session.Service
     const agents = yield* Agent.Service
@@ -682,7 +672,9 @@ export const layer = Layer.effect(
         })
         // kilocode_change end
         yield* prune({ sessionID: input.sessionID, reason: "post-compaction" })
-        yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        // kilocode_change start
+        // kilocode_change - LCM cutover omits the legacy public compacted bus event.
+        // kilocode_change end
       }
       return fallback
       // kilocode_change end
@@ -739,7 +731,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(SessionProcessor.defaultLayer),
     Layer.provide(Agent.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
-    Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
     Layer.provide(EventV2Bridge.defaultLayer),

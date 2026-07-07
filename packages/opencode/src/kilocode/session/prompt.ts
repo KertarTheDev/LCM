@@ -198,6 +198,7 @@ export namespace KiloSessionPrompt {
     lastUser: MessageV2.User
     sessionID: SessionID
     cache: EnvCache
+    now?: Date | number
   }) {
     if (input.cache.user !== input.lastUser.id) {
       const ctx = (() => {
@@ -207,15 +208,18 @@ export namespace KiloSessionPrompt {
           return undefined
         }
       })()
-      input.cache.block = environmentDetails({
-        ...input.lastUser.editorContext,
-        ...(ctx ? { directory: ctx.directory, worktree: ctx.worktree } : {}),
-      })
+      input.cache.block = environmentDetails(
+        {
+          ...input.lastUser.editorContext,
+          ...(ctx ? { directory: ctx.directory, worktree: ctx.worktree } : {}),
+        },
+        { now: input.now },
+      )
       input.cache.user = input.lastUser.id
     }
-    if (!input.cache.block) return
+    if (!input.cache.block) return { injected: false as const }
     const idx = input.msgs.findLastIndex((m) => m.info.role === "user")
-    if (idx === -1) return
+    if (idx === -1) return { injected: false as const }
     input.msgs[idx] = {
       ...input.msgs[idx],
       parts: [
@@ -230,6 +234,7 @@ export namespace KiloSessionPrompt {
         } satisfies MessageV2.TextPart,
       ],
     }
+    return { injected: true as const, block: input.cache.block }
   }
 
   /**

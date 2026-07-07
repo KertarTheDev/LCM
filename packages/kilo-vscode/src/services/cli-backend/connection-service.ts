@@ -628,9 +628,13 @@ export class KiloConnectionService {
    * Clean up everything: kill server, close SSE, clear listeners.
    */
   dispose(): void {
+    void this.disposeAndWait()
+  }
+
+  async disposeAndWait(): Promise<void> {
     this.stopHealthPoll()
     this.sseClient?.dispose()
-    this.serverManager.dispose()
+    await this.serverManager.disposeAndWait()
     this.eventListeners.clear()
     this.stateListeners.clear()
     this.notificationDismissListeners.clear()
@@ -660,6 +664,10 @@ export class KiloConnectionService {
     this.info = null
     this.state = "disconnected"
     this.error = null
+  }
+
+  cleanupOrphanedManagedServers(): Promise<void> {
+    return this.serverManager.cleanupOrphanedManagedServers()
   }
 
   private setState(state: ConnectionState, error?: Error): void {

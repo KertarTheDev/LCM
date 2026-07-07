@@ -1,4 +1,5 @@
-import type { KiloClient, GlobalEvent } from "@kilocode/sdk/v2/client"
+import type { KiloClient, GlobalEvent, Event } from "@kilocode/sdk/v2/client"
+import { debugLog } from "./debug-log"
 
 export type SSEPayload = GlobalEvent["payload"]
 export type SSEEventHandler = (event: SSEPayload, directory?: string) => void
@@ -49,13 +50,13 @@ export class SdkSSEAdapter {
    */
   connect(): void {
     if (this.abortController) {
-      console.log("[Kilo New] SSE: ⚠️ Already connected, skipping")
+      debugLog("[Kilo New] SSE: ⚠️ Already connected, skipping")
       return
     }
 
-    console.log("[Kilo New] SSE: 🔌 connect() called")
+    debugLog("[Kilo New] SSE: 🔌 connect() called")
     this.abortController = new AbortController()
-    console.log('[Kilo New] SSE: 🔄 Setting state to "connecting"')
+    debugLog('[Kilo New] SSE: 🔄 Setting state to "connecting"')
     this.notifyState("connecting")
     void this.consumeLoop(this.abortController.signal).catch((err) => {
       console.error("[Kilo New] SSE: Unhandled error in consumeLoop:", err)
@@ -67,7 +68,7 @@ export class SdkSSEAdapter {
    * Stop consuming the SSE stream and abort any in-flight request.
    */
   disconnect(): void {
-    console.log("[Kilo New] SSE: 🔌 disconnect() called")
+    debugLog("[Kilo New] SSE: 🔌 disconnect() called")
     this.abortController?.abort()
     this.abortController = null
     this.attemptController = null
@@ -81,10 +82,10 @@ export class SdkSSEAdapter {
    */
   reconnect(): void {
     if (!this.attemptController) {
-      console.log("[Kilo New] SSE: ⚠️ reconnect() called but no active attempt")
+      debugLog("[Kilo New] SSE: ⚠️ reconnect() called but no active attempt")
       return
     }
-    console.log("[Kilo New] SSE: 🔄 reconnect() — aborting current attempt")
+    debugLog("[Kilo New] SSE: 🔄 reconnect() — aborting current attempt")
     this.attemptController.abort()
   }
 
@@ -141,7 +142,7 @@ export class SdkSSEAdapter {
       this.attemptController = attempt
 
       try {
-        console.log("[Kilo New] SSE: 🎬 Calling SDK global.event()...")
+        debugLog("[Kilo New] SSE: 🎬 Calling SDK global.event()...")
         const events = await this.client.global.event({
           signal: attempt.signal,
           // Disable SDK-internal retries — consumeLoop handles reconnection
@@ -163,7 +164,7 @@ export class SdkSSEAdapter {
           },
         })
 
-        console.log("[Kilo New] SSE: ⏳ Waiting for first stream event")
+        debugLog("[Kilo New] SSE: ⏳ Waiting for first stream event")
         this.resetHeartbeat(attempt)
 
         for await (const event of events.stream) {
@@ -176,14 +177,14 @@ export class SdkSSEAdapter {
           if (!ready) {
             ready = true
             delay = SdkSSEAdapter.RECONNECT_DELAY_MS
-            console.log("[Kilo New] SSE: ✅ Stream opened successfully")
+            debugLog("[Kilo New] SSE: ✅ Stream opened successfully")
             this.notifyState("connected")
           }
 
           this.notifyEvent(event.payload, event.directory)
         }
 
-        console.log(
+        debugLog(
           ready ? "[Kilo New] SSE: 📭 Stream ended normally" : "[Kilo New] SSE: 📭 Stream ended before first event",
         )
       } catch (error) {
@@ -206,7 +207,7 @@ export class SdkSSEAdapter {
 
       const wait = delay
       delay = ready ? SdkSSEAdapter.RECONNECT_DELAY_MS : Math.min(delay * 2, SdkSSEAdapter.MAX_RECONNECT_DELAY_MS)
-      console.log(`[Kilo New] SSE: 🔄 Reconnecting in ${wait}ms...`)
+      debugLog(`[Kilo New] SSE: 🔄 Reconnecting in ${wait}ms...`)
       this.notifyState("connecting")
       await new Promise((resolve) => setTimeout(resolve, wait))
     }
@@ -222,7 +223,7 @@ export class SdkSSEAdapter {
   private resetHeartbeat(attempt: AbortController): void {
     this.clearHeartbeat()
     this.heartbeatTimer = setTimeout(() => {
-      console.log("[Kilo New] SSE: ⏰ Heartbeat timeout — aborting stale connection")
+      debugLog("[Kilo New] SSE: ⏰ Heartbeat timeout — aborting stale connection")
       attempt.abort()
     }, SdkSSEAdapter.HEARTBEAT_TIMEOUT_MS)
   }

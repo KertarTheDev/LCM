@@ -28,6 +28,9 @@ export const Info = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("busy"),
+    // kilocode_change start
+    message: Schema.optional(Schema.String),
+    // kilocode_change end
   }),
   // kilocode_change start
   Schema.Struct({

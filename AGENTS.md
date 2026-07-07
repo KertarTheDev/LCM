@@ -27,12 +27,12 @@ Kilo CLI is an open source AI coding agent that generates code from natural lang
 
 ## Quality Checks
 
-Before saying an implementation is ready, run the smallest relevant checks that can catch lint, typecheck, and test failures for the touched package. Do not rely on manual extension launch to discover build problems. Fix failures you introduced before the final response, or state exactly which check is still failing or could not be run.
+Before saying an implementation is ready, run the smallest relevant checks that can catch lint, typecheck, and test failures for the touched package. Do not run test or typecheck groups that cover code unaffected by the current changes; use broad package/root gates only for cross-package dependency/config/build changes, generated contract/SDK drift, packaging/release work, or a touched surface that cannot be isolated to a smaller owner. Do not rely on manual extension launch to discover build problems. Fix failures you introduced before the final response, or state exactly which check is still failing or could not be run.
 
 | Area | Checks |
 |---|---|
 | Root / cross-package | `bun run lint`, `bun run typecheck` |
-| CLI | From `packages/opencode/`: `bun run typecheck`, `bun test` or targeted `bun test ./path/to/file.test.ts` |
+| CLI | From `packages/opencode/`: `bun run typecheck:lcm`, `bun run typecheck:session-provider`, `bun run typecheck:tool-server`, `bun run typecheck:cli-kilocode`, `bun run typecheck:storage-project`, or full `bun run typecheck` only when the slice does not cover the change; pair with a targeted `bun test ./path/to/file.test.ts` or owning package script |
 | VS Code extension | From `packages/kilo-vscode/`: `bun run typecheck`, `bun run lint`, `bun run test:unit` or `bun run test` |
 | Extension build/package | From `packages/kilo-vscode/`: `bun run compile` or `bun run package` when touching build, packaging, SDK, or webview integration paths |
 | JetBrains plugin | From `packages/kilo-jetbrains/`: `./gradlew typecheck`, `./gradlew test`. Requires Java 21; do not run `java -version` as a routine preflight. Check Java only after a Java-version or missing-Java failure. |

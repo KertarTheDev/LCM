@@ -28,6 +28,8 @@ export type VariantEntry = {
 export type ModelEntry = {
   id: string
   name: string
+  contextLimit: string
+  outputLimit: string
   reasoning: boolean
   variants: VariantEntry[]
 }
@@ -290,11 +292,19 @@ function VariantRow(props: VariantRowProps) {
 type ModelCardProps = {
   m: ModelEntry
   i: () => number
-  errors: { id?: string; name?: string; variants?: Array<{ name?: string }> }
+  errors: {
+    id?: string
+    name?: string
+    contextLimit?: string
+    outputLimit?: string
+    variants?: Array<{ name?: string }>
+  }
   t: Translator
   canRemove: boolean
   onChangeId: (val: string) => void
   onChangeName: (val: string) => void
+  onChangeContextLimit: (val: string) => void
+  onChangeOutputLimit: (val: string) => void
   onChangeReasoning: (val: boolean) => void
   onRemove: () => void
   onAddVariant: () => void
@@ -350,6 +360,36 @@ export function ModelCard(props: ModelCardProps) {
           disabled={!props.canRemove}
           aria-label={props.t("provider.custom.models.remove")}
           style={{ "margin-bottom": "4px" }}
+        />
+      </div>
+
+      {/* Limits */}
+      <div
+        style={{
+          display: "grid",
+          "grid-template-columns": "repeat(auto-fit, minmax(140px, 1fr))",
+          gap: "8px",
+        }}
+      >
+        <TextField
+          type="number"
+          min="1"
+          label={props.t("provider.custom.models.limit.context.label")}
+          placeholder={props.t("provider.custom.models.limit.context.placeholder")}
+          value={props.m.contextLimit}
+          onChange={props.onChangeContextLimit}
+          validationState={props.errors.contextLimit ? "invalid" : undefined}
+          error={props.errors.contextLimit}
+        />
+        <TextField
+          type="number"
+          min="1"
+          label={props.t("provider.custom.models.limit.output.label")}
+          placeholder={props.t("provider.custom.models.limit.output.placeholder")}
+          value={props.m.outputLimit}
+          onChange={props.onChangeOutputLimit}
+          validationState={props.errors.outputLimit ? "invalid" : undefined}
+          error={props.errors.outputLimit}
         />
       </div>
 

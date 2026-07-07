@@ -479,13 +479,6 @@ export type EventSessionIdle = {
   }
 }
 
-export type EventSessionCompacted = {
-  type: "session.compacted"
-  properties: {
-    sessionID: string
-  }
-}
-
 export type EventFileEdited = {
   type: "file.edited"
   properties: {
@@ -715,7 +708,6 @@ export type Event =
   | EventPermissionReplied
   | EventSessionStatus
   | EventSessionIdle
-  | EventSessionCompacted
   | EventFileEdited
   | EventTodoUpdated
   | EventCommandExecuted

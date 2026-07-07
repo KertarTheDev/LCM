@@ -1,4 +1,4 @@
-import { type ChildProcess } from "child_process"
+import { execFileSync, type ChildProcess } from "child_process"
 import { spawn } from "../../util/process"
 import * as crypto from "crypto"
 import * as fs from "fs"
@@ -7,17 +7,40 @@ import * as vscode from "vscode"
 import { resolveLocalBwrapEnv, resolveTreeSitterEnv } from "./cli-resources"
 import { t } from "./i18n"
 import { parseServerPort } from "./server-utils"
+import { debugLog } from "./debug-log"
 
 export interface ServerInstance {
   port: number
   password: string
   process: ChildProcess
+  launchID: string
 }
 
 const STARTUP_TIMEOUT_SECONDS = 30
+const MANAGED_SERVER_MARKER_VERSION = 1
+const MANAGED_SERVER_SHUTDOWN_GRACE_MS = 5_000
+const MANAGED_SERVER_KILL_GRACE_MS = 1_000
 
 type WorkspaceFolderLike = { uri: { fsPath: string } }
 type ServerExitListener = (code: number | null) => void
+
+export interface ManagedServerMarker {
+  version: typeof MANAGED_SERVER_MARKER_VERSION
+  launchID: string
+  pid: number
+  extensionHostPid: number
+  cliPath: string
+  cwd: string
+  startedAt: string
+  extensionVersion: string
+  port?: number
+}
+
+export interface ProcessRow {
+  pid: number
+  ppid: number
+  command: string
+}
 
 export function resolveServerCwd(folders: readonly WorkspaceFolderLike[] | undefined, storage: string): string {
   return folders?.[0]?.uri.fsPath ?? storage
@@ -32,9 +55,141 @@ export function resolveManagedServerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessE
   return { ...env, KILO_DISABLE_CHANNEL_DB: "true" }
 }
 
+export function managedServerMarkerDir(globalStoragePath: string): string {
+  return path.join(globalStoragePath, "managed-server")
+}
+
+export function managedServerMarkerPath(globalStoragePath: string, launchID: string): string {
+  return path.join(managedServerMarkerDir(globalStoragePath), `server-${launchID}.json`)
+}
+
+function normalizedForCommand(value: string): string {
+  return value.replace(/\\/g, "/")
+}
+
+function commandHasServePortZero(command: string): boolean {
+  return /\bserve\b/.test(command) && /(?:^|\s)--port(?:=|\s+)0(?:\s|$)/.test(command)
+}
+
+export function commandMatchesManagedServerMarker(
+  command: string,
+  marker: Pick<ManagedServerMarker, "cliPath">,
+): boolean {
+  const normalizedCommand = normalizedForCommand(command)
+  const normalizedCliPath = normalizedForCommand(marker.cliPath)
+  return normalizedCommand.includes(normalizedCliPath) && commandHasServePortZero(normalizedCommand)
+}
+
+export function commandLooksLikeLegacyManagedServer(
+  command: string,
+  input: { cliPath: string; extensionPath: string; extensionID: string },
+): boolean {
+  const normalizedCommand = normalizedForCommand(command)
+  if (!commandHasServePortZero(normalizedCommand)) return false
+
+  const normalizedCliPath = normalizedForCommand(input.cliPath)
+  if (normalizedCommand.includes(normalizedCliPath)) return true
+
+  const extensionRoot = normalizedForCommand(path.dirname(input.extensionPath))
+  const extensionPrefix = `${extensionRoot}/${input.extensionID}`
+  return normalizedCommand.includes(`${extensionPrefix}-`) && /\/bin\/kilo(?:\.exe)?(?:\s|$)/.test(normalizedCommand)
+}
+
+export function parsePosixProcessList(text: string): ProcessRow[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+)$/)
+      if (!match) return undefined
+      return { pid: Number(match[1]), ppid: Number(match[2]), command: match[3]!.trim() }
+    })
+    .filter((row): row is ProcessRow => !!row && Number.isFinite(row.pid) && Number.isFinite(row.ppid))
+}
+
+function pidIsLive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (
+      typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "EPERM"
+    )
+  }
+}
+
+function readProcessCommand(pid: number): string | undefined {
+  try {
+    if (process.platform === "win32") {
+      const output = execFileSync("wmic", ["process", "where", `ProcessId=${pid}`, "get", "CommandLine", "/value"], {
+        encoding: "utf8",
+        windowsHide: true,
+        timeout: 2_000,
+      })
+      return output
+        .split(/\r?\n/)
+        .find((line) => line.startsWith("CommandLine="))
+        ?.slice("CommandLine=".length)
+        .trim()
+    }
+    return execFileSync("ps", ["-p", String(pid), "-o", "command="], {
+      encoding: "utf8",
+      timeout: 2_000,
+    }).trim()
+  } catch {
+    return undefined
+  }
+}
+
+function listProcesses(): ProcessRow[] {
+  if (process.platform === "win32") return []
+  try {
+    return parsePosixProcessList(
+      execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8", timeout: 3_000 }),
+    )
+  } catch {
+    return []
+  }
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function waitForPidExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const started = Date.now()
+  while (pidIsLive(pid)) {
+    if (Date.now() - started >= timeoutMs) return false
+    await sleep(100)
+  }
+  return true
+}
+
+function safeReadMarker(file: string): ManagedServerMarker | undefined {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Partial<ManagedServerMarker>
+    if (
+      parsed.version !== MANAGED_SERVER_MARKER_VERSION ||
+      typeof parsed.launchID !== "string" ||
+      typeof parsed.pid !== "number" ||
+      typeof parsed.extensionHostPid !== "number" ||
+      typeof parsed.cliPath !== "string" ||
+      typeof parsed.cwd !== "string" ||
+      typeof parsed.startedAt !== "string" ||
+      typeof parsed.extensionVersion !== "string"
+    ) {
+      return undefined
+    }
+    return parsed as ManagedServerMarker
+  } catch {
+    return undefined
+  }
+}
+
 export class ServerManager {
   private instance: ServerInstance | null = null
   private startupPromise: Promise<ServerInstance> | null = null
+  private cleanupPromise: Promise<void> | null = null
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -45,22 +200,22 @@ export class ServerManager {
    * Get or start the server instance
    */
   async getServer(): Promise<ServerInstance> {
-    console.log("[Kilo New] ServerManager: 🔍 getServer called")
+    debugLog("[Kilo New] ServerManager: 🔍 getServer called")
     if (this.instance) {
-      console.log("[Kilo New] ServerManager: ♻️ Returning existing instance:", { port: this.instance.port })
+      debugLog("[Kilo New] ServerManager: ♻️ Returning existing instance:", { port: this.instance.port })
       return this.instance
     }
 
     if (this.startupPromise) {
-      console.log("[Kilo New] ServerManager: ⏳ Startup already in progress, waiting...")
+      debugLog("[Kilo New] ServerManager: ⏳ Startup already in progress, waiting...")
       return this.startupPromise
     }
 
-    console.log("[Kilo New] ServerManager: 🚀 Starting new server instance...")
-    this.startupPromise = this.startServer()
+    debugLog("[Kilo New] ServerManager: 🚀 Starting new server instance...")
+    this.startupPromise = this.cleanupOrphanedManagedServers().then(() => this.startServer())
     try {
       this.instance = await this.startupPromise
-      console.log("[Kilo New] ServerManager: ✅ Server started successfully:", { port: this.instance.port })
+      debugLog("[Kilo New] ServerManager: ✅ Server started successfully:", { port: this.instance.port })
       return this.instance
     } finally {
       this.startupPromise = null
@@ -69,9 +224,10 @@ export class ServerManager {
 
   private async startServer(): Promise<ServerInstance> {
     const password = crypto.randomBytes(32).toString("hex")
+    const launchID = crypto.randomUUID()
     const cliPath = this.getCliPath()
-    console.log("[Kilo New] ServerManager: 📍 CLI path:", cliPath)
-    console.log("[Kilo New] ServerManager: 🔐 Generated password (length):", password.length)
+    debugLog("[Kilo New] ServerManager: 📍 CLI path:", cliPath)
+    debugLog("[Kilo New] ServerManager: 🔐 Generated password (length):", password.length)
 
     // Verify the CLI binary exists
     if (!fs.existsSync(cliPath)) {
@@ -81,11 +237,11 @@ export class ServerManager {
     }
 
     const stat = fs.statSync(cliPath)
-    console.log("[Kilo New] ServerManager: 📄 CLI isFile:", stat.isFile())
-    console.log("[Kilo New] ServerManager: 📄 CLI mode (octal):", (stat.mode & 0o777).toString(8))
+    debugLog("[Kilo New] ServerManager: 📄 CLI isFile:", stat.isFile())
+    debugLog("[Kilo New] ServerManager: 📄 CLI mode (octal):", (stat.mode & 0o777).toString(8))
 
     return new Promise((resolve, reject) => {
-      console.log("[Kilo New] ServerManager: 🎬 Spawning CLI process:", cliPath, ["serve", "--port", "0"])
+      debugLog("[Kilo New] ServerManager: 🎬 Spawning CLI process:", cliPath, ["serve", "--port", "0"])
       const cfg = vscode.workspace.getConfiguration("kilo-code.new")
       const claudeCompat = cfg.get<boolean>("claudeCodeCompat", false)
       // Pin cwd so the CLI doesn't inherit the extension host's cwd ("/" under F5 debug)
@@ -134,6 +290,9 @@ export class ServerManager {
           KILO_CLIENT: "vscode",
           KILO_ENABLE_QUESTION_TOOL: "true",
           KILOCODE_FEATURE: "vscode-extension",
+          KILO_VSCODE_MANAGED_SERVER: "1",
+          KILO_VSCODE_EXTENSION_HOST_PID: String(process.pid),
+          KILO_VSCODE_SERVER_LAUNCH_ID: launchID,
           ...indexingEnv,
           KILO_TELEMETRY_LEVEL: vscode.env.isTelemetryEnabled ? "all" : "off",
           KILO_APP_NAME: "kilo-code",
@@ -150,20 +309,33 @@ export class ServerManager {
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
       })
-      console.log("[Kilo New] ServerManager: 📦 Process spawned with PID:", serverProcess.pid)
+      debugLog("[Kilo New] ServerManager: 📦 Process spawned with PID:", serverProcess.pid)
+      if (serverProcess.pid !== undefined) {
+        this.writeMarker({
+          version: MANAGED_SERVER_MARKER_VERSION,
+          launchID,
+          pid: serverProcess.pid,
+          extensionHostPid: process.pid,
+          cliPath,
+          cwd: spawnCwd,
+          startedAt: new Date().toISOString(),
+          extensionVersion: this.context.extension.packageJSON.version,
+        })
+      }
 
       let resolved = false
       const stderrLines: string[] = []
 
       serverProcess.stdout?.on("data", (data: Buffer) => {
         const output = data.toString()
-        console.log("[Kilo New] ServerManager: 📥 CLI Server stdout:", output)
+        debugLog("[Kilo New] ServerManager: 📥 CLI Server stdout:", output)
 
         const port = parseServerPort(output)
         if (port !== null && !resolved) {
           resolved = true
-          console.log("[Kilo New] ServerManager: 🎯 Port detected:", port)
-          resolve({ port, password, process: serverProcess })
+          debugLog("[Kilo New] ServerManager: 🎯 Port detected:", port)
+          this.updateMarkerPort(launchID, port)
+          resolve({ port, password, process: serverProcess, launchID })
         }
       })
 
@@ -181,7 +353,8 @@ export class ServerManager {
       })
 
       serverProcess.on("exit", (code) => {
-        console.log("[Kilo New] ServerManager: 🛑 Process exited with code:", code)
+        debugLog("[Kilo New] ServerManager: 🛑 Process exited with code:", code)
+        this.clearMarker(launchID)
         if (this.instance?.process === serverProcess) {
           this.instance = null
           this.onExit?.(code)
@@ -215,8 +388,92 @@ export class ServerManager {
     // Always use the bundled binary from the extension directory
     const binName = process.platform === "win32" ? "kilo.exe" : "kilo"
     const cliPath = path.join(this.context.extensionPath, "bin", binName)
-    console.log("[Kilo New] ServerManager: 📦 Using CLI path:", cliPath)
+    debugLog("[Kilo New] ServerManager: 📦 Using CLI path:", cliPath)
     return cliPath
+  }
+
+  cleanupOrphanedManagedServers(): Promise<void> {
+    this.cleanupPromise ??= this.cleanupOrphanedManagedServersFresh().finally(() => {
+      this.cleanupPromise = null
+    })
+    return this.cleanupPromise
+  }
+
+  private async cleanupOrphanedManagedServersFresh(): Promise<void> {
+    await this.cleanupMarkedServers()
+    await this.cleanupLegacyUnmarkedServers()
+  }
+
+  private async cleanupMarkedServers(): Promise<void> {
+    const dir = managedServerMarkerDir(this.context.globalStorageUri.fsPath)
+    const files = fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : []
+    for (const entry of files) {
+      if (!entry.isFile() || !entry.name.endsWith(".json")) continue
+      const file = path.join(dir, entry.name)
+      const marker = safeReadMarker(file)
+      if (!marker) {
+        fs.rmSync(file, { force: true })
+        continue
+      }
+      if (!pidIsLive(marker.pid)) {
+        fs.rmSync(file, { force: true })
+        continue
+      }
+      if (pidIsLive(marker.extensionHostPid)) continue
+      const command = readProcessCommand(marker.pid)
+      if (!command || !commandMatchesManagedServerMarker(command, marker)) {
+        console.warn("[Kilo New] ServerManager: skipping ambiguous managed backend marker", {
+          pid: marker.pid,
+          marker: file,
+        })
+        continue
+      }
+      await ServerManager.terminatePid(marker.pid)
+      if (!pidIsLive(marker.pid)) fs.rmSync(file, { force: true })
+    }
+  }
+
+  private async cleanupLegacyUnmarkedServers(): Promise<void> {
+    if (process.platform === "win32") return
+    const cliPath = this.getCliPath()
+    const extensionID = `${this.context.extension.packageJSON.publisher}.${this.context.extension.packageJSON.name}`
+    for (const row of listProcesses()) {
+      if (row.pid === process.pid || row.ppid === process.pid) continue
+      if (row.ppid > 1 && pidIsLive(row.ppid)) continue
+      if (
+        !commandLooksLikeLegacyManagedServer(row.command, {
+          cliPath,
+          extensionPath: this.context.extensionPath,
+          extensionID,
+        })
+      ) {
+        continue
+      }
+      await ServerManager.terminatePid(row.pid)
+    }
+  }
+
+  private writeMarker(marker: ManagedServerMarker): void {
+    const dir = managedServerMarkerDir(this.context.globalStorageUri.fsPath)
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(
+      managedServerMarkerPath(this.context.globalStorageUri.fsPath, marker.launchID),
+      JSON.stringify(marker),
+      {
+        mode: 0o600,
+      },
+    )
+  }
+
+  private updateMarkerPort(launchID: string, port: number): void {
+    const file = managedServerMarkerPath(this.context.globalStorageUri.fsPath, launchID)
+    const marker = safeReadMarker(file)
+    if (!marker) return
+    this.writeMarker({ ...marker, port })
+  }
+
+  private clearMarker(launchID: string): void {
+    fs.rmSync(managedServerMarkerPath(this.context.globalStorageUri.fsPath, launchID), { force: true })
   }
 
   /**
@@ -228,39 +485,53 @@ export class ServerManager {
     if (proc.pid === undefined) {
       return
     }
+    ServerManager.killPid(proc.pid, signal, proc)
+  }
+
+  private static killPid(pid: number, signal: NodeJS.Signals, proc?: ChildProcess): void {
     try {
       if (process.platform !== "win32") {
         // Negative PID targets the entire process group
-        process.kill(-proc.pid, signal)
+        process.kill(-pid, signal)
       } else {
-        proc.kill(signal)
+        proc?.kill(signal)
       }
     } catch {
-      // Process already gone — ignore
+      try {
+        process.kill(pid, signal)
+      } catch {
+        // Process already gone — ignore
+      }
     }
   }
 
+  private static async terminatePid(pid: number): Promise<void> {
+    ServerManager.killPid(pid, "SIGTERM")
+    if (await waitForPidExit(pid, MANAGED_SERVER_SHUTDOWN_GRACE_MS)) return
+    console.warn("[Kilo New] ServerManager: managed backend did not exit after SIGTERM, sending SIGKILL", { pid })
+    ServerManager.killPid(pid, "SIGKILL")
+    await waitForPidExit(pid, MANAGED_SERVER_KILL_GRACE_MS)
+  }
+
   dispose(): void {
+    void this.disposeAndWait()
+  }
+
+  async disposeAndWait(): Promise<void> {
     if (!this.instance) {
       return
     }
     const proc = this.instance.process
     this.instance = null
 
-    console.log("[Kilo New] ServerManager: 🔴 Disposing — sending SIGTERM to process group, PID:", proc.pid)
+    debugLog("[Kilo New] ServerManager: 🔴 Disposing — sending SIGTERM to process group, PID:", proc.pid)
     ServerManager.killProcess(proc, "SIGTERM")
 
-    // SIGKILL fallback after 5s. Ensures the process tree dies even if SIGTERM is ignored
-    // or Instance.disposeAll() hangs past the serve.ts shutdown timeout.
-    const timer = setTimeout(() => {
-      if (proc.exitCode === null) {
-        console.warn("[Kilo New] ServerManager: ⚠️ Process did not exit after SIGTERM, sending SIGKILL")
-        ServerManager.killProcess(proc, "SIGKILL")
-      }
-    }, 5000)
-    // unref so this timer doesn't prevent the extension host from exiting
-    timer.unref()
-    proc.on("exit", () => clearTimeout(timer))
+    if (proc.pid !== undefined && !(await waitForPidExit(proc.pid, MANAGED_SERVER_SHUTDOWN_GRACE_MS))) {
+      console.warn("[Kilo New] ServerManager: ⚠️ Process did not exit after SIGTERM, sending SIGKILL")
+      ServerManager.killProcess(proc, "SIGKILL")
+      await waitForPidExit(proc.pid, MANAGED_SERVER_KILL_GRACE_MS)
+    }
   }
 }
 

@@ -137,7 +137,16 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
             metadata: {
               ...result.metadata,
               truncated: truncated.truncated,
-              ...(truncated.truncated && { outputPath: truncated.outputPath }),
+              // kilocode_change start
+              ...(truncated.truncated
+                ? {
+                    outputPath: truncated.outputPath,
+                    outputByteCount: truncated.outputByteCount,
+                    outputSha256: truncated.outputSha256,
+                    outputSidecarVersion: truncated.outputSidecarVersion,
+                  }
+                : {}),
+              // kilocode_change end
             },
           }
         }).pipe(Effect.orDie, Effect.withSpan("Tool.execute", { attributes: attrs }))

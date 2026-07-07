@@ -16,7 +16,7 @@ import {
   batch,
   untrack,
 } from "solid-js"
-import type { ParentComponent, Accessor } from "solid-js"
+import type { ParentComponent } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useVSCode } from "./vscode"
 import { useServer } from "./server"
@@ -45,6 +45,7 @@ import type {
   SkillInfo,
   ExtensionMessage,
   FileAttachment,
+  LcmMetricsSnapshotMessage,
   SendMessageFailedMessage,
   McpStatusEntry,
   MessageLoadMode,
@@ -53,7 +54,6 @@ import type {
 import { removeSessionPermissions, upsertPermission } from "./permission-queue"
 import {
   computeStatus,
-  calcContextUsage,
   buildFamilyCosts,
   buildFamilyParentsFromTools,
   buildFamilyLabelsFromTools,
@@ -64,6 +64,14 @@ import {
   removeSessionToolPart,
   removeSessionToolPartsForMessage,
   upsertSessionToolPart,
+  lcmContextUsageFromMetrics,
+  busyStatusMessage,
+  isLcmMaintenanceHintExpired,
+  lcmMaintenanceHintFromEvent,
+  lcmMetricKeysFromEvent,
+  lcmMaintenanceHintTtlMs,
+  shouldAcceptLcmMetrics,
+  type LcmMaintenanceHint,
 } from "./session-utils"
 import { Identifier } from "../utils/id"
 import { resolveModelSelection } from "./model-selection"
@@ -80,6 +88,9 @@ import { deleteDraftsForSession } from "../utils/draft-store"
 import { createAbortState } from "./abort-state"
 import { clearIfOn, createCloudPrune } from "./session-cloud-prune"
 import { isSameSessionTree } from "./model-usage"
+import { isLcmOwnerLockFailure, lcmPromptFailureDescription, lcmPromptFailureTitle } from "./session-lcm-errors"
+import type { LcmLockRecoveryState } from "./session-lcm-errors"
+import type { MessageMutation, SessionContextValue, SessionStore } from "./session-types"
 
 const RECENT_LIMIT = 5
 const MESSAGE_PAGE_LIMIT = 80
@@ -90,8 +101,6 @@ function dropSet(prev: Set<string>, ids: Iterable<string>): Set<string> {
   for (const id of ids) next.delete(id)
   return next.size === prev.size ? prev : next
 }
-
-type MessageMutation = Exclude<MessageLoadMode, "focus"> | "append" | "update"
 
 interface MessagePageState {
   initialLoaded: boolean
@@ -107,203 +116,6 @@ const emptyPageState: MessagePageState = {
   loadingInitial: false,
   loadingOlder: false,
   hasMore: false,
-}
-
-// Store structure for messages and parts
-interface SessionStore {
-  sessions: Record<string, SessionInfo>
-  messages: Record<string, Message[]> // sessionID -> messages
-  parts: Record<string, Part[]> // messageID -> parts
-  toolParts: Record<string, ToolPart[]> // sessionID -> compact per-session tool index
-  todos: Record<string, TodoItem[]> // sessionID -> todos
-  modelSelections: Record<string, ModelSelection | null> // agentName -> model (global, extension-lifetime)
-  sessionOverrides: Record<string, ModelSelection> // sessionID -> per-session model override (compare mode)
-  agentSelections: Record<string, string> // sessionID -> agent name
-  variantSelections: Record<string, string> // session/agent scoped variant key -> variant name
-  recentModels: ModelSelection[]
-  favoriteModels: ModelSelection[]
-  modelUsage: Record<string, { requestID: string; data?: SessionModelUsage }>
-}
-
-interface SessionContextValue {
-  // Current session
-  currentSessionID: Accessor<string | undefined>
-  currentSession: Accessor<SessionInfo | undefined>
-  setCurrentSessionID: (id: string | undefined) => void
-
-  // All sessions (sorted most recent first)
-  sessions: Accessor<SessionInfo[]>
-
-  // Session status
-  status: Accessor<SessionStatus>
-  statusInfo: Accessor<SessionStatusInfo>
-  closeReason: Accessor<SessionCloseReason | undefined>
-  statusText: Accessor<string | undefined>
-  busySince: Accessor<number | undefined>
-  submitting: Accessor<boolean>
-  loading: Accessor<boolean>
-  loadingOlderMessages: Accessor<boolean>
-  hasOlderMessages: Accessor<boolean>
-  messageMutation: Accessor<MessageMutation | undefined>
-
-  // Messages for current session
-  messages: Accessor<Message[]>
-
-  // Messages for current session with soft-reverted turns hidden
-  visibleMessages: Accessor<Message[]>
-
-  // User messages for current session (role === "user")
-  userMessages: Accessor<Message[]>
-
-  // All messages keyed by sessionID (includes child sessions)
-  allMessages: () => Record<string, Message[]>
-
-  // All parts keyed by messageID (includes child sessions)
-  allParts: () => Record<string, Part[]>
-
-  // All session statuses keyed by sessionID (for DataBridge)
-  allStatusMap: () => Record<string, SessionStatusInfo>
-
-  // Parts for a specific message
-  getParts: (messageID: string) => Part[]
-
-  // Tool parts for a specific session, maintained incrementally for streaming views
-  getSessionToolParts: (sessionID: string) => ToolPart[]
-  getSessionToolCount: (sessionID: string) => number
-
-  // Hidden after model changes so switching models can clear stale provider errors
-  // without removing messages and their checkpoint restore actions.
-  isErrorHidden: (messageID: string) => boolean
-
-  // Move stashed parts into the reactive store for the given message IDs.
-  // Called by VscodeSessionTurn when the virtualizer renders a turn.
-  hydrateParts: (messageIDs: string[]) => void
-
-  // Todos for current session
-  todos: Accessor<TodoItem[]>
-
-  // Pending permission requests (unscoped — all tracked sessions)
-  permissions: Accessor<PermissionRequest[]>
-  respondingPermissions: Accessor<Set<string>>
-
-  // Pending question requests (unscoped — all tracked sessions)
-  questions: Accessor<QuestionRequest[]>
-  questionErrors: Accessor<Set<string>>
-  suggestions: Accessor<SuggestionRequest[]>
-  suggestionErrors: Accessor<Set<string>>
-  respondingSuggestions: Accessor<Set<string>>
-
-  // Scoped permissions/questions — filtered to a session's family (self + subagents)
-  scopedPermissions: (sessionID: string | undefined) => PermissionRequest[]
-  scopedQuestions: (sessionID: string | undefined) => QuestionRequest[]
-  scopedSuggestions: (sessionID: string | undefined) => SuggestionRequest[]
-
-  // Model selection (global, extension-lifetime)
-  selected: (sessionID?: string) => ModelSelection | null
-  configModel: (sessionID?: string) => ModelSelection | null
-  selectModel: (providerID: string, modelID: string, sessionID?: string) => void
-  hasModelOverride: (sessionID?: string) => boolean
-  clearModelOverride: (sessionID?: string) => void
-
-  // Cost and context usage for the current session
-  costBreakdown: Accessor<Array<{ label: string; cost: number }>>
-  contextUsage: Accessor<ContextUsage | undefined>
-  modelUsage: Accessor<SessionModelUsage | undefined>
-  refreshModelUsage: () => void
-
-  // Skills loaded from the CLI backend
-  skills: Accessor<SkillInfo[]>
-  refreshSkills: () => void
-  removeSkill: (location: string) => void
-
-  // Agent/mode selection (per-session)
-  agents: Accessor<AgentInfo[]>
-  allAgents: Accessor<AgentInfo[]>
-  removeAgent: (name: string) => void
-  removeMcp: (name: string) => void
-
-  // MCP server status (runtime connect/disconnect)
-  mcpStatus: Accessor<Record<string, McpStatusEntry>>
-  mcpLoading: Accessor<string | null>
-  connectMcp: (name: string) => void
-  disconnectMcp: (name: string) => void
-  authenticateMcp: (name: string) => void
-  refreshMcpStatus: () => void
-  selectedAgent: (sessionID?: string) => string
-  selectAgent: (name: string, sessionID?: string) => void
-  getSessionAgent: (sessionID: string) => string
-  getSessionModel: (sessionID: string) => ModelSelection | null
-  setSessionModel: (sessionID: string, providerID: string, modelID: string) => void
-  setSessionAgent: (sessionID: string, name: string) => void
-  setSessionVariant: (sessionID: string, providerID: string, modelID: string, value: string, agent?: string) => void
-
-  // Thinking variant for the selected model
-  variantList: (sessionID?: string) => string[]
-  currentVariant: (sessionID?: string) => string | undefined
-  selectVariant: (value: string, sessionID?: string) => void
-
-  // Model favorites
-  favoriteModels: Accessor<ModelSelection[]>
-  toggleFavorite: (providerID: string, modelID: string) => void
-
-  // Revert/undo state for the current session
-  revert: Accessor<SessionInfo["revert"]>
-  revertedCount: Accessor<number>
-  summary: Accessor<SessionInfo["summary"]>
-
-  // Live worktree diff stats (polled from CLI backend)
-  worktreeStats: Accessor<{ files: number; additions: number; deletions: number } | undefined>
-
-  // Actions
-  revertSession: (messageID: string, partID?: string) => void
-  unrevertSession: () => void
-  sendMessage: (
-    text: string,
-    providerID?: string,
-    modelID?: string,
-    files?: FileAttachment[],
-    draftID?: string,
-    context?: string,
-    review?: ReviewMessageData,
-  ) => void
-  sendCommand: (
-    command: string,
-    args: string,
-    providerID?: string,
-    modelID?: string,
-    files?: FileAttachment[],
-    draftID?: string,
-    context?: string,
-  ) => void
-  abort: () => void
-  compact: () => void
-  respondToPermission: (
-    permissionId: string,
-    response: "once" | "always" | "reject",
-    approvedAlways: string[],
-    deniedAlways: string[],
-  ) => void
-  replyToQuestion: (requestID: string, answers: string[][]) => void
-  rejectQuestion: (requestID: string) => void
-  closeQuestion: (requestID: string) => void
-  acceptSuggestion: (requestID: string, index: number) => void
-  dismissSuggestion: (requestID: string) => void
-  createSession: () => void
-  clearCurrentSession: () => void
-  loadSessions: () => void
-  loadOlderMessages: () => void
-  selectSession: (id: string) => void
-  deleteSession: (id: string) => void
-  renameSession: (id: string, title: string) => void
-  exportSessionTranscript: (id: string) => void
-  syncSession: (sessionID: string) => void
-
-  // Cloud session preview
-  cloudPreviewId: Accessor<string | null>
-  selectCloudSession: (cloudSessionId: string) => void
-  draftSessionID: Accessor<string | undefined>
-  setDraftSessionID: (id: string | undefined) => void
-  userClearedSession: Accessor<boolean>
 }
 
 export const SessionContext = createContext<SessionContextValue>()
@@ -457,6 +269,9 @@ export const SessionProvider: ParentComponent = (props) => {
   // Cloud session preview state
   const [cloudPreviewId, setCloudPreviewId] = createSignal<string | null>(null)
   const [hiddenErrors, setHiddenErrors] = createSignal<Set<string>>(new Set())
+  const [lcmLockRecovery, setLcmLockRecovery] = createSignal<LcmLockRecoveryState | undefined>()
+  let lcmLockRecoveryRequestID: string | undefined
+  let lcmLockRecoverySequence = 0
 
   // Live worktree diff stats from extension polling
   const [worktreeStats, setWorktreeStats] = createSignal<
@@ -466,6 +281,7 @@ export const SessionProvider: ParentComponent = (props) => {
   // Tracks optimistic messageIDs that haven't been confirmed by the server yet.
   // Prevents handleMessagesLoaded from wiping them when it replaces the array.
   const pendingOptimistic = new Map<string, Set<string>>()
+  const maintenanceHintTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   const startSubmission = (sid: string, messageID: string) => {
     pendingSubmissions.set(messageID, sid)
@@ -521,6 +337,13 @@ export const SessionProvider: ParentComponent = (props) => {
     recentModels: [],
     favoriteModels: [],
     modelUsage: {},
+    lcmMetrics: {},
+    lcmMaintenanceHints: {},
+  })
+
+  onCleanup(() => {
+    for (const timer of maintenanceHintTimers.values()) clearTimeout(timer)
+    maintenanceHintTimers.clear()
   })
   const [modelUsageReady, setModelUsageReady] = createSignal(false)
   let modelUsageQueued = false
@@ -992,6 +815,23 @@ export const SessionProvider: ParentComponent = (props) => {
     if (message.sessionID) patchPage(message.sessionID, { loadingInitial: false, loadingOlder: false })
   }
 
+  function handleSessionError(message: Extract<ExtensionMessage, { type: "sessionError" }>) {
+    if (message.error?.name === "MessageAbortedError") return
+    const sid = message.sessionID ?? currentSessionID()
+    if (!sid) return
+    const msgs = store.messages[sid] ?? []
+    const parent = [...msgs].reverse().find((m) => m.role === "user")
+    const errorMsg: Message = {
+      id: Identifier.ascending("message"),
+      sessionID: sid,
+      role: "assistant",
+      createdAt: new Date().toISOString(),
+      parentID: parent?.id,
+      error: message.error,
+    }
+    handleMessageCreated(errorMsg)
+  }
+
   function toggleFavorite(providerID: string, modelID: string) {
     const key = `${providerID}/${modelID}`
     const idx = store.favoriteModels.findIndex((f) => `${f.providerID}/${f.modelID}` === key)
@@ -1093,6 +933,10 @@ export const SessionProvider: ParentComponent = (props) => {
         setCloseMap(message.sessionID, message.reason)
         break
 
+      case "lcmEvent":
+        handleLcmEvent(message.event)
+        break
+
       case "todoUpdated":
         handleTodoUpdated(message.sessionID, message.items)
         break
@@ -1134,24 +978,9 @@ export const SessionProvider: ParentComponent = (props) => {
         handleMessageRemoved(message.sessionID, message.messageID)
         break
 
-      case "sessionError": {
-        if (message.error?.name === "MessageAbortedError") break
-        const sid = message.sessionID ?? currentSessionID()
-        if (!sid) break
-        // Find the last user message in this session to use as parentID
-        const msgs = store.messages[sid] ?? []
-        const parent = [...msgs].reverse().find((m) => m.role === "user")
-        const errorMsg: Message = {
-          id: Identifier.ascending("message"),
-          sessionID: sid,
-          role: "assistant",
-          createdAt: new Date().toISOString(),
-          parentID: parent?.id,
-          error: message.error,
-        }
-        handleMessageCreated(errorMsg)
+      case "sessionError":
+        handleSessionError(message)
         break
-      }
 
       case "error":
         handleError(message)
@@ -1159,6 +988,10 @@ export const SessionProvider: ParentComponent = (props) => {
 
       case "sendMessageFailed":
         handleSendMessageFailed(message as unknown as SendMessageFailedMessage)
+        break
+
+      case "recoverLcmDbLock.result":
+        handleChatRecoverLockResult(message)
         break
 
       case "cloudSessionDataLoaded":
@@ -1674,7 +1507,9 @@ export const SessionProvider: ParentComponent = (props) => {
         ? { type: "retry", attempt: attempt ?? 0, message: message ?? "", next: next ?? 0 }
         : newStatus === "offline"
           ? { type: "offline", message: message ?? "" }
-          : { type: newStatus }
+          : newStatus === "busy" && message
+            ? { type: "busy", message }
+            : { type: newStatus }
     setStatusMap(sessionID, info)
     // Track busy start time and discard the previous turn's terminal state.
     if (prev.type === "idle" && newStatus !== "idle") {
@@ -1694,6 +1529,63 @@ export const SessionProvider: ParentComponent = (props) => {
       pendingOptimistic.delete(sessionID)
     }
     if (shouldAbort) vscode.postMessage({ type: "abort", sessionID })
+  }
+
+  function clearMaintenanceHint(key: string, expected?: LcmMaintenanceHint) {
+    setStore(
+      "lcmMaintenanceHints",
+      produce((hints) => {
+        const current = hints[key]
+        if (!current) return
+        if (
+          expected &&
+          (current.operationID !== expected.operationID || current.updatedAtMs !== expected.updatedAtMs)
+        ) {
+          return
+        }
+        delete hints[key]
+      }),
+    )
+  }
+
+  function scheduleMaintenanceHintExpiry(key: string, hint: LcmMaintenanceHint) {
+    const existing = maintenanceHintTimers.get(key)
+    if (existing) clearTimeout(existing)
+    const ttlMs = lcmMaintenanceHintTtlMs(hint)
+    if (ttlMs === undefined) return
+    const timer = setTimeout(() => {
+      maintenanceHintTimers.delete(key)
+      clearMaintenanceHint(key, hint)
+    }, ttlMs)
+    maintenanceHintTimers.set(key, timer)
+  }
+
+  function handleLcmEvent(event: Extract<ExtensionMessage, { type: "lcmEvent" }>["event"]) {
+    if (event.type === "lcm.metrics.updated") {
+      for (const key of lcmMetricKeysFromEvent(event)) {
+        if (shouldAcceptLcmMetrics(store.lcmMetrics[key], event.payload)) setStore("lcmMetrics", key, event.payload)
+      }
+    }
+
+    const hintKey = event.sessionID ?? event.conversationID
+    if (!hintKey) return
+    const current = store.lcmMaintenanceHints[hintKey]
+    const next = lcmMaintenanceHintFromEvent(current, event)
+    if (next === current) return
+
+    const existingTimer = maintenanceHintTimers.get(hintKey)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+      maintenanceHintTimers.delete(hintKey)
+    }
+
+    if (!next) {
+      clearMaintenanceHint(hintKey)
+      return
+    }
+
+    setStore("lcmMaintenanceHints", hintKey, next)
+    scheduleMaintenanceHintExpiry(hintKey, next)
   }
 
   function handlePermissionRequest(permission: PermissionRequest) {
@@ -1804,6 +1696,53 @@ export const SessionProvider: ParentComponent = (props) => {
     }
   }
 
+  function dismissLcmLockRecovery() {
+    lcmLockRecoveryRequestID = undefined
+    setLcmLockRecovery(undefined)
+  }
+
+  function forceUnlockLcm() {
+    const recovery = lcmLockRecovery()
+    if (!recovery || recovery.status === "recovering") return
+    lcmLockRecoverySequence += 1
+    const requestID = `chat-lock-recover-${Date.now()}-${lcmLockRecoverySequence}`
+    lcmLockRecoveryRequestID = requestID
+    setLcmLockRecovery({ ...recovery, status: "recovering" })
+    vscode.postMessage({
+      type: "recoverLcmDbLock",
+      requestID,
+      body: { sessionID: recovery.sessionID, dryRun: false, force: true },
+    })
+  }
+
+  function handleChatRecoverLockResult(
+    message: Extract<ExtensionMessage, { type: "recoverLcmDbLock.result" }>,
+  ): boolean {
+    if (message.requestID !== lcmLockRecoveryRequestID) return false
+    lcmLockRecoveryRequestID = undefined
+    const active = lcmLockRecovery()
+    if (message.ok && (message.body.status === "recovered" || message.body.status === "not_needed")) {
+      setLcmLockRecovery(undefined)
+      showToast({
+        variant: "success",
+        title: "Memory unlocked",
+        description: "Send the message again to continue.",
+      })
+      return true
+    }
+
+    const detail = message.ok
+      ? (message.body.safeErrors[0]?.safeMessage ?? "Memory lock recovery did not complete.")
+      : message.error.safeMessage
+    if (active) setLcmLockRecovery({ ...active, status: "available", detail })
+    showToast({
+      variant: "error",
+      title: "Force unlock failed",
+      description: detail,
+    })
+    return true
+  }
+
   /**
    * Handle a failed send: remove the optimistic message from the store
    * and show a toast. The PromptInput restores the draft text separately
@@ -1830,9 +1769,20 @@ export const SessionProvider: ParentComponent = (props) => {
 
     showToast({
       variant: "error",
-      title: language.t("prompt.toast.promptSendFailed.title") ?? "Failed to send message",
-      description: message.error,
+      title: message.safeError
+        ? lcmPromptFailureTitle(message.safeError)
+        : (language.t("prompt.toast.promptSendFailed.title") ?? "Failed to send message"),
+      description: lcmPromptFailureDescription(message),
     })
+
+    if (isLcmOwnerLockFailure(message) && sid) {
+      setLcmLockRecovery({
+        sessionID: sid,
+        safeMessage: message.safeError?.safeMessage ?? message.error,
+        detail: "Only force unlock after closing any other Kilo or VS Code window using this task.",
+        status: "available",
+      })
+    }
 
     if (!message.sessionID && message.draftID) {
       setDraftSessionID(message.draftID)
@@ -1984,6 +1934,8 @@ export const SessionProvider: ParentComponent = (props) => {
           for (const [id, state] of Object.entries(s.modelUsage)) {
             if (id === sessionID || state.data?.sessionIDs.includes(sessionID)) delete s.modelUsage[id]
           }
+          delete s.lcmMetrics[sessionID]
+          delete s.lcmMaintenanceHints[sessionID]
           delete s.agentSelections[sessionID]
           delete s.sessionOverrides[sessionID]
           for (const key of sessionVariantKeys(s.variantSelections, sessionID)) delete s.variantSelections[key]
@@ -2779,7 +2731,7 @@ export const SessionProvider: ParentComponent = (props) => {
     const msgs: Record<string, Message[]> = {}
     for (const sid of family) msgs[sid] = visible(sid)
     const parents = buildFamilyParentsFromTools(family, (sid) => visibleToolParts(sid, msgs[sid] ?? []))
-    return buildFamilyCosts(family, msgs, store.sessions, parents)
+    return buildFamilyCosts(family, msgs, store.sessions, parents, store.lcmMetrics)
   })
 
   /** Child session labels — only reads store.parts (not message costs). */
@@ -2803,6 +2755,8 @@ export const SessionProvider: ParentComponent = (props) => {
   // Status text derived from last assistant message parts
   const statusText = createMemo<string | undefined>(() => {
     if (status() === "idle") return undefined
+    const explicitStatus = busyStatusMessage(statusInfo())
+    if (explicitStatus) return explicitStatus
     const fallback = language.t("ui.sessionTurn.status.consideringNextSteps")
     const id = currentSessionID()
     const msgs = messages()
@@ -2830,19 +2784,21 @@ export const SessionProvider: ParentComponent = (props) => {
     return id ? store.modelUsage[id]?.data : undefined
   })
 
+  const lcmMetrics = createMemo<LcmMetricsSnapshotMessage | undefined>(() => {
+    const id = currentSessionID()
+    return id ? store.lcmMetrics[id] : undefined
+  })
+
   const contextUsage = createMemo<ContextUsage | undefined>(() => {
-    const msgs = visibleMessages()
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      const m = msgs[i]
-      if (m.role !== "assistant" || !m.tokens) continue
-      const usage = calcContextUsage(m.tokens, undefined)
-      if (usage.tokens === 0) continue
-      const sel = selected()
-      const model = sel ? provider.findModel(sel) : undefined
-      const limit = model?.limit?.context ?? model?.contextLength
-      return calcContextUsage(m.tokens, limit)
-    }
-    return undefined
+    return lcmContextUsageFromMetrics(lcmMetrics())
+  })
+
+  const maintenanceHint = createMemo<LcmMaintenanceHint | undefined>(() => {
+    const id = currentSessionID()
+    if (!id) return undefined
+    const hint = store.lcmMaintenanceHints[id]
+    if (!hint || isLcmMaintenanceHintExpired(hint)) return undefined
+    return hint
   })
 
   const value: SessionContextValue = {
@@ -2888,6 +2844,11 @@ export const SessionProvider: ParentComponent = (props) => {
     contextUsage,
     modelUsage,
     refreshModelUsage,
+    lcmMetrics,
+    maintenanceHint,
+    lcmLockRecovery,
+    forceUnlockLcm,
+    dismissLcmLockRecovery,
     agents,
     allAgents,
     skills,

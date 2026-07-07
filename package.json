@@ -16,6 +16,12 @@
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
     "test": "echo 'do not run tests from root' && exit 1",
+    "typecheck:core": "bun run --cwd packages/core typecheck",
+    "typecheck:sdk": "bun run --cwd packages/sdk/js typecheck",
+    "typecheck:opencode": "bun run --cwd packages/opencode typecheck",
+    "typecheck:vscode": "bun run --cwd packages/kilo-vscode typecheck",
+    "typecheck:vscode:extension": "bun run --cwd packages/kilo-vscode check-types:extension",
+    "typecheck:vscode:webview": "bun run --cwd packages/kilo-vscode check-types:webview",
     "extension": "bun --cwd packages/kilo-vscode script/launch.ts",
     "dev-setup": "bun run --cwd packages/opencode --conditions=browser src/index.ts dev-setup"
   },

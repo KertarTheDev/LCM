@@ -22,7 +22,7 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
     })
 
     const update = Effect.fn("ConfigHttpApi.update")(function* (ctx) {
-      yield* configSvc.update(ctx.payload)
+      yield* configSvc.update(ctx.payload).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
       yield* markInstanceForDisposal(yield* InstanceState.context)
       return ctx.payload
     })

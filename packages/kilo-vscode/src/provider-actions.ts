@@ -2,7 +2,7 @@
  * Provider action handlers extracted from KiloProvider to stay under max-lines.
  * These are pure async functions that operate on the SDK client — no vscode dependency.
  */
-import type { Config, KiloClient } from "@kilocode/sdk/v2"
+import type { Config, KiloClient, ProviderConfig } from "@kilocode/sdk/v2"
 import { validateProviderID as validateProviderIDShared } from "./shared/custom-provider"
 import {
   resolveCustomProviderAuth,
@@ -455,7 +455,7 @@ export async function saveCustomProvider(
     const { data: updated } = await ctx.client.global.config.update(
       {
         config: {
-          provider: { [id]: patch },
+          provider: { [id]: patch as ProviderConfig },
           disabled_providers: nextDisabled,
         },
       },
