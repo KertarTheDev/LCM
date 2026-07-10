@@ -38,7 +38,7 @@ What this should improve:
 
 Token usage will vary by task. Short chats may use about the same number of tokens, or a little more, because LCM keeps recent context fresh and may do background memory work. Longer sessions should usually spend fewer tokens on repeatedly carrying old chat history in the main prompt, but some savings can be traded for memory maintenance or lookup calls. In practice, expect LCM to optimise first for remembering more safely, and second for reducing wasted long-context tokens.
 
-This is still a prerelease. Use the GitHub release artefacts from this repository when testing LCM. The normal Kilo Code Marketplace and npm packages remain the upstream releases.
+This is still a prerelease. Download a platform-specific CLI archive or VSIX from the [KiloCode-LCM releases](https://github.com/KertarTheDev/LCM/releases). The normal Kilo Code Marketplace and npm packages remain the upstream releases.
 
 LCM is inspired by the paper [LCM: Lossless Context Management](https://arxiv.org/abs/2605.04050). More implementation detail is available in the [current-code specifications](specifications/README.md).
 
@@ -125,7 +125,7 @@ Spin up your always-on AI agent at [app.kilo.ai/claw](https://app.kilo.ai/claw).
 <details>
 <summary>Install the CLI from GitHub Releases (binaries)</summary>
 
-Download the latest binary from the [Releases page](https://github.com/Kilo-Org/kilocode/releases).
+Download the latest LCM binary from the [Releases page](https://github.com/KertarTheDev/LCM/releases).
 
 | Platform | Asset |
 |---|---|

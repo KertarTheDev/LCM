@@ -77,6 +77,15 @@ jobs:
       - name: LCM tool wrapper smoke
         working-directory: packages/opencode
         run: bun run lcm:tool-wrapper-smoke
+
+      - name: LCM release-critical runtime checks
+        working-directory: packages/opencode
+        run: |
+          bun run lcm:contracts:check
+          bun run lcm:migration:smoke
+          bun run lcm:active-context:test
+          bun run lcm:assembly-token-budget
+          bun run lcm:provider-assembly
       # kilocode_change end
 
       - name: Compute LCM alpha version
@@ -131,7 +140,7 @@ jobs:
             --notes-file "$notes" \
             --repo "$GITHUB_REPOSITORY"
 
-      - name: Build CLI archives
+      - name: Build and upload CLI archives to draft prerelease
         env:
           KILO_VERSION: ${{ steps.alpha.outputs.version }}
           KILO_PRE_RELEASE: "true"
