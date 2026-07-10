@@ -747,6 +747,147 @@ test("lcm:provider-assembly snapshots only matching active cues and finalizes re
   }
 })
 
+test("lcm:provider-assembly rolls back the request header when snapshot-item persistence fails", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    await query<never>(
+      worker,
+      `
+        ALTER TABLE lcm_provider_request_snapshot_items
+        ADD CONSTRAINT lcm_test_snapshot_item_fault CHECK (item_order < 0)
+      `,
+    )
+    await expect(
+      runContext(
+        worker,
+        LcmContextService.use((svc) => svc.assembleModelMessages(assemblyInput())),
+      ),
+    ).rejects.toBeDefined()
+
+    const snapshots = await query<{ count: number }>(
+      worker,
+      "SELECT count(*)::int AS count FROM lcm_provider_request_snapshots WHERE conversation_id = $1",
+      [conversationID],
+    )
+    expect(snapshots[0]?.count).toBe(0)
+  } finally {
+    await worker.close()
+  }
+})
+
+test("lcm:provider-assembly rolls back resolved terminalization when consumption persistence fails", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    const assembly = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.assembleModelMessages(assemblyInput())),
+    )
+    if (!assembly.ok) throw new Error(assembly.safeError.safeMessage)
+
+    await query<never>(
+      worker,
+      `
+        ALTER TABLE lcm_context_item_consumption
+        ADD CONSTRAINT lcm_test_consumption_fault CHECK (first_consumed_at_ms < 0)
+      `,
+    )
+    await expect(
+      runContext(
+        worker,
+        LcmContextService.use((svc) =>
+          svc.finalizeProviderRequestSnapshot({
+            requestSnapshotID: assembly.providerRequestSnapshotID,
+            status: "resolved",
+            nowMs: now + 31,
+          }),
+        ),
+      ),
+    ).rejects.toBeDefined()
+
+    const afterFailure = await query<{ status: string; terminal_at_ms: number | string | bigint | null }>(
+      worker,
+      "SELECT status, terminal_at_ms FROM lcm_provider_request_snapshots WHERE request_snapshot_id = $1",
+      [assembly.providerRequestSnapshotID],
+    )
+    expect(afterFailure).toEqual([{ status: "in_flight", terminal_at_ms: null }])
+    const consumptionAfterFailure = await query<{ count: number }>(
+      worker,
+      "SELECT count(*)::int AS count FROM lcm_context_item_consumption WHERE first_request_snapshot_id = $1",
+      [assembly.providerRequestSnapshotID],
+    )
+    expect(consumptionAfterFailure[0]?.count).toBe(0)
+
+    await query<never>(worker, "ALTER TABLE lcm_context_item_consumption DROP CONSTRAINT lcm_test_consumption_fault")
+    await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.finalizeProviderRequestSnapshot({
+          requestSnapshotID: assembly.providerRequestSnapshotID,
+          status: "resolved",
+          nowMs: now + 32,
+        }),
+      ),
+    )
+    const afterRetry = await query<{ status: string; terminal_at_ms: number | string | bigint | null }>(
+      worker,
+      "SELECT status, terminal_at_ms FROM lcm_provider_request_snapshots WHERE request_snapshot_id = $1",
+      [assembly.providerRequestSnapshotID],
+    )
+    expect(afterRetry[0]?.status).toBe("resolved")
+    expect(Number(afterRetry[0]?.terminal_at_ms)).toBe(now + 32)
+    const consumptionAfterRetry = await query<{ count: number }>(
+      worker,
+      "SELECT count(*)::int AS count FROM lcm_context_item_consumption WHERE first_request_snapshot_id = $1",
+      [assembly.providerRequestSnapshotID],
+    )
+    expect(consumptionAfterRetry[0]?.count).toBeGreaterThan(0)
+  } finally {
+    await worker.close()
+  }
+})
+
+test("lcm:provider-assembly resolves a snapshot with no raw snapshot items", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    const assembly = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.assembleModelMessages(assemblyInput())),
+    )
+    if (!assembly.ok) throw new Error(assembly.safeError.safeMessage)
+    await query<never>(
+      worker,
+      "DELETE FROM lcm_provider_request_snapshot_items WHERE request_snapshot_id = $1 AND item_type = 'raw_message'",
+      [assembly.providerRequestSnapshotID],
+    )
+
+    await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.finalizeProviderRequestSnapshot({
+          requestSnapshotID: assembly.providerRequestSnapshotID,
+          status: "resolved",
+          nowMs: now + 33,
+        }),
+      ),
+    )
+    const finalized = await query<{ status: string; terminal_at_ms: number | string | bigint | null }>(
+      worker,
+      "SELECT status, terminal_at_ms FROM lcm_provider_request_snapshots WHERE request_snapshot_id = $1",
+      [assembly.providerRequestSnapshotID],
+    )
+    expect(finalized[0]?.status).toBe("resolved")
+    expect(Number(finalized[0]?.terminal_at_ms)).toBe(now + 33)
+  } finally {
+    await worker.close()
+  }
+})
+
 test("lcm:provider-assembly excludes DB-loaded hidden queued raw and derived context", async () => {
   await using tmp = await tmpdir()
   const worker = await initialize(path.join(tmp.path, "lcm"))
@@ -863,6 +1004,17 @@ test("lcm:provider-assembly cue replacement preserves in-flight referenced cues 
       LcmContextService.use((svc) => svc.assembleModelMessages(assemblyInput())),
     )
     if (!assembly.ok) throw new Error(assembly.safeError.safeMessage)
+    const rawSnapshotItems = await query<{ context_item_id: string; message_row_id: string }>(
+      worker,
+      `
+        SELECT context_item_id, message_row_id
+        FROM lcm_provider_request_snapshot_items
+        WHERE request_snapshot_id = $1 AND item_type = 'raw_message'
+        ORDER BY message_row_id
+      `,
+      [assembly.providerRequestSnapshotID],
+    )
+    expect(rawSnapshotItems.length).toBeGreaterThan(0)
 
     await runContext(
       worker,
@@ -902,6 +1054,17 @@ test("lcm:provider-assembly cue replacement preserves in-flight referenced cues 
       protectedRows.find((row) => row.cue_lifecycle_state === "active")?.cue_id,
     )
     expect(protectedOriginal?.cue_superseded_by_generation_id).toStartWith("cuegen_")
+    const snapshotItemsAfterRewrite = await query<{ context_item_id: string; message_row_id: string }>(
+      worker,
+      `
+        SELECT context_item_id, message_row_id
+        FROM lcm_provider_request_snapshot_items
+        WHERE request_snapshot_id = $1 AND item_type = 'raw_message'
+        ORDER BY message_row_id
+      `,
+      [assembly.providerRequestSnapshotID],
+    )
+    expect(snapshotItemsAfterRewrite).toEqual(rawSnapshotItems)
 
     await runContext(
       worker,
@@ -913,6 +1076,17 @@ test("lcm:provider-assembly cue replacement preserves in-flight referenced cues 
         }),
       ),
     )
+    const consumedAfterRewrite = await query<{ context_item_id: string; message_row_id: string }>(
+      worker,
+      `
+        SELECT context_item_id, message_row_id
+        FROM lcm_context_item_consumption
+        WHERE first_request_snapshot_id = $1
+        ORDER BY message_row_id
+      `,
+      [assembly.providerRequestSnapshotID],
+    )
+    expect(consumedAfterRewrite).toEqual(rawSnapshotItems)
     await runContext(
       worker,
       LcmContextService.use((svc) =>

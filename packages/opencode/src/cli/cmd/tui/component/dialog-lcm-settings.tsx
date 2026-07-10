@@ -32,12 +32,6 @@ export function formatLcmSettingsScope(scope: LcmSettingsState["effectiveScope"]
   return "default"
 }
 
-export function formatLcmSettingsTokens(input: FiniteNumberInput) {
-  const tokens = finiteNumber(input)
-  if (tokens === undefined) return "Not reported"
-  return `${Math.max(0, Math.round(tokens)).toLocaleString("en-US")} tokens`
-}
-
 export function lcmSettingsErrorMessage(error: unknown) {
   if (typeof error === "object" && error !== null && "error" in error) {
     const routeError = error as { error?: { safeMessage?: string } }
@@ -133,27 +127,6 @@ export function DialogLcmSettings(props: { sessionID?: string; initialState?: Lc
     await updateSettings({ storageWarningThresholdBytes: next })
   }
 
-  async function showFreshTailPrompt(current: LcmSettingsState) {
-    const tokens = finiteNumber(current.freshTailTokens)
-    const value = await DialogPrompt.show(dialog, "Fresh tail tokens", {
-      value: tokens === undefined ? "" : String(tokens),
-      placeholder: "20000",
-      description: () => (
-        <text fg={theme.textMuted}>
-          Current fresh tail {formatLcmSettingsTokens(current.freshTailTokens)}. Enter tokens.
-        </text>
-      ),
-    })
-    if (value === null) return
-    const next = Number(value.trim())
-    if (!Number.isSafeInteger(next) || next <= 0) {
-      await DialogAlert.show(dialog, "Invalid fresh tail", "Enter a positive integer token value.")
-      dialog.replace(() => <DialogLcmSettings sessionID={props.sessionID} initialState={current} />)
-      return
-    }
-    await updateSettings({ freshTailTokens: next })
-  }
-
   const options = createMemo((): DialogSelectOption<string>[] => {
     const current = state()
     if (!current) {
@@ -183,14 +156,6 @@ export function DialogLcmSettings(props: { sessionID?: string; initialState?: Lc
         footer: formatLcmSettingsBytes(current.storageWarningThresholdBytes),
         category: "Settings",
         onSelect: () => void showThresholdPrompt(current),
-      },
-      {
-        title: "Fresh tail tokens",
-        value: "fresh-tail",
-        description: "Whole raw-message tokens kept fresh before soft backlog",
-        footer: formatLcmSettingsTokens(current.freshTailTokens),
-        category: "Settings",
-        onSelect: () => void showFreshTailPrompt(current),
       },
       {
         title: "Storage used",

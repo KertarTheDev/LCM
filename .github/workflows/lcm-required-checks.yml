@@ -17,7 +17,9 @@ on:
       - "packages/opencode/test/session/prompt.test.ts"
       - "packages/opencode/script/lcm-*.ts"
       - "packages/opencode/package.json"
-      - "sdks/**"
+      - "packages/sdk/**"
+      - "packages/kilo-vscode/esbuild.js"
+      - "packages/kilo-vscode/script/**"
       - "packages/kilo-vscode/src/**"
       - "packages/kilo-vscode/webview-ui/src/**"
       - "packages/kilo-vscode/tests/unit/lcm-*.test.ts"
@@ -55,7 +57,14 @@ jobs:
         working-directory: packages/opencode
         run: |
           bun run lcm:activation
+          bun run lcm:recursive-cleanup
           bun run lcm:raw-leaf-parity
+
+      - name: Active-context recovery and threshold assembly
+        working-directory: packages/opencode
+        run: |
+          bun run lcm:active-context:test
+          bun run lcm:assembly-token-budget
 
       - name: Provider-safe assembly and protocol
         working-directory: packages/opencode

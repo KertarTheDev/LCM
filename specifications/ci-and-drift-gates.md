@@ -1,6 +1,6 @@
 # LCM CI And Drift Gates
 
-Status date: 2026-06-15.
+Status date: 2026-07-10.
 
 This document defines the upstream ownership checks for LCM-sensitive changes.
 
@@ -30,9 +30,10 @@ The non-strict `lcm:release-long-context` script remains a permissive local repo
 `.github/workflows/lcm-required-checks.yml` runs on LCM-sensitive PR paths and covers:
 
 - generated LCM contract check
-- migration smoke
+- migration smoke and recursive LCM-owned cleanup
 - activation and raw-leaf parity
-- provider-safe assembly and provider protocol
+- active-context rebuild and summary-graph validation
+- provider-safe assembly, exact assembly-token-budget binding, and provider protocol
 - retrieval authorization and path provenance
 - hard-limit and prompt-boundary behavior
 - prompt/runtime static unresolved-symbol check
@@ -41,6 +42,8 @@ The non-strict `lcm:release-long-context` script remains a permissive local repo
 - runtime typecheck
 - VSCode LCM settings UI tests
 - VSCode compile
+
+The trigger paths include generated SDK/OpenAPI output under `packages/sdk/**`, the VSCode bundler entrypoint `packages/kilo-vscode/esbuild.js`, and extension packaging helpers under `packages/kilo-vscode/script/**`. Changes to any of these surfaces must run the owning runtime or VSCode job; the obsolete `sdks/**` path is not a valid generated-SDK trigger.
 
 `.github/workflows/lcm-macos-platform-smoke.yml` remains the manual macOS packaged-runtime smoke workflow for Darwin VSIX/runtime evidence.
 
@@ -55,6 +58,7 @@ The following upstream changes require an LCM review before merge:
 - Public route, DTO, safe-error, generated SDK, or webview message changes.
 - PGlite version, asset loading, migration, owner-lock, packaged-runtime, or filesystem data-root changes.
 - VSCode package identity, extension storage namespace, or installed-editor packaging changes.
+- VSCode esbuild entrypoint or packaging-script changes that alter the bundled runtime, workers, or VSIX layout.
 
 ## Sentinel Expectations
 

@@ -526,7 +526,7 @@ test("source, serve-mode, and compiled CLI smokes use explicit family roots", as
       regexStartupTimeoutMs: 20_000,
       regexQueryTimeoutMs: 100,
     })
-    expect(sourceReport.status).toBe("passed")
+    expect(sourceReport).toMatchObject({ status: "passed" })
     expect(sourceReport.dataDir).toBe(sourceTarget.familyRoot)
 
     for (const target of [serveTarget, compiledTarget]) {

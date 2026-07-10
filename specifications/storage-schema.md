@@ -24,7 +24,7 @@ Important owner-lock constants:
 
 Current migration file: `packages/opencode/src/session/lcm/migrations/0001_initial_schema.sql`.
 
-The baseline creates `pg_trgm`, 21 LCM tables, and 62 indexes. This is the only current schema baseline in the code inspected for this rebaseline.
+The baseline creates `pg_trgm`, 21 LCM tables, and 61 explicit indexes. This is the only current schema baseline in the code inspected for this rebaseline.
 
 Tables:
 
@@ -116,6 +116,8 @@ Lineage is split across:
 
 Summaries are derived state. They do not delete source message or part rows.
 
+Durable rebuild validates the complete stored summary graph before projecting roots. Every summary must belong to the target conversation, use direct source or parent provenance from that conversation, be reachable from an active root, remain acyclic, and stay within the bounded lineage depth. Disconnected or rooted cycles, cross-conversation provenance, and orphaned summary components fail closed instead of producing a partial context projection.
+
 ## Active Context
 
 `lcm_context_items` stores the active context view. Supported item types:
@@ -140,11 +142,11 @@ Context item order is unique per conversation. Token cache fields include token 
 - source selection, request-snapshot protection, visibility, protected span, provider transform, and provider validator hashes
 - creation, expiry, and terminal timestamps
 
-`context.ts` creates snapshots during assembly, finalizes them after provider execution, and records final validation hashes through the LLM provider transform middleware.
+Provider assembly creates each snapshot header and its ordered item evidence in one data-modifying statement inside the serialized assembly transaction. A header cannot commit without all item rows, including the valid zero-item case. Before dispatch, the LLM provider-transform middleware records final validation hashes. After provider/processor execution, `context.ts` terminalizes the snapshot.
 
-`lcm_provider_request_snapshot_items` records the ordered context items represented by each request snapshot. It stores render-unit IDs, context item IDs, item type, optional message row ID, source kind, and provider-snapshot order without storing raw text or provider payload content.
+`lcm_provider_request_snapshot_items` records the ordered context items represented by each request snapshot. Its non-null `context_item_id` is immutable historical evidence, not a foreign key to the mutable active-context projection, so a transactional context rewrite cannot erase what an in-flight request rendered. The table also stores render-unit ID, item type, optional durable message row ID, source kind, and provider-snapshot order without storing raw text or provider payload content.
 
-`lcm_context_item_consumption` records the first resolved provider request that consumed a raw source message row. `message_row_id` is the durable key so consumption survives active-context item replacement; `context_item_id` is nullable provenance for the active item that was rendered at request time. Only snapshots finalized as `resolved` insert consumption rows; canceled, expired, or failed provider requests leave their raw rows unconsumed for future soft-backlog protection. Soft backlog selection uses this table to keep post-current rows mandatory until a later resolved request proves the model had a chance to see them.
+`lcm_context_item_consumption` records the first resolved provider request that consumed a raw source message row. `message_row_id` is the durable key so consumption survives active-context item replacement; `context_item_id` is nullable provenance and is retained only when that active row still exists. Resolved terminalization and first-consumption insertion execute in one data-modifying statement: a consumption failure rolls the snapshot back to `in_flight`, where the caller can retry. Canceled, expired, or failed provider requests leave raw rows unconsumed for future soft-backlog protection. Soft backlog selection uses this table to keep post-current rows mandatory until a later resolved request proves the model had a chance to see them.
 
 `lcm_provider_transform_overheads` records content-safe provider/model/family token overhead observations from final provider validation. Threshold checks use the max observed overhead, with a conservative floor for unknown providers, as an internal input-budget reserve.
 
@@ -154,7 +156,7 @@ Context item order is unique per conversation. Token cache fields include token 
 
 Current restore manifest version: `lcm-context-restore-manifest-v2`.
 
-`context.ts` validates snapshots newest-to-oldest. Snapshot restore requires manifest fields to match row fields, token counter identity, provider-safe metrics, render unit identity, and current manifest schema. Invalid or historical snapshots are skipped rather than partially restored.
+`context-state.ts` validates snapshots newest-to-oldest. Snapshot restore requires manifest fields to match row fields, token counter identity, provider-safe metrics, render unit identity, current manifest schema, and the exact current durable projection of active summary roots, uncovered source rows, archive pointers, and standalone large-file markers. Invalid, incomplete, superseded, duplicate, or historical snapshots are skipped rather than partially restored.
 
 ## Usage Records
 
@@ -191,6 +193,6 @@ The persisted soft-maintenance payload includes session ID, provider/model IDs, 
 
 ## Cleanup
 
-Normal session deletion calls LCM cleanup through `LcmRuntime.handleSessionDeleted(...)` and `lifecycle.ts`. Recursive deletion is the normal product path because conversation trees can have child conversations. Runtime cleanup also removes the deleted session's finalized-sync pending sidecar, when present. Artifact cleanup uses `lcm_artifact_cleanup_queue` for durable retryable artifact cleanup bookkeeping.
+Normal session deletion calls LCM cleanup through `LcmRuntime.handleSessionDeleted(...)` and `lifecycle.ts`. Recursive deletion is the normal product path because conversation trees can have child conversations. Before deleting DB rows, the runtime resolves the trusted descendant tree and cancels each source session's scheduled maintenance, delayed or running map work, child admission state, and finalized-sync pending sidecar. Artifact cleanup uses `lcm_artifact_cleanup_queue` for durable retryable artifact cleanup bookkeeping.
 
-Settings reads and writes are config-backed and do not require opening the PGlite family DB.
+Primary sessionless settings reads and writes are config-backed and do not open PGlite. Session-scoped settings may read runtime capabilities and therefore initialize the family DB to attach lifecycle/DB diagnostics; clients still receive only the runtime-owned content-safe status and never gain DB ownership.

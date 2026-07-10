@@ -1,11 +1,9 @@
 import { describe, expect, it } from "bun:test"
 import {
-  LCM_INVALID_FRESH_TAIL_DIAGNOSTIC_CODE,
   LCM_INVALID_STORAGE_THRESHOLD_DIAGNOSTIC_CODE,
   createLcmMemoryNumericSettingsAutosave,
   isLcmMemoryAutosaveValidationError,
   lcmNumericSettingsAutosaveAction,
-  parseFreshTailTokens,
   type LcmNumericSettingsPatch,
 } from "../../webview-ui/src/components/settings/lcm-memory-autosave"
 import type { LcmSafeError } from "@kilocode/sdk/v2/client"
@@ -39,51 +37,25 @@ function createFakeTimers() {
 }
 
 describe("LCM Memory numeric settings autosave", () => {
-  it("parses positive whole-token fresh tail values only", () => {
-    expect(parseFreshTailTokens("20000")).toBe(20_000)
-    expect(parseFreshTailTokens(" 1 ")).toBe(1)
-    expect(parseFreshTailTokens("0")).toBeUndefined()
-    expect(parseFreshTailTokens("20.5")).toBeUndefined()
-    expect(parseFreshTailTokens("abc")).toBeUndefined()
-  })
-
-  it("builds a combined patch only for changed valid drafts", () => {
+  it("builds a patch only for a changed valid draft", () => {
     expect(
       lcmNumericSettingsAutosaveAction({
-        freshTailDraft: "21000",
         storageThresholdDraft: "1",
-        currentFreshTailTokens: 20_000,
         currentStorageWarningThresholdBytes: 10737418240,
       }),
-    ).toEqual({ kind: "patch", patch: { freshTailTokens: 21_000, storageWarningThresholdBytes: 1073741824 } })
+    ).toEqual({ kind: "patch", patch: { storageWarningThresholdBytes: 1073741824 } })
 
     expect(
       lcmNumericSettingsAutosaveAction({
-        freshTailDraft: "20000",
         storageThresholdDraft: "10",
-        currentFreshTailTokens: 20_000,
         currentStorageWarningThresholdBytes: 10737418240,
       }),
     ).toEqual({ kind: "idle" })
   })
 
   it("returns content-safe validation errors without building a patch", () => {
-    const invalidFreshTail = lcmNumericSettingsAutosaveAction({
-      freshTailDraft: "0",
-      storageThresholdDraft: "10",
-      currentFreshTailTokens: 20_000,
-      currentStorageWarningThresholdBytes: 10737418240,
-    })
-    expect(invalidFreshTail.kind).toBe("invalid")
-    if (invalidFreshTail.kind === "invalid") {
-      expect(invalidFreshTail.error.diagnosticCode).toBe(LCM_INVALID_FRESH_TAIL_DIAGNOSTIC_CODE)
-      expect(isLcmMemoryAutosaveValidationError(invalidFreshTail.error)).toBe(true)
-    }
-
     const invalidThreshold = lcmNumericSettingsAutosaveAction({
-      freshTailDraft: "20000",
       storageThresholdDraft: "ten",
-      currentFreshTailTokens: 20_000,
       currentStorageWarningThresholdBytes: 10737418240,
     })
     expect(invalidThreshold.kind).toBe("invalid")
@@ -105,15 +77,11 @@ describe("LCM Memory numeric settings autosave", () => {
     })
 
     autosave.schedule({
-      freshTailDraft: "21000",
-      storageThresholdDraft: "10",
-      currentFreshTailTokens: 20_000,
+      storageThresholdDraft: "9",
       currentStorageWarningThresholdBytes: 10737418240,
     })
     autosave.schedule({
-      freshTailDraft: "22000",
-      storageThresholdDraft: "10",
-      currentFreshTailTokens: 20_000,
+      storageThresholdDraft: "8",
       currentStorageWarningThresholdBytes: 10737418240,
     })
 
@@ -123,7 +91,7 @@ describe("LCM Memory numeric settings autosave", () => {
     expect(patches).toEqual([])
 
     fake.flush(1)
-    expect(patches).toEqual([{ freshTailTokens: 22_000 }])
+    expect(patches).toEqual([{ storageWarningThresholdBytes: 8 * 1024 ** 3 }])
     expect(errors).toEqual([])
   })
 
@@ -139,9 +107,7 @@ describe("LCM Memory numeric settings autosave", () => {
     })
 
     autosave.schedule({
-      freshTailDraft: "20000",
       storageThresholdDraft: "",
-      currentFreshTailTokens: 20_000,
       currentStorageWarningThresholdBytes: 10737418240,
     })
 

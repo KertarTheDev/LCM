@@ -1109,7 +1109,6 @@ Options:
   --json                             print JSON output  [boolean] [default: false]
   --strategy                         LCM strategy  [string] [choices: "upward", "dolt"]
   --storage-warning-threshold-bytes  local LCM storage warning threshold in bytes  [number]
-  --fresh-tail-tokens                raw-message tokens kept fresh before soft backlog summarization  [number]
 ```
 
 ## kilo db

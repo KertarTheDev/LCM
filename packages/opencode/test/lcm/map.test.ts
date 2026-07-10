@@ -513,11 +513,10 @@ test("llm_map defers local provider capacity without consuming retries or failin
   expect(itemRows[0]).toMatchObject({ status: "retryable", attempts: 0, error_code: "provider_capacity_deferred" })
 
   await scheduler.shutdown({ operationID: operationID("capacity_clear_timer") })
-  await query(
-    worker,
-    "UPDATE lcm_map_runs SET lease_expires_at_ms = $2 WHERE map_id = $1",
-    [started.mapID, Date.now() - 1],
-  )
+  await query(worker, "UPDATE lcm_map_runs SET lease_expires_at_ms = $2 WHERE map_id = $1", [
+    started.mapID,
+    Date.now() - 1,
+  ])
   scheduler.schedule({
     mapID: started.mapID,
     sessionID,
@@ -533,6 +532,42 @@ test("llm_map defers local provider capacity without consuming retries or failin
   expect(completed.status).toBe("completed")
   expect(completed.completedItems).toBe(1)
   expect(completed.failedItems).toBe(0)
+
+  const cancelStarted = await runMap(
+    service,
+    llmMap({
+      sessionID,
+      dataDir,
+      scheduler,
+      modelSelection,
+      inputJsonl: '{"value":84}',
+      itemSchema: { type: "object", required: ["result"], properties: { result: { type: "number" } } },
+      prompt: "Cancel this deferred map.",
+      maxRetries: 0,
+      generator: async () => {
+        throw createLcmSafeError({
+          code: "provider_capacity_deferred",
+          templateKey: "lcm.provider_capacity.deferred",
+          safeParams: { retryable: true, action: "retry" },
+          retryable: true,
+          diagnosticCode: "lcm_provider_capacity_background_deferred",
+        })
+      },
+    }),
+  )
+  expectMapResult(cancelStarted)
+  await scheduler.drain(cancelStarted.mapID)
+  await scheduler.cancelBySession({ sessionID, operationID: operationID("capacity_session_deleted") })
+
+  const canceled = await runMap(service, mapStatus({ sessionID, dataDir, mapID: cancelStarted.mapID }))
+  expect(canceled.ok).toBe(true)
+  expectMapResult(canceled)
+  expect(canceled.status).toBe("canceled")
+  expect(canceled.safeError).toMatchObject({
+    code: "canceled",
+    diagnosticCode: "lcm_map_session_deleted",
+  })
+  await scheduler.shutdown({ operationID: operationID("capacity_test_cleanup") })
   await worker.close()
 })
 

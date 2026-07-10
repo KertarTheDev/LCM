@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test"
 import {
-  LCM_FRESH_TAIL_DESCRIPTION,
   LCM_EXCLUDED_CONTROL_LABELS,
   dbBackedActionsDisabled,
   describeScope,
@@ -19,7 +18,6 @@ describe("LCM/Memory settings state", () => {
   function settingsState(overrides: Partial<LcmSettingsState> = {}): LcmSettingsState {
     return {
       strategy: "upward",
-      freshTailTokens: 20_000,
       storageWarningThresholdBytes: 10737418240,
       storageBytes: 5368709120,
       storageWarning: false,
@@ -42,9 +40,6 @@ describe("LCM/Memory settings state", () => {
     expect(
       describeScope({ effectiveScope: { kind: "workspace", projectID: "project_a", workspaceID: "workspace_a" } }),
     ).toBe("Workspace")
-    expect(LCM_FRESH_TAIL_DESCRIPTION).toBe(
-      "How many tokens from the most recent messages are kept unsummarised.",
-    )
     expect(storageWarningSettingsDescription(settingsState())).toBe(
       [
         "Current storage: 5.00 GiB.",

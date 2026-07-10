@@ -65,7 +65,7 @@
     "lcm:hard-limit": "bun run script/test-runner.ts test/lcm/hard-limit.test.ts --timeout 60000 --concurrency 1",
     "lcm:crash-reopen": "bun run script/test-runner.ts test/lcm/summary.test.ts test/lcm/hard-limit.test.ts test/lcm/map.test.ts --timeout 60000 --concurrency 1",
     "lcm:prompt-static": "bun run script/lcm-prompt-static-check.ts",
-    "lcm:prompt-first-message": "bun test test/session/prompt.test.ts -t 'first plan prompt reaches LLM with LCM render-only reminders' --timeout 120000",
+    "lcm:prompt-first-message": "bun test test/session/prompt.test.ts -t 'LCM render boundary' --timeout 120000",
     "lcm:prompt-mcp-schema": "bun test test/session/prompt.test.ts -t 'first prompt resolves MCP tool schemas before LLM' --timeout 120000",
     "lcm:tool-wrapper-smoke": "bun run script/test-runner.ts test/tool/lcm-wrapper.test.ts --timeout 60000 --concurrency 1",
     "lcm:prompt-boundary": "bun run script/test-runner.ts test/lcm/summary.test.ts test/lcm/hard-limit.test.ts test/lcm/retrieval-tools.test.ts test/lcm/system-tool-guide.test.ts --timeout 60000 --concurrency 1",

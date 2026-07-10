@@ -49,6 +49,11 @@ import {
 import { deriveLcmFamilyID } from "../../src/session/lcm/family"
 import { createLcmPGlite } from "../../src/session/lcm/pglite-assets"
 import { LcmRuntime, lcmShouldRetrySoftMaintenance } from "../../src/session/lcm/runtime"
+import { hardLimitMaintenanceBlocksPreflight } from "../../src/session/lcm/runtime-support"
+import {
+  manualMaintenanceEventIdentity,
+  normalizeManualMaintenanceResult,
+} from "../../src/session/lcm/runtime-maintenance"
 import { upsertDeferredSoftMaintenanceJob } from "../../src/session/lcm/deferred-jobs"
 import { ProviderTest } from "../fake/provider"
 import { createLcmSafeError } from "../../src/session/lcm/types"
@@ -268,6 +273,88 @@ test("soft maintenance retries only transient retryable failures", () => {
   expect(
     lcmShouldRetrySoftMaintenance(softMaintenanceResult({ status: "failed", safeError: lockedNeedsUserAction })),
   ).toBe(false)
+})
+
+test("canceled hard-limit maintenance always blocks provider preflight", () => {
+  expect(hardLimitMaintenanceBlocksPreflight(softMaintenanceResult({ status: "canceled" }))).toBe(true)
+})
+
+test("manual maintenance preserves caller reason and uses the repair event phase", () => {
+  const input = { reason: "manual" as const, blocking: true }
+  expect(manualMaintenanceEventIdentity(input)).toEqual({ phase: "repair", reason: "manual", blocking: true })
+  expect(
+    normalizeManualMaintenanceResult(
+      softMaintenanceResult({ status: "completed", reason: "soft_threshold", blocking: false }),
+      input,
+    ),
+  ).toMatchObject({ status: "completed", reason: "manual", blocking: true })
+})
+
+test("manual maintenance preserves caller reason for recovery lifecycle results", async () => {
+  const config = {} satisfies Config.Info
+  await using tmp = await tmpdir({ git: true, config })
+  const previous = process.env.KILO_LCM_TEST_DATA_DIR
+  process.env.KILO_LCM_TEST_DATA_DIR = path.join(tmp.path, "kilo-data")
+
+  try {
+    const created = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "manual maintenance recovery reason" })
+        const conversationID = await Effect.runPromise(
+          LcmRuntime.Service.use((svc) => svc.getOrCreateConversation({ sessionID: session.id })).pipe(
+            Effect.ensuring(LcmRuntime.Service.use((svc) => svc.close()).pipe(Effect.ignore)),
+            Effect.provide(runtimeLayer(config)),
+          ),
+        )
+        return { session, conversationID }
+      },
+    })
+    const familyID = deriveLcmFamilyID(created.session.id)
+    const familyRoot = resolveLcmFamilyRoot({ kiloDataDir: path.join(tmp.path, "kilo-data"), familyID })
+    const pgliteDir = resolveLcmDbLayout(familyRoot).pgliteDir
+
+    for (const lifecycleState of ["recovery_required", "recovery_failed"] as const) {
+      const db = await createLcmPGlite({ dataDir: pgliteDir })
+      await db.query(
+        `
+          UPDATE lcm_conversations
+          SET lifecycle_state = $2
+          WHERE conversation_id = $1
+        `,
+        [created.conversationID, lifecycleState],
+      )
+      await db.close()
+
+      const result = await Instance.provide({
+        directory: tmp.path,
+        fn: () =>
+          Effect.runPromise(
+            LcmRuntime.Service.use((svc) =>
+              svc.runManualMaintenance({
+                sessionID: created.session.id,
+                reason: "manual",
+                blocking: true,
+              }),
+            ).pipe(
+              Effect.ensuring(LcmRuntime.Service.use((svc) => svc.close()).pipe(Effect.ignore)),
+              Effect.provide(runtimeLayer(config)),
+            ),
+          ),
+      })
+
+      expect(result).toMatchObject({
+        conversationID: created.conversationID,
+        reason: "manual",
+        blocking: true,
+        status: lifecycleState === "recovery_required" ? "recovery_required" : "failed",
+      })
+      expect(result.safeError?.code).toBe(lifecycleState)
+    }
+  } finally {
+    if (previous === undefined) delete process.env.KILO_LCM_TEST_DATA_DIR
+    else process.env.KILO_LCM_TEST_DATA_DIR = previous
+  }
 })
 
 test("passive settings state treats Kilo config as deployment defaults", async () => {

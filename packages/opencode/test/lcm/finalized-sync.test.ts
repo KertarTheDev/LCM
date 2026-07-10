@@ -360,7 +360,7 @@ test("sync re-pins the current user raw context when the source row already exis
   })
 })
 
-test("raw context append treats messages covered by active summaries as already consumed", async () => {
+test("raw context append treats messages indirectly covered by an active bindle as already consumed", async () => {
   await using tmp = await tmpdir({ git: true })
   const dataDir = path.join(tmp.path, "lcm")
   const { session, user } = await provideTestInstance({
@@ -413,6 +413,33 @@ test("raw context append treats messages covered by active summaries as already 
       )
       yield* dbQuery(
         `
+          INSERT INTO lcm_summaries (
+            summary_id,
+            conversation_id,
+            summary_type,
+            content_text,
+            source_token_count,
+            summary_token_count,
+            summary_level,
+            prompt_version,
+            strategy,
+            objective_status,
+            fallback_mode,
+            created_at_ms
+          )
+          VALUES ('sum_m06_user_bindle', $1, 'bindle', 'user message condensed indirectly', 4, 2, 1,
+                  'summary-condense-v2', 'upward', 'accepted', 'none', 1777500007050)
+        `,
+        [conversationID],
+      )
+      yield* dbQuery(
+        `
+          INSERT INTO lcm_summary_parents (summary_id, parent_summary_id, parent_order)
+          VALUES ('sum_m06_user_bindle', 'sum_m06_user_consumed', 1)
+        `,
+      )
+      yield* dbQuery(
+        `
           INSERT INTO lcm_context_items (
             context_item_id,
             conversation_id,
@@ -422,7 +449,7 @@ test("raw context append treats messages covered by active summaries as already 
             created_at_ms,
             updated_at_ms
           )
-          VALUES ('ctx_m06_user_consumed_summary', $1, 99, 'summary', 'sum_m06_user_consumed',
+          VALUES ('ctx_m06_user_consumed_summary', $1, 99, 'summary', 'sum_m06_user_bindle',
                   1777500007000, 1777500007000)
         `,
         [conversationID],
@@ -447,7 +474,7 @@ test("raw context append treats messages covered by active summaries as already 
             count(*) FILTER (WHERE item_type = 'summary')::int AS summary_count
           FROM lcm_context_items
           WHERE conversation_id = $1
-            AND (message_row_id = $2 OR summary_id = 'sum_m06_user_consumed')
+            AND (message_row_id = $2 OR summary_id = 'sum_m06_user_bindle')
         `,
         [conversationID, messageRowID],
       )

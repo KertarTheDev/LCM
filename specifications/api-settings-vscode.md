@@ -6,8 +6,10 @@ This document describes the current public route and VSCode/webview integration 
 
 LCM routes are implemented in:
 
-- `packages/opencode/src/server/routes/instance/index.ts`
-- `packages/opencode/src/server/routes/instance/session.ts`
+- `packages/opencode/src/server/routes/instance/httpapi/groups/lcm.ts`
+- `packages/opencode/src/server/routes/instance/httpapi/handlers/lcm.ts`
+- `packages/opencode/src/server/routes/instance/httpapi/groups/session.ts`
+- `packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts`
 
 Sessionless settings routes:
 
@@ -16,14 +18,14 @@ Sessionless settings routes:
 
 Session-scoped routes include:
 
-- `GET /:sessionID/lcm/capabilities`
-- `GET /:sessionID/lcm/settings`
-- `PATCH /:sessionID/lcm/settings`
-- `POST /:sessionID/lcm/maintenance/cancel`
-- `POST /:sessionID/lcm/db/diagnose`
-- `POST /:sessionID/lcm/db/recover-lock`
-- `POST /:sessionID/lcm/db/rebuild`
-- `POST /:sessionID/lcm/prompts/export`
+- `GET /session/:sessionID/lcm/capabilities`
+- `GET /session/:sessionID/lcm/settings`
+- `PATCH /session/:sessionID/lcm/settings`
+- `POST /session/:sessionID/lcm/maintenance/cancel`
+- `POST /session/:sessionID/lcm/db/diagnose`
+- `POST /session/:sessionID/lcm/db/recover-lock`
+- `POST /session/:sessionID/lcm/db/rebuild`
+- `POST /session/:sessionID/lcm/prompts/export`
 - existing summarize/compact-compatible route behavior backed by LCM-owned maintenance, not legacy lossy compaction
 
 Route errors are normalized through `lcmRouteErrorResponse(...)` and `lcmRouteHttpStatus(...)` from `route-errors.ts`.
@@ -51,7 +53,6 @@ The normative source for those generated shapes is `api-contracts.md`.
 `LcmSettingsState` reports:
 
 - strategy
-- fresh-tail token budget
 - storage warning threshold
 - current storage bytes
 - storage warning boolean
@@ -68,7 +69,6 @@ The primary `/lcm/settings` routes return config-backed state only. The session-
 Settings writes accept only:
 
 - `strategy`
-- `freshTailTokens`
 - `storageWarningThresholdBytes`
 - optional route/transport scope assertions
 
@@ -79,7 +79,6 @@ Unsupported fields, null fields, invalid strategies, invalid thresholds, mismatc
 Public settings are config-backed through normal Kilo config:
 
 - `lcm.strategy`
-- `lcm.freshTailTokens`
 - `lcm.storage.warningThresholdBytes`
 
 `runtime.ts` uses `Config.Service`, and `settings-state.ts` resolves scope from trusted session/project/workspace state. Primary `/lcm/settings` reads and writes do not open PGlite and are not blocked by family DB lock/corruption/migration failure. Session-scoped settings routes first resolve scope from the trusted path session, then attach the same runtime-owned capability status used by the active session so Memory prefs can show `lifecycleState`, `dbStatus`, and safe recovery details. The extension host still receives this as route state; it does not open or migrate family storage.
@@ -131,7 +130,6 @@ The tab currently provides:
 
 - status card with lifecycle/DB status
 - strategy selector for `upward` or `dolt`
-- fresh-tail token input with tokens explained in the description and debounced autosave
 - storage warning threshold input with GiB explained in the description and debounced autosave
 - cleanup guidance through normal Kilo session deletion
 - content-safe aggregate cost totals
@@ -162,11 +160,11 @@ Changed webview files include:
 - `styles/task-header.css`
 - message type definitions under `types/messages/`
 
-The UI distinguishes `lcm_active_budget` from ordinary provider input/output context accounting, treating provider output separately where needed. `ContextProgress` and `TaskHeader` use current-session LCM metrics for active memory pressure and do not fall back to the last assistant provider-token totals as memory pressure. Provider token accounting remains available as separate cost/context information where explicitly labeled. Metrics events are keyed by every trusted identifier present in the event envelope and payload (`sessionID`, envelope `conversationID`, payload `conversationID`) so a current sidebar session can resolve the snapshot even when the runtime payload is conversation keyed. The chat context detail labels hard-limit fill as `Hard`, raw-lane soft pressure as `Raw`, and the summarizable eligible subset as `Backlog`; raw/backlog percentages may exceed 100% as real pressure values while visual progress fill remains bounded. The Memory settings status grid shows raw-lane pressure separately from soft backlog, fresh tail, and unconsumed post-current rows so protected growth is not misread as a zero raw counter.
+The UI distinguishes `lcm_active_budget` from ordinary provider input/output context accounting, treating provider output separately where needed. `ContextProgress` and `TaskHeader` use current-session LCM metrics for active memory pressure and do not fall back to the last assistant provider-token totals as memory pressure. Provider token accounting remains available as separate cost/context information where explicitly labeled. Metrics events are keyed by every trusted identifier present in the event envelope and payload (`sessionID`, envelope `conversationID`, payload `conversationID`) so a current sidebar session can resolve the snapshot even when the runtime payload is conversation keyed. Client state accepts metrics monotonically by `updatedAt`; an older event cannot overwrite newer post-maintenance counters. The chat context detail labels hard-limit fill as `Hard`, raw-lane soft pressure as `Raw`, and the summarizable eligible subset as `Backlog`; raw/backlog percentages may exceed 100% as real pressure values while visual progress fill remains bounded. The Memory settings status grid shows raw-lane pressure separately from soft backlog, fresh tail, and unconsumed post-current rows so protected growth is not misread as a zero raw counter.
 
 ## Events
 
-`events.ts` defines content-safe LCM events for DB status, context updates, file status, metrics updates, and compaction/maintenance started, ended, or failed. Runtime code publishes these events via the app bus where available.
+`events.ts` defines content-safe LCM events for DB status, context updates, file status, metrics updates, and maintenance started, ended, or failed. Runtime code publishes these events via the app bus where available.
 
 Event labels are safe status text, not raw memory content.
 
@@ -177,7 +175,7 @@ Current CLI additions:
 - `packages/opencode/src/cli/cmd/lcm.ts`
 - `packages/opencode/src/cli/cmd/debug/lcm-db.ts`
 
-Settings CLI supports showing and setting LCM strategy, fresh-tail token budget, and storage warning threshold. Debug DB commands support smoke, diagnose, owner-lock recovery, and rebuild flows against explicit LCM family roots.
+Settings CLI supports showing and setting LCM strategy and storage warning threshold. Debug DB commands support smoke, diagnose, owner-lock recovery, and rebuild flows against explicit LCM family roots.
 
 ## Package Scripts
 
@@ -229,7 +227,7 @@ VSCode package scripts include compile and snapshot build paths used by validati
 
 Routine extension-host backend logs for CLI startup, child-process stdout, SSE connection state, heartbeat reconnects, and per-event traces are gated behind `kilo-code.new.debugBackendLogs` or `KILO_VSCODE_DEBUG_LOGS=1`. Warnings and errors remain visible without debug logging.
 
-The webview forwards LCM lifecycle events into the normal task header instead of using modal prompts. Nonblocking soft-threshold maintenance appears as transient pending/running/completed/canceled hints; first-release over-soft maintenance that runs between finalized agent steps uses the normal active memory-preparation labels because the next model step waits for it. Prompt-time LCM preflight appears as fixed content-safe active preparation phases for opening memory, syncing memory, rebuilding memory context, finding relevant memory, checking memory size, and preparing memory for the model; blocking hard-limit maintenance appears as active memory preparation for the current response. The prompt loop clears runtime-owned memory labels before provider streaming starts, and blocked or interrupted runtime preflight clears those labels before surfacing a content-safe result. DB lock, corruption, unavailable, provider-capacity, timeout, cancellation, and hard-limit failure safe errors remain visible as memory recovery hints until a later lifecycle event reports recovery or replaces the state, with the safe code, retryability, and action in the tooltip. The Memory settings tab also shows a compact runtime status area for the active session: last memory sync, current maintenance state, inline maintenance progress details, active budget, soft backlog, fresh-tail/unconsumed counters, storage pressure, degraded token counting or provider model-limit estimates, and safe next-step labels. When runtime events or metrics show a retryable queued background maintenance retry, the Memory settings tab exposes `Cancel retry`, which calls the runtime-owned session maintenance cancel route and never opens or mutates the DB from the extension host. For DB lock/corruption/unavailable states, the tab can call the runtime-owned session DB diagnose route and render only the content-safe report status, check counts, first safe error, owner-lock recovery state, quarantine recommendation, and operation ID. For locked diagnostics whose owner-lock report says recovery is possible, the tab offers a dry-run lock recovery preview and then an apply action only after the preview reports `would_recover`; both calls go through the runtime-owned session DB recover-lock route and quarantine only `owner.lock`. Prompt-send owner-lock failures also show an inline chat recovery banner; the banner can send `recoverLcmDbLock` with `force: true` only after the user has been told to close other Kilo or VS Code windows using the task. For corrupt or unavailable diagnostics, the tab offers a dry-run repair preview and then an apply action only after the preview reports `would_rebuild`; both calls go through the runtime-owned session DB rebuild route. For ready DB-backed sessions, the tab exposes `Export prompts`, which writes Markdown under the workspace `lcm-export/` directory through the runtime-owned session export route and shows only the returned folder path, file count, and warning code. Safe `contact_support` actions open the Kilo support URL; arbitrary DB reset, raw DB browsing, and extension-host DB ownership remain outside the webview.
+The webview forwards LCM lifecycle events into the normal task header instead of using modal prompts. Nonblocking soft-threshold maintenance appears as transient pending/running/completed/canceled hints; first-release over-soft maintenance that runs between finalized agent steps uses the normal active memory-preparation labels because the next model step waits for it. Prompt-time LCM preflight appears as fixed content-safe active preparation phases for opening memory, syncing memory, rebuilding memory context, finding relevant memory, checking memory size, and preparing memory for the model; blocking hard-limit maintenance appears as active memory preparation for the current response. The prompt loop clears runtime-owned memory labels before provider streaming starts, and blocked or interrupted runtime preflight clears those labels before surfacing a content-safe result. Terminal maintenance publication emits the refreshed metrics snapshot before `lcm.maintenance.ended` or `lcm.maintenance.failed`, so the event and latest counters describe the same post-maintenance state. DB lock, corruption, unavailable, provider-capacity, timeout, cancellation, and hard-limit failure safe errors remain visible as memory recovery hints until a later lifecycle event reports recovery or replaces the state, with the safe code, retryability, and action in the tooltip. The Memory settings tab also shows a compact runtime status area for the active session: last memory sync, current maintenance state, inline maintenance progress details, active budget, soft backlog, fresh-tail/unconsumed counters, storage pressure, degraded token counting or provider model-limit estimates, and safe next-step labels. When runtime events or metrics show a retryable queued background maintenance retry, the Memory settings tab exposes `Cancel retry`, which calls the runtime-owned session maintenance cancel route and never opens or mutates the DB from the extension host. For DB lock/corruption/unavailable states, the tab can call the runtime-owned session DB diagnose route and render only the content-safe report status, check counts, first safe error, owner-lock recovery state, quarantine recommendation, and operation ID. For locked diagnostics whose owner-lock report says recovery is possible, the tab offers a dry-run lock recovery preview and then an apply action only after the preview reports `would_recover`; both calls go through the runtime-owned session DB recover-lock route and quarantine only `owner.lock`. Prompt-send owner-lock failures also show an inline chat recovery banner; the banner can send `recoverLcmDbLock` with `force: true` only after the user has been told to close other Kilo or VS Code windows using the task. For corrupt or unavailable diagnostics, the tab offers a dry-run repair preview and then an apply action only after the preview reports `would_rebuild`; both calls go through the runtime-owned session DB rebuild route. For ready DB-backed sessions, the tab exposes `Export prompts`, which writes Markdown under the workspace `lcm-export/` directory through the runtime-owned session export route and shows only the returned folder path, file count, and warning code. Safe `contact_support` actions open the Kilo support URL; arbitrary DB reset, raw DB browsing, and extension-host DB ownership remain outside the webview.
 
 On backend connection and session open/focus paths, the extension prewarms LCM by calling the generated session capabilities route for the active session. The prewarm is coalesced per session/directory/workspace and uses the runtime-owned LCM DB path; the extension host never opens storage directly. Prompt and command sends start advisory prewarm for the resolved session/directory, then perform a bounded readiness wait before calling the normal prompt or command route. The wait uses existing `sessionStatus: retry` copy, honors Stop/abort, and may surface `sendMessageFailed` with the runtime `LcmSafeError` only if readiness remains blocked. Owner-lock readiness failures stop the retry countdown immediately. The extension may dry-run and apply non-forced recovery for stale recoverable owner locks before submitting the prompt; if recovery requires explicit force or remains blocked, the draft is restored through `sendMessageFailed` and the chat recovery banner offers the user-confirmed force path. Runtime prompt preflight remains the authoritative provider boundary before any provider request. Advisory prewarm still uses bounded capability-request timeouts and bounded retry backoff for retryable route failures or retryable capabilities safe-status responses, but terminal advisory prewarm failures are support diagnostics rather than prompt-send failures. Malformed safe-error-shaped capability payloads fall back to generic memory-readiness copy for diagnostics. Connection changes, global config/settings updates, recover-lock actions, and `lcm.db.status` events clear affected cached readiness and cancel stale scheduled retries. Any DB lock, migration, corruption, or unavailable state is surfaced through the same `lcm.db.status` event flow used by normal runtime operations and through runtime preflight if the next prompt cannot safely proceed.
 

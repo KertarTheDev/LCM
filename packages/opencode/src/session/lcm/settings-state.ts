@@ -98,7 +98,6 @@ export function validateLcmSettingsUpdate(input: LcmUpdateSettingsInput) {
     "projectID",
     "workspaceID",
     "strategy",
-    "freshTailTokens",
     "storageWarningThresholdBytes",
   ])
   for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
@@ -107,16 +106,6 @@ export function validateLcmSettingsUpdate(input: LcmUpdateSettingsInput) {
   }
   if (input.strategy !== undefined && input.strategy !== "upward" && input.strategy !== "dolt") {
     throw lcmSettingsInvalidRequest("lcm_settings_invalid_strategy")
-  }
-  const freshTailTokens = input.freshTailTokens
-  if (
-    freshTailTokens !== undefined &&
-    (typeof freshTailTokens !== "number" ||
-      !Number.isInteger(freshTailTokens) ||
-      freshTailTokens <= 0 ||
-      !Number.isFinite(freshTailTokens))
-  ) {
-    throw lcmSettingsInvalidRequest("lcm_settings_invalid_fresh_tail_tokens")
   }
   const threshold = input.storageWarningThresholdBytes
   if (
@@ -128,17 +117,12 @@ export function validateLcmSettingsUpdate(input: LcmUpdateSettingsInput) {
 }
 
 function hasPublicLcmSetting(config: Config.Info["lcm"] | undefined) {
-  return (
-    config?.strategy !== undefined ||
-    config?.freshTailTokens !== undefined ||
-    config?.storage?.warningThresholdBytes !== undefined
-  )
+  return config?.strategy !== undefined || config?.storage?.warningThresholdBytes !== undefined
 }
 
 export function lcmSettingsConfigPatch(input: LcmUpdateSettingsInput): Config.Info {
   const lcm: NonNullable<Config.Info["lcm"]> = {}
   if (input.strategy !== undefined) lcm.strategy = input.strategy
-  if (input.freshTailTokens !== undefined) lcm.freshTailTokens = input.freshTailTokens
   if (input.storageWarningThresholdBytes !== undefined) {
     lcm.storage = { warningThresholdBytes: input.storageWarningThresholdBytes }
   }
@@ -152,7 +136,6 @@ export function mergePublicLcmSettings(input: {
   return {
     ...(input.current ?? {}),
     ...(input.patch.strategy !== undefined ? { strategy: input.patch.strategy } : {}),
-    ...(input.patch.freshTailTokens !== undefined ? { freshTailTokens: input.patch.freshTailTokens } : {}),
     storage: {
       ...(input.current?.storage ?? {}),
       ...(input.patch.storageWarningThresholdBytes !== undefined
@@ -176,7 +159,6 @@ export function lcmSettingsStateFromConfig(input: {
   const storageBytes = input.storageBytes ?? 0
   return {
     strategy: resolved.strategy,
-    freshTailTokens: resolved.freshTailTokens,
     storageWarningThresholdBytes: threshold,
     storageBytes,
     storageWarning: LcmConfig.storageWarning({

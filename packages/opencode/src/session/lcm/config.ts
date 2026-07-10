@@ -8,7 +8,6 @@ const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterTh
 export const PublicConfigZod = z
   .object({
     strategy: z.enum(["upward", "dolt"]).optional(),
-    freshTailTokens: z.number().int().positive().optional(),
     storage: z
       .object({
         warningThresholdBytes: z.number().int().positive().optional(),
@@ -21,10 +20,6 @@ export const PublicConfigZod = z
 export const PublicConfigSchema = Schema.Struct({
   strategy: Schema.optional(Schema.Literals(["upward", "dolt"])).annotate({
     description: "LCM strategy setting. User-facing settings are persisted through normal Kilo config storage.",
-  }),
-  freshTailTokens: Schema.optional(PositiveInt).annotate({
-    description:
-      "Raw-message token budget kept fresh at the tail before soft backlog summarization. Selection rounds to whole messages.",
   }),
   storage: Schema.optional(
     Schema.Struct({
@@ -39,7 +34,6 @@ export type PublicConfig = Schema.Schema.Type<typeof PublicConfigSchema>
 
 export const PUBLIC_DEFAULTS = {
   strategy: "upward" as LcmStrategy,
-  freshTailTokens: 20_000,
   storage: {
     warningThresholdBytes: 10_737_418_240,
   },
@@ -142,7 +136,6 @@ export function resolve(input?: PublicConfig): ResolvedConfig {
   return {
     ...RUNTIME_DEFAULTS,
     strategy: input?.strategy ?? PUBLIC_DEFAULTS.strategy,
-    freshTailTokens: input?.freshTailTokens ?? PUBLIC_DEFAULTS.freshTailTokens,
     storage: {
       warningThresholdBytes: input?.storage?.warningThresholdBytes ?? PUBLIC_DEFAULTS.storage.warningThresholdBytes,
     },

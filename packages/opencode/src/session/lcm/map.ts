@@ -2013,20 +2013,29 @@ export function createLcmMapScheduler(lcmDb: LcmDb.Interface): LcmMapScheduler {
       readonly lcmDb: LcmDb.Interface
     }
   >()
-  const delayed = new Map<MapRunID, ReturnType<typeof setTimeout>>()
+  const delayed = new Map<
+    MapRunID,
+    {
+      readonly timer: ReturnType<typeof setTimeout>
+      readonly input: LcmMapProcessInput
+    }
+  >()
   const clearDelayed = (mapID: MapRunID) => {
-    const timer = delayed.get(mapID)
-    if (!timer) return
-    clearTimeout(timer)
+    const entry = delayed.get(mapID)
+    if (!entry) return
+    clearTimeout(entry.timer)
     delayed.delete(mapID)
   }
   const scheduleDelayed = (input: LcmMapProcessInput, retryAfterMs: number) => {
     if (delayed.has(input.mapID)) return
-    const timer = setTimeout(() => {
-      delayed.delete(input.mapID)
-      scheduler.schedule(input)
-    }, Math.max(0, retryAfterMs))
-    delayed.set(input.mapID, timer)
+    const timer = setTimeout(
+      () => {
+        delayed.delete(input.mapID)
+        scheduler.schedule(input)
+      },
+      Math.max(0, retryAfterMs),
+    )
+    delayed.set(input.mapID, { timer, input })
   }
   const cancelRunning = async (input: {
     readonly mapID: MapRunID
@@ -2034,10 +2043,11 @@ export function createLcmMapScheduler(lcmDb: LcmDb.Interface): LcmMapScheduler {
     readonly safeError?: LcmSafeError
     readonly lcmDb?: LcmDb.Interface
   }) => {
+    const delayedEntry = delayed.get(input.mapID)
     clearDelayed(input.mapID)
     const current = running.get(input.mapID)
     current?.controller.abort()
-    const dbService = current?.lcmDb ?? input.lcmDb ?? lcmDb
+    const dbService = current?.lcmDb ?? delayedEntry?.input.lcmDb ?? input.lcmDb ?? lcmDb
     await Effect.runPromise(
       dbService.execute({
         operationID: input.operationID,
@@ -2099,9 +2109,14 @@ export function createLcmMapScheduler(lcmDb: LcmDb.Interface): LcmMapScheduler {
       await cancelRunning(input)
     },
     async cancelBySession(input) {
-      const matches = [...running.entries()].filter(([, value]) => value.sessionID === input.sessionID)
+      const matches = new Set(
+        [...running.entries()].filter(([, value]) => value.sessionID === input.sessionID).map(([mapID]) => mapID),
+      )
+      for (const [mapID, entry] of delayed) {
+        if (entry.input.sessionID === input.sessionID) matches.add(mapID)
+      }
       await Promise.all(
-        matches.map(([mapID]) =>
+        [...matches].map((mapID) =>
           cancelRunning({
             mapID,
             operationID: input.operationID,

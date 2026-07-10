@@ -25,12 +25,10 @@ describe("lcm settings cli helpers", () => {
     expect(
       lcmSettingsUpdateFromArgs({
         strategy: "dolt",
-        freshTailTokens: 20_000,
         storageWarningThresholdBytes: 1024,
       }),
     ).toEqual({
       strategy: "dolt",
-      freshTailTokens: 20_000,
       storageWarningThresholdBytes: 1024,
     })
   })
@@ -38,7 +36,6 @@ describe("lcm settings cli helpers", () => {
   test("formats content-safe settings state", () => {
     const state: LcmSettingsState = {
       strategy: "upward",
-      freshTailTokens: 20_000,
       storageWarningThresholdBytes: 1024,
       storageBytes: 512,
       storageWarning: false,
@@ -49,7 +46,7 @@ describe("lcm settings cli helpers", () => {
 
     const text = formatLcmSettingsState(state)
     expect(text).toContain("strategy: upward")
-    expect(text).toContain("freshTailTokens: 20000")
+    expect(text).not.toContain("freshTailTokens")
     expect(text).toContain("scope: project project=project_a")
     expect(text).toContain("dbStatus: ready")
   })

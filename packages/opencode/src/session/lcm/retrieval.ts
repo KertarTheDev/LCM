@@ -501,6 +501,7 @@ function pageLimit(input: { limit?: number }) {
 }
 
 const RETRIEVAL_CURSOR_TTL_MS = 30 * 60 * 1000
+const RETRIEVAL_CURSOR_MAX_ENTRIES = 2048
 const RETRIEVAL_CURSOR_PREFIX = "lcmcur1_"
 const retrievalCursors = new Map<string, CursorPayload>()
 
@@ -521,8 +522,19 @@ function pruneExpiredCursors(nowMs = Date.now()) {
   }
 }
 
+function reserveCursorSlot() {
+  // Cursors carry server-side authorization scope. Keep them ephemeral and
+  // bounded; eviction only forces an old page request to restart safely.
+  while (retrievalCursors.size >= RETRIEVAL_CURSOR_MAX_ENTRIES) {
+    const oldest = retrievalCursors.keys().next().value
+    if (!oldest) return
+    retrievalCursors.delete(oldest)
+  }
+}
+
 function encodeCursor(input: Omit<CursorPayload, "v" | "expiresAtMs">) {
   pruneExpiredCursors()
+  reserveCursorSlot()
   const cursor = `${RETRIEVAL_CURSOR_PREFIX}${randomBytes(24).toString("base64url")}`
   retrievalCursors.set(cursor, {
     v: 1,

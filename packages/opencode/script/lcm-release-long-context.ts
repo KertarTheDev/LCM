@@ -768,6 +768,7 @@ async function main() {
   const vscodePackageJson = await Bun.file(path.join(implementationRoot, "packages/kilo-vscode/package.json")).json()
   const requiredScripts = [
     "lcm:activation",
+    "lcm:active-context:test",
     "lcm:large-file",
     "lcm:path-provenance",
     "lcm:retrieval-auth",
@@ -1107,7 +1108,7 @@ async function main() {
     "corrupt-pglite-diagnose-rebuild": ["lcm:db:support"],
     "preflight-result-union": ["lcm:activation"],
     "manual-compact-quarantine": ["lcm:cutover-quarantine"],
-    "pre-beta-schema-rebaseline": ["lcm:migration:smoke"],
+    "pre-beta-schema-rebaseline": ["lcm:migration:smoke", "lcm:active-context:test"],
     "recursive-session-delete-cleanup": ["lcm:recursive-cleanup"],
     "vscode-inline-status": [
       { packageName: "kilo-vscode", scriptName: "lcm:context-ui" },

@@ -1,51 +1,52 @@
 # Kilo LCM Maintainer Overview
 
-Status date: 2026-06-23.
+Status date: 2026-07-10.
 
-This overview explains what the current release-sync LCM branch changes relative to upstream Kilo Code release `v7.3.54` (`0f55066dc71254967b97de287bbf58541d42e577`). The current code is the source of truth; earlier milestone documents are historical material.
+This overview explains what the current release-sync LCM branch changes relative to upstream Kilo Code release `v7.4.1` (`4ed43ab7c5309761276a0513fff99019df1d0570`). The current code is the source of truth; earlier milestone documents are historical material.
 
 ## Executive Summary
 
 Kilo LCM replaces routine lossy context compaction with a local, runtime-owned memory system. Finalized Kilo messages and parts are written into a PGlite-backed family database, and the prompt path derives a provider-safe active context from that durable source. Summaries, retrieval cues, large-file markers, and map artifacts become model-visible handles into preserved memory rather than destructive replacements for prior context.
 
-The VSCode extension stays a client of the packaged runtime. It exposes Memory settings, status, and installed-editor validation guidance, but it does not own the LCM database. Public user controls are deliberately narrow: strategy selection (`upward` or `dolt`), fresh-tail token budget, and storage warning threshold. There is no LCM enable/disable switch, raw memory browser, raw memory export, or LCM-only delete UI.
+The VSCode extension stays a client of the packaged runtime. It exposes Memory settings, status, and installed-editor validation guidance, but it does not own the LCM database. Public user controls are deliberately narrow: strategy selection (`upward` or `dolt`) and storage warning threshold. The internal fresh-tail budget remains runtime-owned and visible only as threshold/metrics evidence. There is no LCM enable/disable switch, raw memory browser, raw memory export, or LCM-only delete UI.
 
 ## Size Of The Change
 
-Scoped comparison against clean Kilo `v7.3.54`, excluding dependencies, build output, and local artifacts. These raw numbers include LCM work, generated artifacts, and formatter normalization:
+Scoped comparison against clean Kilo `v7.4.1`, excluding dependencies, build output, local artifacts, and specification files. These raw numbers include LCM work, generated artifacts, and formatter normalization:
 
 | Area | Changed files | Insertions | Deletions | Notes |
 | --- | ---: | ---: | ---: | --- |
-| `packages/opencode/src` | 117 | 45,516 | 528 | LCM runtime plus prompt/server/tool integration |
-| `packages/opencode/test` | 69 | 28,689 | 146 | LCM suites plus focused upstream compatibility tests |
-| `packages/opencode/script` | 10 | 3,467 | 64 | LCM release/contract/platform helpers |
-| `packages/kilo-vscode/src` | 19 | 1,663 | 271 | Extension backend/status transport and settings bridge |
-| `packages/kilo-vscode/webview-ui/src` | 46 | 2,734 | 383 | Memory UI, context status, webview messages, and locale cleanup |
-| `packages/kilo-vscode/tests` | 21 | 3,458 | 41 | LCM unit coverage |
-| `packages/sdk/js/src` | 3 | 2,706 | 18 | Generated SDK surface |
-| `packages/sdk/openapi.json` | 1 | 23,025 | 11,854 | Generated OpenAPI contract |
-| `.github` | 2 | 186 | 0 | LCM workflows |
-| Package metadata and lockfile | 3 | 83 | 3 | LCM package metadata and lock changes |
+| `packages/opencode/src` | 131 | 48,766 | 587 | LCM runtime plus prompt/server/tool integration |
+| `packages/opencode/test` | 75 | 32,177 | 370 | LCM suites plus focused upstream compatibility tests |
+| `packages/opencode/script` | 10 | 3,464 | 65 | LCM release/contract/platform helpers |
+| `packages/kilo-vscode/src` | 20 | 2,190 | 254 | Extension backend/status transport and settings bridge |
+| `packages/kilo-vscode/webview-ui/src` | 51 | 3,338 | 600 | Memory UI, context status, webview messages, and locale cleanup |
+| `packages/kilo-vscode/tests` | 22 | 3,825 | 43 | LCM unit coverage |
+| `packages/sdk/js/src` | 3 | 2,830 | 18 | Generated SDK surface |
+| `packages/sdk/openapi.json` | 1 | 16,600 | 5,069 | Generated OpenAPI contract |
+| `.github` | 2 | 195 | 0 | LCM workflows |
+| Package metadata and lockfile | 4 | 95 | 3 | LCM package metadata and lock changes |
 | `script/check-workflows.ts` | 1 | 2 | 0 | Workflow allowlist drift gate |
-| `packages/kilo-docs` | 3 | 115 | 13 | Generated CLI/source-link docs |
+| `packages/kilo-docs` | 3 | 130 | 13 | Generated CLI/source-link docs |
 | `packages/ui/src/components/markdown.tsx` | 1 | 1 | 2 | Shared markdown rendering compatibility |
-| Publishable guidance and VSCode scripts | 4 | 95 | 18 | Repo guidance, install notes, and extension script updates |
+| Publishable guidance and VSCode scripts | 6 | 115 | 50 | Repo guidance, install notes, bundler, and extension script updates |
+| Typecheck configs and generated-artifact drift gate | 6 | 155 | 5 | Focused compiler slices and generated-artifact ownership |
 
-Total scoped source/package delta: 300 changed files, 111,740 insertions, and 13,341 deletions.
+Total scoped source/package delta: 336 changed files, 113,883 insertions, and 7,079 deletions.
 
-Inside the new runtime, `packages/opencode/src/session/lcm/` contains 61 files and about 41,423 lines including the generated contract artifact. The colocated `packages/opencode/test/lcm/` suite contains 50 files and about 26,572 lines. New LCM and map tools add 9 files and about 623 lines.
+Inside the new runtime, `packages/opencode/src/session/lcm/` contains 71 files and 44,348 lines including the migration SQL and generated contract artifact. The colocated `packages/opencode/test/lcm/` suite contains 51 files and 29,798 lines. New LCM/map tool and wrapper files add 10 files and 721 lines; nine of those files register model-visible tools.
 
 ## Upstream Since The Original Baseline
 
-The branch was replayed over `v7.3.54` on 2026-06-23 as a release-specific LCM branch. The latest upstream release line is now part of the base; remaining differences in this overview are the LCM implementation, generated contract/SDK/docs artifacts, and the small compatibility fixes needed for the new base.
+The branch was replayed over `v7.4.1` on 2026-07-07 as a release-specific LCM branch and audited through 2026-07-10. The latest upstream release line is now part of the base; remaining differences in this overview are the LCM implementation, generated contract/SDK/docs artifacts, and the small compatibility fixes needed for the new base.
 
-The `v7.3.54` base brings upstream ACP service extraction, background task auto-injection with `task_status` removal, local recall/session search, primary worktree support, session metadata migration, OpenAI websocket transport, TUI workspace/session switching, and core config/plugin service refactors. LCM keeps these upstream changes by preserving the new ACP service structure, mapping the legacy `/compact` ACP compatibility path to runtime-owned `session.summarize`, carrying LCM child-session scope/admission through the new task flow, keeping upstream SDK/OpenAPI regeneration, and using the new core service-use import path.
+The `v7.4.1` base includes the upstream VSCode sandbox-mutation worker bundle, bidirectional prompt input, fail-closed headless/daemon subagent permission behavior, worktree reasoning/mode selection, persisted sandbox state, provider-reported output-cap handling, and core memory/runtime updates. LCM retains these upstream changes while keeping its own family database, prompt preflight, provider-safe assembly, and memory maintenance ownership isolated under the Kilo runtime boundary.
 
 ## Core Runtime Architecture
 
 The runtime owns PGlite database initialization, migrations, owner locks, artifact directories, and per-family conversation state. A family is a root conversation and its trusted child conversations. Runtime ownership is intentionally kept inside `packages/opencode`; VSCode extension host code must not open or migrate the LCM database directly.
 
-The central service is `LcmRuntime.Service` in `packages/opencode/src/session/lcm/runtime.ts`. It provides conversation creation, child conversation creation, final source sync, prompt-time preflight, maintenance queues, provider snapshot lifecycle, retrieval, file exploration, map runs, usage reporting, settings, and cleanup.
+The central service is `LcmRuntime.Service` in `packages/opencode/src/session/lcm/runtime.ts`. It provides conversation creation, child conversation creation, final source sync, prompt-time preflight, maintenance queues, provider snapshot lifecycle, retrieval, file exploration, map runs, usage reporting, settings, and cleanup. Its public facade is preserved while service contracts, support/state actions, provider work, and maintenance orchestration live in `runtime-interface.ts`, `runtime-support.ts`, `runtime-provider.ts`, and `runtime-maintenance.ts`. The corresponding `LcmContext` facade remains in `context.ts`, with core DB/summary helpers, rendering, budgeting, active state, and maintenance split into the `context-*` ownership modules. Every TypeScript file in the LCM runtime tree is below 3,000 lines.
 
 Lifecycle state gates behavior:
 
@@ -56,7 +57,7 @@ Lifecycle state gates behavior:
 
 ## Prompt Path Changes
 
-The prompt path now asks LCM for capabilities, syncs finalized source, runs preflight, assembles provider-safe messages, records a provider request snapshot, and validates the final provider-transformed payload before the model call. Legacy `SessionCompaction.prune`, automatic `SessionCompaction.create`, and old tool-result clearing are not used as the LCM-active context-management mechanism, and `SessionCompaction.defaultLayer` is not installed in the default app runtime.
+The prompt path now asks LCM for capabilities and delegates the authoritative finalized-source sync, lifecycle proof, threshold checks, provider-safe assembly, and provider request snapshot to preflight before validating the final provider-transformed payload and starting the model call. Legacy `SessionCompaction.prune`, automatic `SessionCompaction.create`, and old tool-result clearing are not used as the LCM-active context-management mechanism, and `SessionCompaction.defaultLayer` is not installed in the default app runtime.
 
 The existing summarize compatibility route is also routed through LCM: it initializes/syncs the conversation and calls runtime-owned manual maintenance while preserving the old boolean response shape. It no longer constructs a legacy `compaction` turn or re-enters the legacy prompt loop.
 
@@ -66,7 +67,7 @@ When a provider still reports context overflow after LCM preflight succeeded, LC
 
 ## Data Model
 
-The current schema baseline has 19 tables and 58 indexes. Important table families include:
+The current schema baseline has 21 tables and 61 explicit indexes. Important table families include:
 
 - Conversations and conversation lineage.
 - Immutable source messages and source parts.
@@ -89,13 +90,13 @@ The model receives LCM tools only when the trusted runtime scope allows them. Ro
 
 ## VSCode And Product Surface
 
-The VSCode package is upstream-aligned as the normal `kilocode.kilo-code` extension and includes a bundled runtime. `kilo-provider/lcm-webview.ts` bridges settings/status calls through generated SDK methods, including sessionless settings calls. The webview UI adds a Memory settings tab for strategy, fresh-tail budget, storage warning threshold, storage status, and cleanup guidance through normal session deletion. Primary `/lcm/settings` calls remain config-only and work before a chat session exists; session-scoped Memory settings use the active or inherited local session to report runtime-owned lifecycle and DB status diagnostics, including a visible but disabled `Export prompts` action until the family DB is ready.
+The VSCode package is upstream-aligned as the normal `kilocode.kilo-code` extension and includes a bundled runtime. `kilo-provider/lcm-webview.ts` bridges settings/status calls through generated SDK methods, including sessionless settings calls. The webview UI adds a Memory settings tab for strategy, storage warning threshold, storage status, and cleanup guidance through normal session deletion; fresh-tail counters remain read-only runtime status. Primary `/lcm/settings` calls remain config-only and work before a chat session exists; session-scoped Memory settings use the active or inherited local session to report runtime-owned lifecycle and DB status diagnostics, including a visible but disabled `Export prompts` action until the family DB is ready.
 
 Routine extension-host CLI backend and SSE trace logs are off by default and can be enabled with `kilo-code.new.debugBackendLogs` or `KILO_VSCODE_DEBUG_LOGS=1`. Warnings and errors remain visible.
 
 LCM runtime lifecycle events are surfaced in the chat task header as memory hints. First-release soft-threshold work that is needed between finalized agent steps is awaited and shown through the normal memory-preparation labels; deferred/nonblocking soft work can still appear as pending/running/completed background maintenance. Prompt-time LCM preflight and hard-limit maintenance are shown as memory preparation for the current response, and DB/provider/hard-limit safe errors are reduced to content-safe recovery labels with code, retryability, and action details in the tooltip. The chat header and context progress read active-budget pressure from current-session LCM metrics keyed by session/conversation identifiers, not from provider-token fallback totals. The Memory settings status grid also renders content-safe maintenance detail inline, such as active-token progress and soft-backlog pressure, so long maintenance is visible without exposing raw conversation memory. Safe support actions can open the Kilo support URL. DB diagnosis and guided repair go through runtime-owned session routes: repair starts with a dry-run preview, refuses healthy family state, quarantines repairable PGlite state only in apply mode, and resyncs the active session from finalized Kilo messages. Arbitrary DB reset, raw memory browsing, and extension-host DB ownership are not exposed.
 
-The extension prewarms session LCM health through the generated `session.lcm.capabilities` SDK path after backend connection, session registration/creation, session load/focus, and child-session sync. Calls are coalesced per session/directory/workspace and only touch the runtime-owned capabilities route, so DB startup, lock acquisition, and migration warnings can surface before the first large prompt while keeping storage ownership in the CLI runtime. Prompt and command sends start advisory prewarm for the resolved session/directory but do not await extension-side readiness before submission; runtime prompt preflight remains the authoritative point that blocks, repairs, or safely fails before provider dispatch. Retryable route failures and retryable safe status responses get bounded backoff retries without warning on intermediate scheduled attempts; terminal or non-retryable readiness failures still log once for support diagnosis. Connection changes, global config/settings updates, and DB status events invalidate cached readiness.
+The extension prewarms session LCM health through the generated `session.lcm.capabilities` SDK path after backend connection, session registration/creation, session load/focus, and child-session sync. Calls are coalesced per session/directory/workspace and only touch the runtime-owned capabilities route, so DB startup, lock acquisition, and migration warnings can surface before the first large prompt while keeping storage ownership in the CLI runtime. Prompt and command sends start advisory prewarm, then perform a bounded readiness wait that honors cancellation and can apply non-forced stale-owner-lock recovery before submission. Runtime prompt preflight remains the authoritative provider boundary. Retryable route failures and safe-status responses get bounded backoff retries without warning on intermediate scheduled attempts; terminal or non-retryable readiness failures still log once for support diagnosis. Connection changes, global config/settings updates, recovery actions, and DB status events invalidate cached readiness.
 
 Blocking hard-limit maintenance distinguishes unresolved capacity from elapsed-time timeout. Timeout results are retryable and preserve partial maintenance counters; DB shutdown also bounds active queue drain before lock release so a stuck foreground DB request cannot keep the plugin process open forever.
 

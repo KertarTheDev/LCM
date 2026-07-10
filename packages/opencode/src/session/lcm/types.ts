@@ -1465,7 +1465,6 @@ export interface LcmFileStatus {
 
 export interface LcmSettingsState {
   strategy: LcmStrategy
-  freshTailTokens: number
   storageWarningThresholdBytes: number
   storageBytes: number
   storageWarning: boolean
@@ -1488,7 +1487,6 @@ export interface LcmUpdateSettingsInput {
   projectID?: string
   workspaceID?: string
   strategy?: LcmStrategy
-  freshTailTokens?: number
   storageWarningThresholdBytes?: number
 }
 

@@ -43,6 +43,7 @@ test("rejects invalid public LCM config values", () => {
 
 test("keeps internal LCM runtime defaults out of public config", () => {
   expect(() => parseConfig({ lcm: { enabled: false } })).toThrow()
+  expect(() => parseConfig({ lcm: { freshTailTokens: 1000 } })).toThrow()
   expect(() => parseConfig({ lcm: { thresholds: { softRatio: 0.4 } } })).toThrow()
   expect(() => parseConfig({ lcm: { retrieval: { defaultPageLimit: 5 } } })).toThrow()
   expect(() => parseConfig({ lcm: { map: { llmMapWorkers: 1 } } })).toThrow()

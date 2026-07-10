@@ -113,7 +113,6 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         "projectID",
         "workspaceID",
         "strategy",
-        "freshTailTokens",
         "storageWarningThresholdBytes",
       ])
       for (const key of Object.keys(payload)) {
@@ -432,7 +431,6 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
           projectID: instance.project.id,
           workspaceID,
           strategy: ctx.payload.strategy,
-          freshTailTokens: ctx.payload.freshTailTokens,
           storageWarningThresholdBytes: ctx.payload.storageWarningThresholdBytes,
         }),
       )

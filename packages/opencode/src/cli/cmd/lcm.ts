@@ -18,7 +18,6 @@ type ScopeArgs = {
 
 type UpdateArgs = ScopeArgs & {
   strategy?: string
-  freshTailTokens?: number
   storageWarningThresholdBytes?: number
 }
 
@@ -46,10 +45,9 @@ export function resolveLcmSettingsScope(
 
 export function lcmSettingsUpdateFromArgs(
   args: UpdateArgs,
-): Pick<LcmUpdateSettingsInput, "strategy" | "freshTailTokens" | "storageWarningThresholdBytes"> {
+): Pick<LcmUpdateSettingsInput, "strategy" | "storageWarningThresholdBytes"> {
   return {
     ...(args.strategy ? { strategy: args.strategy as LcmUpdateSettingsInput["strategy"] } : {}),
-    ...(args.freshTailTokens !== undefined ? { freshTailTokens: args.freshTailTokens } : {}),
     ...(args.storageWarningThresholdBytes !== undefined
       ? { storageWarningThresholdBytes: args.storageWarningThresholdBytes }
       : {}),
@@ -67,7 +65,6 @@ export function formatLcmSettingsState(state: LcmSettingsState) {
 
   const lines = [
     `strategy: ${state.strategy}`,
-    `freshTailTokens: ${state.freshTailTokens}`,
     `storageWarningThresholdBytes: ${state.storageWarningThresholdBytes}`,
     `storageBytes: ${state.storageBytes}`,
     `storageWarning: ${state.storageWarning ? "yes" : "no"}`,
@@ -147,25 +144,10 @@ const LcmSettingsSetCommand = cmd({
         type: "number",
         describe: "local LCM storage warning threshold in bytes",
       })
-      .option("fresh-tail-tokens", {
-        type: "number",
-        describe: "raw-message tokens kept fresh before soft backlog summarization",
-      })
       .check((args) => {
         if (Array.isArray(args._) && args._.length === 0) return true
-        if (
-          args.strategy === undefined &&
-          args.freshTailTokens === undefined &&
-          args.storageWarningThresholdBytes === undefined
-        ) {
-          throw new Error("set requires --strategy, --fresh-tail-tokens, or --storage-warning-threshold-bytes")
-        }
-        const freshTailTokens = typeof args.freshTailTokens === "number" ? args.freshTailTokens : undefined
-        if (
-          freshTailTokens !== undefined &&
-          (!Number.isInteger(freshTailTokens) || freshTailTokens <= 0 || !Number.isFinite(freshTailTokens))
-        ) {
-          throw new Error("--fresh-tail-tokens must be a positive integer")
+        if (args.strategy === undefined && args.storageWarningThresholdBytes === undefined) {
+          throw new Error("set requires --strategy or --storage-warning-threshold-bytes")
         }
         const threshold =
           typeof args.storageWarningThresholdBytes === "number" ? args.storageWarningThresholdBytes : undefined

@@ -3045,10 +3045,6 @@
             "optional": true,
             "type": "number"
           },
-          "freshTailTokens": {
-            "optional": false,
-            "type": "number"
-          },
           "lifecycleState": {
             "optional": true,
             "type": "LcmLifecycleState"
@@ -3087,7 +3083,7 @@
           }
         },
         "methods": {},
-        "source": "interface LcmSettingsState {\n strategy: LcmStrategy\n freshTailTokens: number\n storageWarningThresholdBytes: number\n storageBytes: number\n storageWarning: boolean\n effectiveScope: {\n kind: LcmSettingsScopeKind\n projectID?: string\n workspaceID?: string\n }\n lifecycleState?: LcmLifecycleState\n dbStatus?: LcmDbStatus\n safeError?: LcmSafeError\n memoryMaintenanceCostTotal?: number\n retrievalCostTotal?: number\n fileExplorationCostTotal?: number\n mapCostTotal?: number\n}"
+        "source": "interface LcmSettingsState {\n strategy: LcmStrategy\n storageWarningThresholdBytes: number\n storageBytes: number\n storageWarning: boolean\n effectiveScope: {\n kind: LcmSettingsScopeKind\n projectID?: string\n workspaceID?: string\n }\n lifecycleState?: LcmLifecycleState\n dbStatus?: LcmDbStatus\n safeError?: LcmSafeError\n memoryMaintenanceCostTotal?: number\n retrievalCostTotal?: number\n fileExplorationCostTotal?: number\n mapCostTotal?: number\n}"
       },
       "LcmSoftMaintenanceAfterTurnInput": {
         "fields": {
@@ -3431,10 +3427,6 @@
       },
       "LcmUpdateSettingsInput": {
         "fields": {
-          "freshTailTokens": {
-            "optional": true,
-            "type": "number"
-          },
           "projectID": {
             "optional": true,
             "type": "string"
@@ -3457,7 +3449,7 @@
           }
         },
         "methods": {},
-        "source": "interface LcmUpdateSettingsInput {\n sessionID?: SessionID\n projectID?: string\n workspaceID?: string\n strategy?: LcmStrategy\n freshTailTokens?: number\n storageWarningThresholdBytes?: number\n}"
+        "source": "interface LcmUpdateSettingsInput {\n sessionID?: SessionID\n projectID?: string\n workspaceID?: string\n strategy?: LcmStrategy\n storageWarningThresholdBytes?: number\n}"
       },
       "LcmUsageRecord": {
         "fields": {
@@ -4463,7 +4455,7 @@
     }
   },
   "source": {
-    "sha256": "2fe5531aeac65532aa162cc0d524c73c2adcabe83f619d64cc84fdc3c40f1677"
+    "sha256": "57d2ea9f36480923b5fd5c6f2df2520c83e5266b07b91879bf3ca179e3499cea"
   },
   "surfaceClassifications": {
     "LcmAssemblyBlockedResult": {

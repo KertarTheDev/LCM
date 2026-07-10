@@ -576,7 +576,8 @@ CREATE TABLE lcm_provider_request_snapshot_items (
   request_snapshot_id text NOT NULL REFERENCES lcm_provider_request_snapshots(request_snapshot_id) ON DELETE CASCADE,
   conversation_id text NOT NULL REFERENCES lcm_conversations(conversation_id) ON DELETE CASCADE,
   render_unit_id text NOT NULL,
-  context_item_id text REFERENCES lcm_context_items(context_item_id) ON DELETE SET NULL,
+  -- This is immutable request evidence, not a pointer to the mutable active-context projection.
+  context_item_id text NOT NULL,
   item_type text NOT NULL CHECK (
     item_type IN ('raw_message', 'summary', 'archive_stub', 'large_file_marker', 'retrieval_cue')
   ),

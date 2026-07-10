@@ -470,6 +470,33 @@ test("lcm:scheduler removes aborted foreground waiters from local provider queue
   await expect(registry.run({ ...request, priority: "foreground" }, async () => "next")).resolves.toBe("next")
 })
 
+test("lcm:scheduler rejects already-aborted local requests without allocating capacity state", async () => {
+  const registry = createLcmProviderCapacityRegistry()
+  const request = {
+    providerID: "ollama",
+    modelID: "qwen3",
+    apiID: "ollama-openai-compatible",
+    apiNpm: "@ai-sdk/openai-compatible",
+    apiURL: "http://127.0.0.1:11434/v1",
+  }
+
+  for (const priority of ["foreground", "background"] as const) {
+    const controller = new AbortController()
+    const reason = new Error(`${priority} local provider request canceled`)
+    controller.abort(reason)
+    let ran = false
+    const failure = await registry
+      .run({ ...request, priority, abortSignal: controller.signal }, async () => {
+        ran = true
+      })
+      .catch((error) => error)
+
+    expect(failure).toBe(reason)
+    expect(ran).toBe(false)
+    expect(registry.stateCount()).toBe(0)
+  }
+})
+
 test("lcm:scheduler serializes foreground local provider work behind an active background job", async () => {
   const registry = createLcmProviderCapacityRegistry()
   const request = {

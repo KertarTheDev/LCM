@@ -209,7 +209,6 @@ export const LcmCapabilitiesSchema = Schema.Struct({
 
 export const LcmSettingsStateSchema = Schema.Struct({
   strategy: Schema.Literals(["upward", "dolt"]),
-  freshTailTokens: Schema.Number,
   storageWarningThresholdBytes: Schema.Number,
   storageBytes: Schema.Number,
   storageWarning: Schema.Boolean,
@@ -232,7 +231,6 @@ const LcmUpdateSettingsInputFields = Schema.Struct({
   projectID: Schema.optional(Schema.String),
   workspaceID: Schema.optional(Schema.String),
   strategy: Schema.optional(Schema.Literals(["upward", "dolt"])),
-  freshTailTokens: Schema.optional(Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))),
   storageWarningThresholdBytes: Schema.optional(Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))),
 })
 export const LcmUpdateSettingsInput = Schema.StructWithRest(LcmUpdateSettingsInputFields, [

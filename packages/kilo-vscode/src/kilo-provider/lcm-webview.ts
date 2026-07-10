@@ -24,7 +24,6 @@ export type LcmWebviewRequest =
         projectID?: string
         workspaceID?: string
         strategy?: "upward" | "dolt"
-        freshTailTokens?: number
         storageWarningThresholdBytes?: number
       }
     }

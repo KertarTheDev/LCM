@@ -52,7 +52,6 @@ export const lcmHandlers = HttpApiBuilder.group(InstanceHttpApi, "lcm", (handler
         "projectID",
         "workspaceID",
         "strategy",
-        "freshTailTokens",
         "storageWarningThresholdBytes",
       ])
       for (const key of Object.keys(payload)) {
@@ -122,7 +121,6 @@ export const lcmHandlers = HttpApiBuilder.group(InstanceHttpApi, "lcm", (handler
           projectID: instance.project.id,
           workspaceID,
           strategy: ctx.payload.strategy,
-          freshTailTokens: ctx.payload.freshTailTokens,
           storageWarningThresholdBytes: ctx.payload.storageWarningThresholdBytes,
         }),
       )

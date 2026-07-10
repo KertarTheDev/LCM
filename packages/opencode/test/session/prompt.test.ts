@@ -44,6 +44,8 @@ import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 // kilocode_change start
 import { LcmRuntime } from "../../src/session/lcm/runtime"
+import { markLcmRenderOnlyPart } from "../../src/session/lcm/render-prep"
+import { createOperationID } from "../../src/session/lcm/id"
 // kilocode_change end
 import { Suggestion } from "../../src/kilocode/suggestion" // kilocode_change - accept suggestion in telemetry test
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -300,11 +302,7 @@ function makePrompt(input?: {
   )
 }
 
-function makeHttp(input?: {
-  processor?: "blocking"
-  llm?: Layer.Layer<LLM.Service>
-  mcp?: Layer.Layer<MCP.Service>
-}) {
+function makeHttp(input?: { processor?: "blocking"; llm?: Layer.Layer<LLM.Service>; mcp?: Layer.Layer<MCP.Service> }) {
   return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
 }
 
@@ -883,8 +881,8 @@ it.instance("static loop returns assistant text through local provider", () =>
   }),
 )
 
-// kilocode_change start - first plan prompt must enter LCM render prep without runtime reference errors
-firstMessageSmoke.instance("first plan prompt reaches LLM with LCM render-only reminders", () =>
+// kilocode_change start - prompt render preparation must succeed or fail before provider dispatch
+firstMessageSmoke.instance("LCM render boundary sends first plan prompt with render-only reminders", () =>
   Effect.gen(function* () {
     firstMessageSmokeInputs.length = 0
     const { directory: dir } = yield* TestInstance
@@ -909,6 +907,46 @@ firstMessageSmoke.instance("first plan prompt reaches LLM with LCM render-only r
     expect(result.parts.some((part) => part.type === "text" && part.text === "plan response")).toBe(true)
     expect(firstMessageSmokeInputs).toHaveLength(1)
     expect(JSON.stringify(firstMessageSmokeInputs[0]?.messages)).toContain("## Plan File")
+  }),
+)
+
+it.instance("LCM render boundary fails before provider dispatch for invalid render-only metadata", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Invalid LCM render metadata",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    const message = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "Do not send malformed prompt metadata" }],
+    })
+    const text = message.parts.find((part) => part.type === "text")
+    if (!text) throw new Error("expected prompt text part")
+    const malformed = markLcmRenderOnlyPart(structuredClone(text), {
+      kind: "plan_reminder",
+      producer: "kilo.session.prompt",
+      operationID: createOperationID(),
+      createdAtMs: Date.now(),
+    })
+    ;(malformed as unknown as { lcmRenderOnly: { producer: string } }).lcmRenderOnly.producer = "unregistered.producer"
+    yield* sessions.updatePart(malformed)
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.finish).toBe("error")
+      expect(result.info.error).toMatchObject({
+        name: "LcmMemoryError",
+        data: { code: "missing_source" },
+      })
+    }
+    expect(yield* llm.hits).toHaveLength(0)
   }),
 )
 
@@ -1151,16 +1189,8 @@ it.instance(
       expect(tool.state.title).toBeDefined()
       expect(tool.state.metadata?.model).toBeDefined()
 
-      yield* awaitWithTimeout(
-        prompt.cancel(chat.id),
-        "timed out cancelling running subtask",
-        "10 seconds",
-      ) // kilocode_change - cancellation should not wait forever on LCM child setup
-      yield* awaitWithTimeout(
-        Fiber.await(fiber),
-        "timed out awaiting cancelled running subtask",
-        "10 seconds",
-      ) // kilocode_change - parent fiber should settle after bounded subtask cancellation
+      yield* awaitWithTimeout(prompt.cancel(chat.id), "timed out cancelling running subtask", "10 seconds") // kilocode_change - cancellation should not wait forever on LCM child setup
+      yield* awaitWithTimeout(Fiber.await(fiber), "timed out awaiting cancelled running subtask", "10 seconds") // kilocode_change - parent fiber should settle after bounded subtask cancellation
     }),
   60_000, // kilocode_change - LCM child scope setup can exceed the default VPS test budget
 )
@@ -1456,11 +1486,7 @@ noLLMServer.instance(
       yield* addSubtask(chat.id, msg.id)
 
       const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* awaitWithTimeout(
-        Deferred.await(ready),
-        "timed out waiting for task tool to start",
-        "30 seconds",
-      ) // kilocode_change - LCM child setup can run before the mocked task body starts
+      yield* awaitWithTimeout(Deferred.await(ready), "timed out waiting for task tool to start", "30 seconds") // kilocode_change - LCM child setup can run before the mocked task body starts
       yield* prompt.cancel(chat.id)
 
       const exit = yield* Fiber.await(fiber)
@@ -2270,11 +2296,7 @@ unixNoLLMServer(
       const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
       for (let i = 0; i < 20; i++) yield* Effect.yieldNow // kilocode_change - let the queued loop reach the runner
 
-      yield* awaitWithTimeout(
-        prompt.cancel(chat.id),
-        "timed out cancelling shell with queued loop",
-        "30 seconds",
-      ) // kilocode_change - shell cancellation should settle before queued loop fibers are awaited
+      yield* awaitWithTimeout(prompt.cancel(chat.id), "timed out cancelling shell with queued loop", "30 seconds") // kilocode_change - shell cancellation should settle before queued loop fibers are awaited
 
       const exit = yield* awaitWithTimeout(
         Fiber.await(loop),
@@ -2287,11 +2309,7 @@ unixNoLLMServer(
         expect(tool?.state.output).toContain("User aborted the command")
       }
 
-      yield* awaitWithTimeout(
-        Fiber.await(sh),
-        "timed out awaiting cancelled shell",
-        "30 seconds",
-      ) // kilocode_change - shell fiber should settle after cancellation
+      yield* awaitWithTimeout(Fiber.await(sh), "timed out awaiting cancelled shell", "30 seconds") // kilocode_change - shell fiber should settle after cancellation
     }),
   { git: true, config: cfg },
   60_000, // kilocode_change - LCM shell cancellation can wait for persisted tool cleanup
@@ -2978,11 +2996,7 @@ it.instance(
       const tagged = trackSpy.mock.calls
         .map((args) => args[0] as Parameters<typeof Telemetry.trackLlmCompletion>[0])
         .find(
-          (p) =>
-            p.mode === "review" &&
-            p.feature === "code_reviews" &&
-            p.command === "review" &&
-            p.tool === "suggest",
+          (p) => p.mode === "review" && p.feature === "code_reviews" && p.command === "review" && p.tool === "suggest",
         )
       expect(tagged).toBeDefined()
     }),

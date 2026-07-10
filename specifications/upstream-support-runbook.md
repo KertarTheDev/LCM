@@ -1,6 +1,6 @@
 # LCM Upstream Support Runbook
 
-Status date: 2026-06-23.
+Status date: 2026-07-10.
 
 This runbook records local operational guidance for maintaining and supporting LCM after upstream integration. It does not replace external installed-editor release evidence.
 
@@ -8,7 +8,7 @@ This runbook records local operational guidance for maintaining and supporting L
 
 LCM release syncs are maintained as clean branches on top of a specific upstream Kilo release tag. For a new upstream release, create a fresh `kilocode-lcm-v<upstream-release>` branch from that tag, replay or squash-merge the current LCM delta with explicit conflict review, update these current-code specs to the new base, then rebase prerelease-only release workflow/README changes on top of the corrected branch.
 
-The current release-sync branch is `kilocode-lcm-v3.7.54`, based on upstream `v7.3.54`. The older rolling `kilocode-lcm` branch is no longer the default source for release validation once a release-specific branch exists; use it only as a previous LCM source for comparison or cherry-picking.
+The current release-sync branch is `kilocode-lcm-v7.4.1`, based on upstream `v7.4.1`. The older rolling and release-specific branches are no longer the default source for release validation once a newer release-sync branch exists; use them only as previous LCM sources for comparison or cherry-picking.
 
 ## Current Upstream Package Policy
 
@@ -51,13 +51,12 @@ Always confirm the runtime-reported data root when collecting evidence. Flatpak,
 
 ## User Settings Commands
 
-Public LCM settings are strategy, fresh-tail token budget, and storage warning threshold:
+Public LCM settings are strategy and storage warning threshold:
 
 ```sh
 kilo lcm settings show
 kilo lcm settings set --strategy upward
 kilo lcm settings set --strategy dolt
-kilo lcm settings set --fresh-tail-tokens 20000
 kilo lcm settings set --storage-warning-threshold-bytes 10737418240
 ```
 
@@ -83,7 +82,7 @@ Interpret `budgetStatus = "provider_limit_fallback"` as a provider metadata limi
 
 Use `kilo debug lcm-db-diagnose --data-dir <family-root> --json` for storage/index health. The report checks owner-lock/layout presence, migration registry readability, search extension/index readiness, deferred-job queue readability, large-payload marker readability, path-provenance row readability, map status row readability, and artifact cleanup queue readability. It intentionally does not export message text, summaries, raw file content, map payloads, prompt text, or provider output.
 
-For long-context tuning, prefer `upward` unless deliberately testing Dolt-style summary hierarchy behavior. Adjust `freshTailTokens` only to change how many newest whole raw-message rows remain verbatim after mandatory current-turn protection; the default is 20,000 tokens. Increase `storageWarningThresholdBytes` only to adjust support warnings for local disk policy; it is not a cap and does not prune memory. Large files should enter memory through path/artifact-backed markers and be recovered through authorized read/retrieval paths. Local Ollama or local OpenAI-compatible endpoints may defer background maintenance, maps, or child-session admission while foreground work is active; wait for the queued retry or reduce concurrent background work instead of bypassing LCM.
+For long-context tuning, prefer `upward` unless deliberately testing Dolt-style summary hierarchy behavior. The 20,000-token whole-message fresh-tail budget is runtime-owned and may be inspected through metrics, but it is not a public tuning control. Increase `storageWarningThresholdBytes` only to adjust support warnings for local disk policy; it is not a cap and does not prune memory. Large files should enter memory through path/artifact-backed markers and be recovered through authorized read/retrieval paths. Local Ollama or local OpenAI-compatible endpoints may defer background maintenance, maps, or child-session admission while foreground work is active; wait for the queued retry or reduce concurrent background work instead of bypassing LCM.
 
 ## Safe Error Triage
 

@@ -21,7 +21,6 @@ function mergeTestLcmConfig(current: Config.Info["lcm"] | undefined, patch: Conf
   return {
     ...(current ?? {}),
     ...(patch?.strategy !== undefined ? { strategy: patch.strategy } : {}),
-    ...(patch?.freshTailTokens !== undefined ? { freshTailTokens: patch.freshTailTokens } : {}),
     storage:
       current?.storage !== undefined || patch?.storage !== undefined
         ? {
@@ -139,7 +138,6 @@ test("settings persist through Kilo config without touching LCM memory tables", 
       {
         lcm: {
           strategy: "dolt",
-          freshTailTokens: 12_000,
           storage: { warningThresholdBytes: 2048 },
         },
       },
@@ -154,7 +152,6 @@ test("settings persist through Kilo config without touching LCM memory tables", 
             projectID: "project_settings",
             workspaceID: "workspace_a",
             strategy: "upward",
-            freshTailTokens: 20_000,
             storageWarningThresholdBytes: 4096,
           })
           const reread = yield* svc.getSettingsState({ projectID: "project_settings", workspaceID: "workspace_a" })
@@ -165,7 +162,6 @@ test("settings persist through Kilo config without touching LCM memory tables", 
 
     expect(result.defaults).toMatchObject({
       strategy: "dolt",
-      freshTailTokens: 12_000,
       storageWarningThresholdBytes: 2048,
       effectiveScope: {
         kind: "default",
@@ -175,7 +171,6 @@ test("settings persist through Kilo config without touching LCM memory tables", 
     })
     expect(result.updated).toMatchObject({
       strategy: "upward",
-      freshTailTokens: 20_000,
       storageWarningThresholdBytes: 4096,
       effectiveScope: {
         kind: "workspace",
@@ -185,7 +180,6 @@ test("settings persist through Kilo config without touching LCM memory tables", 
     })
     expect(result.reread).toMatchObject({
       strategy: "upward",
-      freshTailTokens: 20_000,
       storageWarningThresholdBytes: 4096,
       effectiveScope: {
         kind: "workspace",
@@ -232,7 +226,6 @@ test("settings config failures are content-safe and writes fail closed", async (
 
   expect(state).toMatchObject({
     strategy: "upward",
-    freshTailTokens: 20_000,
     storageWarningThresholdBytes: 10737418240,
     effectiveScope: { kind: "default", projectID: "project_config_error" },
     safeError: {
@@ -288,6 +281,23 @@ test("primary settings route rejects forged scope assertions before config write
       error: {
         code: "invalid_request",
         diagnosticCode: "lcm_settings_primary_route_session_id_unsupported",
+      },
+    })
+
+    const internalSettingRejected = await app.request("/lcm/settings", {
+      method: "PATCH",
+      headers: {
+        ...headers,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ freshTailTokens: 1000 }),
+    })
+    expect(internalSettingRejected.status).toBe(400)
+    expect(await internalSettingRejected.json()).toMatchObject({
+      ok: false,
+      error: {
+        code: "invalid_request",
+        diagnosticCode: "lcm_settings_unsupported_field",
       },
     })
   } finally {

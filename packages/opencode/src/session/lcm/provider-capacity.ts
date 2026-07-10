@@ -272,22 +272,32 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
     return state
   }
 
+  function deleteIfIdle(key: string, state: CapacityState) {
+    if (state.active === 0 && state.foregroundWaiters.length === 0 && states.get(key) === state) {
+      states.delete(key)
+    }
+  }
+
   function keyFor(input: LcmProviderCapacityInput) {
     return lcmProviderCapacityLane(input).key
   }
 
-  function wakeNext(state: CapacityState) {
+  function wakeNext(key: string, state: CapacityState) {
     while (state.active < maxLocalConcurrent) {
       const next = state.foregroundWaiters.shift()
-      if (!next) return
+      if (!next) {
+        deleteIfIdle(key, state)
+        return
+      }
       if (next.start()) return
     }
   }
 
   function release(key: string) {
-    const state = stateFor(key)
+    const state = states.get(key)
+    if (!state) return
     state.active = Math.max(0, state.active - 1)
-    wakeNext(state)
+    wakeNext(key, state)
   }
 
   function releaseOnce(key: string) {
@@ -303,6 +313,11 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
     const capacityClass = classifyLcmProviderCapacity(input)
     if (capacityClass === "remote_or_unknown") {
       return { capacityClass, release: () => {} }
+    }
+
+    const signal = input.abortSignal
+    if (signal?.aborted) {
+      throw signal.reason instanceof Error ? signal.reason : new DOMException("The request was aborted.", "AbortError")
     }
 
     const key = keyFor(input)
@@ -327,11 +342,6 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
       return { capacityClass, release: releaseOnce(key) }
     }
 
-    const signal = input.abortSignal
-    if (signal?.aborted) {
-      throw signal.reason instanceof Error ? signal.reason : new DOMException("The request was aborted.", "AbortError")
-    }
-
     await new Promise<void>((resolve, reject) => {
       let settled = false
       let waiter: ForegroundWaiter
@@ -342,6 +352,7 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
         cleanup()
         const index = state.foregroundWaiters.indexOf(waiter)
         if (index >= 0) state.foregroundWaiters.splice(index, 1)
+        deleteIfIdle(key, state)
         reject(
           signal?.reason instanceof Error ? signal.reason : new DOMException("The request was aborted.", "AbortError"),
         )
@@ -403,15 +414,19 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
   function snapshot(input: LcmProviderCapacityInput) {
     const capacityClass = classifyLcmProviderCapacity(input)
     if (capacityClass === "remote_or_unknown") return { capacityClass, active: 0, foregroundQueued: 0 }
-    const state = stateFor(keyFor(input))
+    const state = states.get(keyFor(input))
     return {
       capacityClass,
-      active: state.active,
-      foregroundQueued: state.foregroundWaiters.length,
+      active: state?.active ?? 0,
+      foregroundQueued: state?.foregroundWaiters.length ?? 0,
     }
   }
 
-  return { acquire, run, snapshot }
+  function stateCount() {
+    return states.size
+  }
+
+  return { acquire, run, snapshot, stateCount }
 }
 
 export const defaultLcmProviderCapacityRegistry = createLcmProviderCapacityRegistry()

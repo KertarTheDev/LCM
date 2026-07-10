@@ -1,13 +1,13 @@
 # LCM Current-Code Specifications
 
-Status date: 2026-06-23.
+Status date: 2026-07-10.
 
 These documents describe the LCM implementation on the current release-sync branch. Current code is the authority.
 
 ## Source Of Truth
 
-- Implementation branch: `kilocode-lcm-v3.7.54`
-- Upstream base: Kilo Code `v7.3.54` (`0f55066dc71254967b97de287bbf58541d42e577`)
+- Implementation branch: `kilocode-lcm-v7.4.1`
+- Upstream base: Kilo Code `v7.4.1` (`4ed43ab7c5309761276a0513fff99019df1d0570`)
 - Current code and the current spec files in this directory are normative.
 - Branch model: release-sync branches are named for the upstream release they carry. Future syncs should create a new clean `kilocode-lcm-v<upstream-release>` branch from the upstream tag, replay the LCM delta there, then rebase prerelease-only changes on top.
 
@@ -30,23 +30,24 @@ These documents describe the LCM implementation on the current release-sync bran
 
 ## Comparison Scope
 
-Change statistics in this spec set compare tracked source and package paths from upstream tag `v7.3.54` to this branch, excluding installed dependencies, build output, and local artifacts. Scoped comparisons inspected:
+Change statistics in this spec set compare tracked source and package paths from upstream tag `v7.4.1` to the current branch worktree, excluding installed dependencies, build output, local artifacts, and the specification files themselves. Scoped comparisons inspected:
 
 - `packages/opencode/src`, `packages/opencode/test`, `packages/opencode/script`, and `packages/opencode/package.json`
 - `packages/kilo-vscode/src`, `packages/kilo-vscode/webview-ui/src`, and `packages/kilo-vscode/package.json`
-- `packages/app/src`, `.github`, and `bun.lock`
+- generated SDK/docs, `.github`, package metadata, publishable guidance, and VSCode packaging scripts
+- focused opencode typecheck configs and the generated-artifact drift gate
 
-Within that scope the LCM branch now differs from upstream `v7.3.54` by 300 files with 111,740 insertions and 13,341 deletions. These raw numbers include generated OpenAPI/SDK artifacts and formatter normalization; they should not be read as pure hand-authored feature size.
+Within that scope the LCM branch now differs from upstream `v7.4.1` by 336 files with 113,883 insertions and 7,079 deletions. These raw numbers include generated OpenAPI/SDK artifacts and formatter normalization; they should not be read as pure hand-authored feature size.
 
 ## Upstream Reference Refresh
 
-The LCM branch was replayed from the previous `v7.3.50` release base onto upstream `v7.3.54` on 2026-06-23. Notable upstream behavior retained in the new base includes:
+The LCM branch was replayed from the previous release-sync branch onto upstream `v7.4.1` on 2026-07-07 and audited through 2026-07-10. Notable upstream behavior retained in the new base includes:
 
-- the `7.3.54` package versions and upstream SDK/OpenAPI/doc generator output;
-- upstream ACP service extraction, with the LCM manual-memory compatibility hook kept in the new ACP service layer;
-- upstream background task auto-injection and removal of `task_status`, with LCM child-session scope and local-provider admission preserved in the new task flow;
-- local recall/session search, primary worktree, session metadata, OpenAI websocket transport, and TUI workspace/session switcher updates;
-- upstream config/plugin/core service refactors, including the `@opencode-ai/core/effect/service-use` import path.
+- the `7.4.1` package versions and upstream SDK/OpenAPI/doc generator output;
+- upstream VSCode packaging of the sandbox mutation worker and bidirectional prompt input;
+- headless/daemon subagent permission handling that fails closed instead of waiting on an unavailable prompt;
+- worktree reasoning/mode selection, persisted sandbox behavior, and provider-reported output-cap handling;
+- upstream core memory/runtime and provider/model updates retained alongside the separate LCM ownership boundary.
 
 ## Current High-Level Behavior
 

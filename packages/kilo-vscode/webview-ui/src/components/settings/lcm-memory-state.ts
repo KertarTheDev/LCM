@@ -39,8 +39,6 @@ export function formatStorageThresholdGiB(bytes: FiniteNumberInput) {
   return gib.toFixed(gib >= 1 ? 2 : 3).replace(/\.?0+$/, "")
 }
 
-export const LCM_FRESH_TAIL_DESCRIPTION = "How many tokens from the most recent messages are kept unsummarised."
-
 export function storageWarningSettingsDescription(
   state: Pick<LcmSettingsState, "storageBytes" | "storageWarningThresholdBytes"> | undefined,
 ) {

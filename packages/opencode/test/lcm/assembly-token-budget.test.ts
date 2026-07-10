@@ -2,6 +2,7 @@
 import { expect, test } from "bun:test"
 import { PGlite } from "@electric-sql/pglite"
 import { Effect, Layer } from "effect"
+import fs from "node:fs/promises"
 import path from "node:path"
 import type { Agent } from "../../src/agent/agent"
 import type { Permission } from "../../src/permission"
@@ -22,6 +23,8 @@ import {
 import { LcmDb } from "../../src/session/lcm/db"
 import { createLcmDbWorker } from "../../src/session/lcm/db-worker"
 import { LCM_DB_GATE_SCHEMA_VERSION } from "../../src/session/lcm/db-smoke"
+import { resolveLcmDbLayout } from "../../src/session/lcm/db-layout"
+import { resolveArtifactPath, writeLcmArtifact } from "../../src/session/lcm/artifacts"
 import { LCM_TOKEN_BUDGET_CACHE_VERSION } from "../../src/session/lcm/token-budget"
 import type {
   ConversationID,
@@ -66,7 +69,39 @@ async function initialize(dataDir: string) {
   return worker
 }
 
-function contextLayer(worker: ReturnType<typeof createLcmDbWorker>) {
+function abortAfterProviderSnapshotDb(db: unknown, controller: AbortController) {
+  const typedDb = db as PGlite
+  return new Proxy(typedDb, {
+    get(target, property, receiver) {
+      if (property === "transaction") {
+        return <T>(run: (tx: PGlite) => Promise<T>) =>
+          target.transaction((tx) => {
+            const wrapped = new Proxy(tx, {
+              get(txTarget, txProperty, txReceiver) {
+                if (txProperty === "query") {
+                  return async (sql: string, params?: unknown[]) => {
+                    const result = await txTarget.query(sql, params)
+                    if (sql.includes("WITH inserted_snapshot AS")) controller.abort()
+                    return result
+                  }
+                }
+                const value = Reflect.get(txTarget, txProperty, txReceiver)
+                return typeof value === "function" ? value.bind(txTarget) : value
+              },
+            })
+            return run(wrapped as unknown as PGlite)
+          })
+      }
+      const value = Reflect.get(target, property, receiver)
+      return typeof value === "function" ? value.bind(target) : value
+    },
+  })
+}
+
+function contextLayer(
+  worker: ReturnType<typeof createLcmDbWorker>,
+  options?: { abortAfterProviderSnapshot?: AbortController },
+) {
   const dbLayer = Layer.succeed(
     LcmDb.Service,
     LcmDb.Service.of({
@@ -79,7 +114,19 @@ function contextLayer(worker: ReturnType<typeof createLcmDbWorker>) {
         }),
       executeForeground: (input) =>
         Effect.tryPromise({
-          try: () => worker.executeForeground(input),
+          try: () =>
+            worker.executeForeground({
+              ...input,
+              run: (db, control) =>
+                input.run(
+                  options?.abortAfterProviderSnapshot && input.purpose === "assembly"
+                    ? abortAfterProviderSnapshotDb(db, options.abortAfterProviderSnapshot)
+                    : db,
+                  options?.abortAfterProviderSnapshot && input.purpose === "assembly"
+                    ? { abortSignal: options.abortAfterProviderSnapshot.signal }
+                    : control,
+                ),
+            }),
           catch: (error) => error as LcmSafeError,
         }),
       close: () => Effect.promise(() => worker.close()),
@@ -91,8 +138,9 @@ function contextLayer(worker: ReturnType<typeof createLcmDbWorker>) {
 function runContext<A, E>(
   worker: ReturnType<typeof createLcmDbWorker>,
   effect: Effect.Effect<A, E, LcmContextService>,
+  options?: { abortAfterProviderSnapshot?: AbortController },
 ) {
-  return Effect.runPromise(effect.pipe(Effect.provide(contextLayer(worker))))
+  return Effect.runPromise(effect.pipe(Effect.provide(contextLayer(worker, options))))
 }
 
 async function query<T>(worker: ReturnType<typeof createLcmDbWorker>, sql: string, params: unknown[] = []) {
@@ -481,6 +529,56 @@ async function seedAssemblyConversation(db: PGlite) {
   }
 }
 
+async function seedStandaloneLargeFileMarker(db: PGlite) {
+  await db.query(
+    `
+      INSERT INTO lcm_large_files (
+        file_id,
+        conversation_id,
+        source_kind,
+        mime_type,
+        preview_text,
+        artifact_storage_kind,
+        created_at_ms,
+        updated_at_ms
+      )
+      VALUES ('file_m36_marker', $1, 'inline', 'text/plain', 'initial marker preview', 'none', $2, $2)
+    `,
+    [conversationID, now + 4],
+  )
+  await db.query(
+    `
+      UPDATE lcm_context_items
+      SET item_order = -item_order
+      WHERE conversation_id = $1 AND item_order >= 4
+    `,
+    [conversationID],
+  )
+  await db.query(
+    `
+      UPDATE lcm_context_items
+      SET item_order = -item_order + 1
+      WHERE conversation_id = $1 AND item_order < 0
+    `,
+    [conversationID],
+  )
+  await db.query(
+    `
+      INSERT INTO lcm_context_items (
+        context_item_id,
+        conversation_id,
+        item_order,
+        item_type,
+        file_id,
+        created_at_ms,
+        updated_at_ms
+      )
+      VALUES ('ctx_m36_marker', $1, 4, 'large_file_marker', 'file_m36_marker', $2, $2)
+    `,
+    [conversationID, now + 4],
+  )
+}
+
 function visibility(): LcmMessageVisibilityInput {
   return {
     version: "kilo-prompt-queue-visibility-v1",
@@ -528,17 +626,30 @@ function renderOptions(): LcmAssemblyInput["renderOptions"] {
   }
 }
 
-function thresholdInput(renderOptionsOverride = renderOptions()): LcmRawLeafThresholdInput {
+function thresholdInput(
+  renderOptionsOverride = renderOptions(),
+  preparation = renderPreparation(),
+): LcmRawLeafThresholdInput {
   return {
     conversationID,
     renderOptions: renderOptionsOverride,
     providerContextLimit: 100_000,
     providerOutputLimit: 8_192,
-    renderPreparation: renderPreparation(),
+    renderPreparation: preparation,
+    targetCurrentUser: {
+      sourceSessionID: sessionID,
+      sourceMessageID: "msg_m36_user_current",
+      messageRowID: "msg_m36_row_5",
+      promptOperationID: operationID("current"),
+      visibilityBaseMessageID: "msg_m36_user_current",
+    },
   }
 }
 
-function assemblyInput(renderOptionsOverride = renderOptions()): LcmAssemblyInput & {
+function assemblyInput(
+  renderOptionsOverride = renderOptions(),
+  preparation = renderPreparation(),
+): LcmAssemblyInput & {
   renderPreparation: LcmRawLeafRenderPreparationInput
 } {
   return {
@@ -552,7 +663,7 @@ function assemblyInput(renderOptionsOverride = renderOptions()): LcmAssemblyInpu
       visibilityBaseMessageID: "msg_m36_user_current",
     },
     renderOptions: renderOptionsOverride,
-    renderPreparation: renderPreparation(),
+    renderPreparation: preparation,
   }
 }
 
@@ -581,16 +692,17 @@ test("lcm:assembly-token-budget writes provider-safe v2 snapshots and active ren
   const worker = await initialize(path.join(tmp.path, "lcm"))
   try {
     await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    const preparation = renderPreparation()
 
     const threshold = await runContext(
       worker,
-      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput())),
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), preparation))),
     )
     const assembly = await runContext(
       worker,
       LcmContextService.use((svc) =>
         svc.assembleModelMessages({
-          ...assemblyInput(),
+          ...assemblyInput(renderOptions(), preparation),
           threshold,
         } as Parameters<typeof svc.assembleModelMessages>[0]),
       ),
@@ -774,6 +886,746 @@ test("lcm:assembly-token-budget changes cache identity for source placement and 
   }
 })
 
+test("lcm:assembly-token-budget rejects changed preparation instead of reusing an old budget", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    const thresholdPreparation = {
+      ...renderPreparation(),
+      resolveSystem: () => Effect.succeed(["threshold system"]),
+    } satisfies LcmRawLeafRenderPreparationInput
+    const threshold = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), thresholdPreparation))),
+    )
+    const assemblyPreparation = {
+      ...renderPreparation(),
+      resolveSystem: () => Effect.succeed(["assembly system ".repeat(100_000)]),
+    } satisfies LcmRawLeafRenderPreparationInput
+    const assembly = await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.assembleModelMessages({
+          ...assemblyInput(renderOptions(), assemblyPreparation),
+          threshold,
+        } as Parameters<typeof svc.assembleModelMessages>[0]),
+      ),
+    )
+    expect(assembly.ok).toBe(false)
+    if (!assembly.ok) {
+      expect(assembly.safeError.diagnosticCode).toBe("lcm_provider_assembly_threshold_cache_mismatch")
+    }
+    const requests = await query<{ count: number }>(
+      worker,
+      "SELECT count(*)::int AS count FROM lcm_provider_request_snapshots WHERE conversation_id = $1",
+      [conversationID],
+    )
+    expect(requests[0]?.count).toBe(0)
+  } finally {
+    await worker.close()
+  }
+})
+
+test("lcm:assembly-token-budget rejects a threshold from another conversation", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    const preparation = renderPreparation()
+    const threshold = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), preparation))),
+    )
+    const wrongConversationThreshold = {
+      ...threshold,
+      conversationID: "conv_m36_other" as ConversationID,
+    }
+    const assembly = await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.assembleModelMessages({
+          ...assemblyInput(renderOptions(), preparation),
+          threshold: wrongConversationThreshold,
+        } as Parameters<typeof svc.assembleModelMessages>[0]),
+      ),
+    )
+    expect(assembly.ok).toBe(false)
+    if (!assembly.ok) {
+      expect(assembly.safeError.diagnosticCode).toBe("lcm_provider_assembly_threshold_conversation_mismatch")
+    }
+  } finally {
+    await worker.close()
+  }
+})
+
+test("lcm:assembly-token-budget rejects mutated provider budget fields on a cached threshold", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    const preparation = renderPreparation()
+    const threshold = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), preparation))),
+    )
+    const mutableThreshold = threshold as { hardLimit: number; providerInputLimit: number }
+    mutableThreshold.hardLimit += 1
+    mutableThreshold.providerInputLimit += 1
+
+    const assembly = await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.assembleModelMessages({
+          ...assemblyInput(renderOptions(), preparation),
+          threshold,
+        } as Parameters<typeof svc.assembleModelMessages>[0]),
+      ),
+    )
+    expect(assembly.ok).toBe(false)
+    if (!assembly.ok) {
+      expect(assembly.safeError.diagnosticCode).toBe("lcm_provider_assembly_threshold_cache_mismatch")
+    }
+    const requests = await query<{ count: number }>(
+      worker,
+      "SELECT count(*)::int AS count FROM lcm_provider_request_snapshots WHERE conversation_id = $1",
+      [conversationID],
+    )
+    expect(requests[0]?.count).toBe(0)
+  } finally {
+    await worker.close()
+  }
+})
+
+test("lcm:assembly-token-budget refreshes cached request-snapshot protection before commit", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    const firstPreparation = renderPreparation()
+    const firstThreshold = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), firstPreparation))),
+    )
+    const firstAssembly = await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.assembleModelMessages({
+          ...assemblyInput(renderOptions(), firstPreparation),
+          threshold: firstThreshold,
+        } as Parameters<typeof svc.assembleModelMessages>[0]),
+      ),
+    )
+    if (!firstAssembly.ok) throw new Error(firstAssembly.safeError.safeMessage)
+
+    const secondPreparation = renderPreparation()
+    const secondThreshold = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), secondPreparation))),
+    )
+    const secondAssembly = await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.assembleModelMessages({
+          ...assemblyInput(renderOptions(), secondPreparation),
+          threshold: secondThreshold,
+        } as Parameters<typeof svc.assembleModelMessages>[0]),
+      ),
+    )
+    if (!secondAssembly.ok) throw new Error(secondAssembly.safeError.safeMessage)
+
+    const snapshots = await query<{
+      request_snapshot_id: string
+      request_snapshot_protection_hash: string
+    }>(
+      worker,
+      `
+        SELECT request_snapshot_id, request_snapshot_protection_hash
+        FROM lcm_provider_request_snapshots
+        WHERE request_snapshot_id = ANY($1::text[])
+      `,
+      [[firstAssembly.providerRequestSnapshotID, secondAssembly.providerRequestSnapshotID]],
+    )
+    const firstHash = snapshots.find(
+      (snapshot) => snapshot.request_snapshot_id === firstAssembly.providerRequestSnapshotID,
+    )?.request_snapshot_protection_hash
+    const secondHash = snapshots.find(
+      (snapshot) => snapshot.request_snapshot_id === secondAssembly.providerRequestSnapshotID,
+    )?.request_snapshot_protection_hash
+    expect(secondHash).not.toBe(firstHash)
+    expect(secondAssembly.preparedProviderPayload.renderInputManifest.requestSnapshotProtectionHash).toBe(secondHash!)
+  } finally {
+    await worker.close()
+  }
+})
+
+for (const cacheMode of ["cached"] as const) {
+  test(`lcm:assembly-token-budget rejects ${cacheMode} assembly after conversation authority changes`, async () => {
+    await using tmp = await tmpdir()
+    const worker = await initialize(path.join(tmp.path, "lcm"))
+    try {
+      await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+      const preparation = renderPreparation()
+      const threshold = await runContext(
+        worker,
+        LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), preparation))),
+      )
+      await query<never>(
+        worker,
+        `
+          UPDATE lcm_conversations
+          SET lifecycle_state = 'recovery_required',
+              updated_at_ms = updated_at_ms + 1
+          WHERE conversation_id = $1
+        `,
+        [conversationID],
+      )
+
+      const assembly = await runContext(
+        worker,
+        LcmContextService.use((svc) =>
+          svc.assembleModelMessages({
+            ...assemblyInput(renderOptions(), cacheMode === "cached" ? preparation : renderPreparation()),
+            threshold,
+          } as Parameters<typeof svc.assembleModelMessages>[0]),
+        ),
+      )
+      expect(assembly.ok).toBe(false)
+      if (!assembly.ok) {
+        expect(assembly.safeError.diagnosticCode).toBe("lcm_provider_assembly_threshold_authority_stale")
+      }
+      const requests = await query<{ count: number }>(
+        worker,
+        "SELECT count(*)::int AS count FROM lcm_provider_request_snapshots WHERE conversation_id = $1",
+        [conversationID],
+      )
+      expect(requests[0]?.count).toBe(0)
+    } finally {
+      await worker.close()
+    }
+  })
+}
+
+test("lcm:assembly-token-budget rejects cached assembly after durable strategy authority changes", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    const preparation = renderPreparation()
+    const threshold = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), preparation))),
+    )
+    await query<never>(
+      worker,
+      `
+        UPDATE lcm_context_snapshots
+        SET strategy = CASE strategy WHEN 'upward' THEN 'dolt' ELSE 'upward' END
+        WHERE snapshot_id = (
+          SELECT snapshot_id
+          FROM lcm_context_snapshots
+          WHERE conversation_id = $1
+          ORDER BY created_at_ms DESC, snapshot_id DESC
+          LIMIT 1
+        )
+      `,
+      [conversationID],
+    )
+
+    const assembly = await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.assembleModelMessages({
+          ...assemblyInput(renderOptions(), preparation),
+          threshold,
+        } as Parameters<typeof svc.assembleModelMessages>[0]),
+      ),
+    )
+    expect(assembly.ok).toBe(false)
+    if (!assembly.ok) {
+      expect(assembly.safeError.diagnosticCode).toBe("lcm_provider_assembly_threshold_authority_stale")
+    }
+  } finally {
+    await worker.close()
+  }
+})
+
+test("lcm:assembly-token-budget rejects cached assembly from initially invalid lifecycle or capability", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    await query<never>(
+      worker,
+      "UPDATE lcm_conversations SET lifecycle_state = 'recovery_required' WHERE conversation_id = $1",
+      [conversationID],
+    )
+    const recoveryPreparation = renderPreparation()
+    const recoveryThreshold = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), recoveryPreparation))),
+    )
+    const recoveryAssembly = await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.assembleModelMessages({
+          ...assemblyInput(renderOptions(), recoveryPreparation),
+          threshold: recoveryThreshold,
+        } as Parameters<typeof svc.assembleModelMessages>[0]),
+      ),
+    )
+    expect(recoveryAssembly.ok).toBe(false)
+    if (!recoveryAssembly.ok) {
+      expect(recoveryAssembly.safeError.diagnosticCode).toBe("lcm_provider_assembly_threshold_authority_stale")
+    }
+
+    await query<never>(
+      worker,
+      "UPDATE lcm_conversations SET lifecycle_state = 'lcm_active' WHERE conversation_id = $1",
+      [conversationID],
+    )
+    const childOptions = { ...renderOptions(), taskCapabilityClass: "task_child" as const }
+    const childPreparation = renderPreparation()
+    const childThreshold = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(childOptions, childPreparation))),
+    )
+    const childAssembly = await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.assembleModelMessages({
+          ...assemblyInput(childOptions, childPreparation),
+          threshold: childThreshold,
+        } as Parameters<typeof svc.assembleModelMessages>[0]),
+      ),
+    )
+    expect(childAssembly.ok).toBe(false)
+    if (!childAssembly.ok) {
+      expect(childAssembly.safeError.diagnosticCode).toBe("lcm_provider_assembly_threshold_authority_stale")
+    }
+    const requests = await query<{ count: number }>(
+      worker,
+      "SELECT count(*)::int AS count FROM lcm_provider_request_snapshots WHERE conversation_id = $1",
+      [conversationID],
+    )
+    expect(requests[0]?.count).toBe(0)
+  } finally {
+    await worker.close()
+  }
+})
+
+test("lcm:assembly-token-budget rejects post-threshold consumption and provider-overhead drift", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    const priorAssembly = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.assembleModelMessages(assemblyInput())),
+    )
+    if (!priorAssembly.ok) throw new Error(priorAssembly.safeError.safeMessage)
+
+    const consumptionPreparation = renderPreparation()
+    const consumptionThreshold = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), consumptionPreparation))),
+    )
+    await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.finalizeProviderRequestSnapshot({
+          requestSnapshotID: priorAssembly.providerRequestSnapshotID,
+          conversationID,
+          status: "resolved",
+          nowMs: now + 100,
+        }),
+      ),
+    )
+    const consumptionAssembly = await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.assembleModelMessages({
+          ...assemblyInput(renderOptions(), consumptionPreparation),
+          threshold: consumptionThreshold,
+        } as Parameters<typeof svc.assembleModelMessages>[0]),
+      ),
+    )
+    expect(consumptionAssembly.ok).toBe(false)
+    if (!consumptionAssembly.ok) {
+      expect(consumptionAssembly.safeError.diagnosticCode).toBe("lcm_provider_assembly_threshold_budget_stale")
+    }
+
+    const overheadPreparation = renderPreparation()
+    const overheadThreshold = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), overheadPreparation))),
+    )
+    await query<never>(
+      worker,
+      `
+        INSERT INTO lcm_provider_transform_overheads (
+          provider_id, model_id, provider_family, max_observed_tokens, last_observed_tokens,
+          sample_count, created_at_ms, updated_at_ms
+        )
+        VALUES ($1, $2, 'openai_compatible', 4000, 4000, 1, $3, $3)
+      `,
+      [providerID, modelID, now + 200],
+    )
+    const overheadAssembly = await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.assembleModelMessages({
+          ...assemblyInput(renderOptions(), overheadPreparation),
+          threshold: overheadThreshold,
+        } as Parameters<typeof svc.assembleModelMessages>[0]),
+      ),
+    )
+    expect(overheadAssembly.ok).toBe(false)
+    if (!overheadAssembly.ok) {
+      expect(overheadAssembly.safeError.diagnosticCode).toBe("lcm_provider_assembly_threshold_budget_stale")
+    }
+    const requests = await query<{ count: number }>(
+      worker,
+      "SELECT count(*)::int AS count FROM lcm_provider_request_snapshots WHERE conversation_id = $1",
+      [conversationID],
+    )
+    expect(requests[0]?.count).toBe(1)
+  } finally {
+    await worker.close()
+  }
+})
+
+for (const cacheMode of ["cached"] as const) {
+  test(`lcm:assembly-token-budget rejects ${cacheMode} threshold after active context changes`, async () => {
+    await using tmp = await tmpdir()
+    const worker = await initialize(path.join(tmp.path, "lcm"))
+    try {
+      await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+      const preparation = renderPreparation()
+      const threshold = await runContext(
+        worker,
+        LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), preparation))),
+      )
+      await worker.executeForeground(
+        request({
+          run: async (db) => {
+            await (db as PGlite).query(
+              `
+              UPDATE lcm_context_items
+              SET cue_payload_json = jsonb_set(
+                    cue_payload_json,
+                    '{cueText}',
+                    '"updated cue after threshold"'::jsonb
+                  ),
+                  updated_at_ms = updated_at_ms + 1
+              WHERE conversation_id = $1
+                AND context_item_id = 'ctx_m36_cue'
+            `,
+              [conversationID],
+            )
+          },
+        }),
+      )
+
+      const assembly = await runContext(
+        worker,
+        LcmContextService.use((svc) =>
+          svc.assembleModelMessages({
+            ...assemblyInput(renderOptions(), cacheMode === "cached" ? preparation : renderPreparation()),
+            threshold,
+          } as Parameters<typeof svc.assembleModelMessages>[0]),
+        ),
+      )
+      expect(assembly.ok).toBe(false)
+      if (!assembly.ok) {
+        expect(assembly.safeError.diagnosticCode).toBe("lcm_provider_assembly_threshold_context_stale")
+      }
+      const requests = await query<{ count: number | string | bigint }>(
+        worker,
+        "SELECT count(*) AS count FROM lcm_provider_request_snapshots WHERE conversation_id = $1",
+        [conversationID],
+      )
+      expect(Number(requests[0]?.count ?? 0)).toBe(0)
+    } finally {
+      await worker.close()
+    }
+  })
+
+  test(`lcm:assembly-token-budget rejects ${cacheMode} threshold after large-file marker rendering changes`, async () => {
+    await using tmp = await tmpdir()
+    const worker = await initialize(path.join(tmp.path, "lcm"))
+    try {
+      await worker.executeForeground(
+        request({
+          run: async (db) => {
+            const typedDb = db as PGlite
+            await seedAssemblyConversation(typedDb)
+            await seedStandaloneLargeFileMarker(typedDb)
+          },
+        }),
+      )
+      const preparation = renderPreparation()
+      const threshold = await runContext(
+        worker,
+        LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), preparation))),
+      )
+      await worker.executeForeground(
+        request({
+          run: async (db) => {
+            await (db as PGlite).query(
+              `
+              UPDATE lcm_large_files
+              SET preview_text = 'updated marker preview',
+                  exploration_summary_text = 'updated exploration summary',
+                  exploration_status = 'completed',
+                  updated_at_ms = updated_at_ms + 1
+              WHERE conversation_id = $1 AND file_id = 'file_m36_marker'
+            `,
+              [conversationID],
+            )
+          },
+        }),
+      )
+
+      const assembly = await runContext(
+        worker,
+        LcmContextService.use((svc) =>
+          svc.assembleModelMessages({
+            ...assemblyInput(renderOptions(), cacheMode === "cached" ? preparation : renderPreparation()),
+            threshold,
+          } as Parameters<typeof svc.assembleModelMessages>[0]),
+        ),
+      )
+      expect(assembly.ok).toBe(false)
+      if (!assembly.ok) {
+        expect(assembly.safeError.diagnosticCode).toBe("lcm_provider_assembly_threshold_context_stale")
+      }
+      const requests = await query<{ count: number | string | bigint }>(
+        worker,
+        "SELECT count(*) AS count FROM lcm_provider_request_snapshots WHERE conversation_id = $1",
+        [conversationID],
+      )
+      expect(Number(requests[0]?.count ?? 0)).toBe(0)
+    } finally {
+      await worker.close()
+    }
+  })
+}
+
+test("lcm:assembly-token-budget cached commit rejects a missing referenced artifact", async () => {
+  await using tmp = await tmpdir()
+  const dataDir = path.join(tmp.path, "lcm")
+  const worker = await initialize(dataDir)
+  try {
+    const artifactRoot = resolveLcmDbLayout(dataDir).artifactsDir
+    const artifact = await writeLcmArtifact({
+      artifactRoot,
+      bytes: Buffer.from("assembly token budget artifact", "utf8"),
+    })
+    await worker.executeForeground(
+      request({
+        run: async (db) => {
+          const typedDb = db as PGlite
+          await seedAssemblyConversation(typedDb)
+          await seedStandaloneLargeFileMarker(typedDb)
+          await typedDb.query(
+            `
+              UPDATE lcm_large_files
+              SET artifact_storage_kind = 'file',
+                  artifact_path = $2,
+                  artifact_byte_count = $3,
+                  artifact_content_sha256 = $4
+              WHERE conversation_id = $1 AND file_id = 'file_m36_marker'
+            `,
+            [conversationID, artifact.artifactPath, artifact.byteCount, artifact.sha256],
+          )
+        },
+      }),
+    )
+    const preparation = renderPreparation()
+    const threshold = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), preparation))),
+    )
+    await fs.rm(resolveArtifactPath({ artifactRoot, artifactPath: artifact.artifactPath }))
+
+    const assembly = await runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.assembleModelMessages({
+          ...assemblyInput(renderOptions(), preparation),
+          threshold,
+        } as Parameters<typeof svc.assembleModelMessages>[0]),
+      ),
+    )
+    expect(assembly.ok).toBe(false)
+    if (!assembly.ok) {
+      expect(assembly.safeError.diagnosticCode).toBe("lcm_provider_assembly_threshold_context_stale")
+    }
+    const requests = await query<{ count: number }>(
+      worker,
+      "SELECT count(*)::int AS count FROM lcm_provider_request_snapshots WHERE conversation_id = $1",
+      [conversationID],
+    )
+    expect(requests[0]?.count).toBe(0)
+  } finally {
+    await worker.close()
+  }
+})
+
+test("lcm:assembly-token-budget rejects source mutation during threshold preparation before persistence", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    const preparation = {
+      ...renderPreparation(),
+      prepareRenderOnlyMessages: ({ messages }) =>
+        Effect.promise(async () => {
+          await worker.executeForeground(
+            request({
+              run: async (db) => {
+                await (db as PGlite).query(
+                  `
+                    UPDATE lcm_context_items
+                    SET cue_payload_json = jsonb_set(
+                          cue_payload_json,
+                          '{cueText}',
+                          '"mutated during threshold preparation"'::jsonb
+                        ),
+                        updated_at_ms = updated_at_ms + 1
+                    WHERE conversation_id = $1
+                      AND context_item_id = 'ctx_m36_cue'
+                  `,
+                  [conversationID],
+                )
+              },
+            }),
+          )
+          return messages
+        }),
+    } satisfies LcmRawLeafRenderPreparationInput
+
+    await expect(
+      runContext(
+        worker,
+        LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), preparation))),
+      ),
+    ).rejects.toMatchObject({ diagnosticCode: "lcm_threshold_context_stale" })
+    const evidence = await query<{ snapshot_count: number; cached_count: number }>(
+      worker,
+      `
+        SELECT
+          (SELECT count(*)::int FROM lcm_context_snapshots WHERE conversation_id = $1) AS snapshot_count,
+          (SELECT count(*)::int FROM lcm_context_items
+           WHERE conversation_id = $1 AND cache_key IS NOT NULL) AS cached_count
+      `,
+      [conversationID],
+    )
+    expect(evidence[0]).toEqual({ snapshot_count: 0, cached_count: 0 })
+  } finally {
+    await worker.close()
+  }
+})
+
+test("lcm:assembly-token-budget rejects consumption changes during threshold preparation", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    const priorAssembly = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.assembleModelMessages(assemblyInput())),
+    )
+    if (!priorAssembly.ok) throw new Error(priorAssembly.safeError.safeMessage)
+    let finalized = false
+    const preparation = {
+      ...renderPreparation(),
+      prepareRenderOnlyMessages: ({ messages }) =>
+        Effect.promise(async () => {
+          if (!finalized) {
+            finalized = true
+            await runContext(
+              worker,
+              LcmContextService.use((svc) =>
+                svc.finalizeProviderRequestSnapshot({
+                  requestSnapshotID: priorAssembly.providerRequestSnapshotID,
+                  conversationID,
+                  status: "resolved",
+                  nowMs: now + 100,
+                }),
+              ),
+            )
+          }
+          return messages
+        }),
+    } satisfies LcmRawLeafRenderPreparationInput
+
+    await expect(
+      runContext(
+        worker,
+        LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), preparation))),
+      ),
+    ).rejects.toMatchObject({ diagnosticCode: "lcm_threshold_context_stale" })
+    const snapshots = await query<{ count: number }>(
+      worker,
+      "SELECT count(*)::int AS count FROM lcm_context_snapshots WHERE conversation_id = $1",
+      [conversationID],
+    )
+    expect(snapshots[0]?.count).toBe(0)
+  } finally {
+    await worker.close()
+  }
+})
+
+test("lcm:assembly-token-budget rolls back cached snapshot writes after internal DB cancellation", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  try {
+    await worker.executeForeground(request({ run: async (db) => seedAssemblyConversation(db as PGlite) }))
+    const preparation = renderPreparation()
+    const threshold = await runContext(
+      worker,
+      LcmContextService.use((svc) => svc.isOverThreshold(thresholdInput(renderOptions(), preparation))),
+    )
+    const before = await query<{ count: number }>(
+      worker,
+      "SELECT count(*)::int AS count FROM lcm_context_snapshots WHERE conversation_id = $1",
+      [conversationID],
+    )
+    const internalController = new AbortController()
+
+    await expect(
+      runContext(
+        worker,
+        LcmContextService.use((svc) =>
+          svc.assembleModelMessages({
+            ...assemblyInput(renderOptions(), preparation),
+            threshold,
+          } as Parameters<typeof svc.assembleModelMessages>[0]),
+        ),
+        { abortAfterProviderSnapshot: internalController },
+      ),
+    ).rejects.toMatchObject({
+      code: "canceled",
+      diagnosticCode: "lcm_provider_assembly_canceled_after_cached_request_snapshot",
+    })
+
+    const after = await query<{ context_count: number; request_count: number }>(
+      worker,
+      `
+        SELECT
+          (SELECT count(*)::int FROM lcm_context_snapshots WHERE conversation_id = $1) AS context_count,
+          (SELECT count(*)::int FROM lcm_provider_request_snapshots WHERE conversation_id = $1) AS request_count
+      `,
+      [conversationID],
+    )
+    expect(after[0]).toEqual({ context_count: before[0]?.count, request_count: 0 })
+  } finally {
+    await worker.close()
+  }
+})
+
 test("lcm:assembly-token-budget cooperatively cancels after render preparation and skips snapshots", async () => {
   await using tmp = await tmpdir()
   const worker = await initialize(path.join(tmp.path, "lcm"))
@@ -844,25 +1696,50 @@ test("lcm:assembly-token-budget clears non-provider snapshot token cache metadat
       worker,
       LcmContextService.use((svc) => svc.rebuildActiveContext({ conversationID, reason: "non-provider-cache-clear" })),
     )
-    expect(rebuilt).toMatchObject({ status: "rebuilt", itemsRebuilt: 5 })
+    expect(rebuilt).toMatchObject({ status: "rebuilt", itemsRebuilt: 3 })
 
-    const rows = await query<{ token_count: number | null; cache_key: string | null; cache_version: number | null }>(
+    const rows = await query<{
+      item_type: string
+      message_row_id: string | null
+      summary_id: string | null
+      token_count: number | null
+      cache_key: string | null
+      cache_version: number | null
+    }>(
       worker,
       `
-        SELECT token_count, cache_key, cache_version
+        SELECT item_type, message_row_id, summary_id, token_count, cache_key, cache_version
         FROM lcm_context_items
         WHERE conversation_id = $1
         ORDER BY item_order
       `,
       [conversationID],
     )
-    expect(rows).toHaveLength(5)
     expect(rows).toEqual([
-      { token_count: null, cache_key: null, cache_version: null },
-      { token_count: null, cache_key: null, cache_version: null },
-      { token_count: null, cache_key: null, cache_version: null },
-      { token_count: null, cache_key: null, cache_version: null },
-      { token_count: null, cache_key: null, cache_version: null },
+      {
+        item_type: "summary",
+        message_row_id: null,
+        summary_id: "sum_m36_provider",
+        token_count: null,
+        cache_key: null,
+        cache_version: null,
+      },
+      {
+        item_type: "raw_message",
+        message_row_id: "msg_m36_row_2",
+        summary_id: null,
+        token_count: null,
+        cache_key: null,
+        cache_version: null,
+      },
+      {
+        item_type: "raw_message",
+        message_row_id: "msg_m36_row_5",
+        summary_id: null,
+        token_count: null,
+        cache_key: null,
+        cache_version: null,
+      },
     ])
   } finally {
     await worker.close()

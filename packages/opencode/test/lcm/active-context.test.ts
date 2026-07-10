@@ -15,6 +15,9 @@ import {
   writeContextSnapshot,
 } from "../../src/session/lcm/context"
 import { LCM_DB_GATE_SCHEMA_VERSION } from "../../src/session/lcm/db-smoke"
+import { rowToItem } from "../../src/session/lcm/context-core"
+import { loadSummaryMetadata, loadVisibilityProvenance } from "../../src/session/lcm/context-render"
+import { loadContextRows } from "../../src/session/lcm/context-state"
 import type { LcmDbRequest, LcmSafeError, OperationID, SessionID } from "../../src/session/lcm/types"
 import { LCM_HARNESS_SENTINELS, LCM_RECOVERY_FIXTURE_IDS, seedRecoveryConversationFixture } from "./harness"
 
@@ -98,13 +101,66 @@ async function writeSnapshotAndDeleteContext(worker: ReturnType<typeof createLcm
   await worker.executeForeground(
     request({
       run: async (db) => {
+        const typedDb = db as PGlite
         await writeContextSnapshot({
-          db: db as PGlite,
+          db: typedDb,
+          conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID,
+          reason: "before-condensation",
+          nowMs: 1_777_500_007_050,
+        })
+        await typedDb.query(
+          `
+            INSERT INTO lcm_messages (
+              message_row_id,
+              conversation_id,
+              source_session_id,
+              source_message_id,
+              role,
+              message_order,
+              created_at_ms,
+              metadata_json
+            )
+            VALUES ('msg_m08_snapshot_raw', $1, $2, 'source_msg_m08_snapshot_raw', 'user', 2,
+                    1777500007900, '{}'::jsonb)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID, LCM_RECOVERY_FIXTURE_IDS.sessionID],
+        )
+        await typedDb.query(
+          `
+            INSERT INTO lcm_message_parts (
+              part_row_id,
+              message_row_id,
+              conversation_id,
+              source_part_key,
+              part_order,
+              part_kind,
+              text_content,
+              content_sha256,
+              search_text,
+              created_at_ms
+            )
+            VALUES ('part_m08_snapshot_raw', 'msg_m08_snapshot_raw', $1,
+                    'derived:source_msg_m08_snapshot_raw:1:text:i0s0c0', 1, 'text', 'snapshot raw source',
+                    repeat('d', 64), 'snapshot raw source', 1777500007900)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+        )
+        await typedDb.query(
+          `
+            UPDATE lcm_context_items
+            SET message_row_id = 'msg_m08_snapshot_raw'
+            WHERE conversation_id = $1
+              AND context_item_id = $2
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID, LCM_RECOVERY_FIXTURE_IDS.rawContextID],
+        )
+        await writeContextSnapshot({
+          db: typedDb,
           conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID,
           reason: "fixture",
           nowMs: 1_777_500_008_000,
         })
-        await (db as PGlite).query("DELETE FROM lcm_context_items WHERE conversation_id = $1", [
+        await typedDb.query("DELETE FROM lcm_context_items WHERE conversation_id = $1", [
           LCM_RECOVERY_FIXTURE_IDS.conversationID,
         ])
       },
@@ -242,6 +298,738 @@ test("rebuild restores the newest valid snapshot manifest atomically", async () 
     { context_item_id: LCM_RECOVERY_FIXTURE_IDS.rawContextID, item_order: 1, item_type: "raw_message" },
     { context_item_id: LCM_RECOVERY_FIXTURE_IDS.summaryContextID, item_order: 2, item_type: "summary" },
   ])
+  await worker.close()
+})
+
+test("durable rebuild activates only archived summary roots and keeps descendant messages covered", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  await seed(worker)
+  await worker.executeForeground(
+    request({
+      run: async (db) => {
+        const typedDb = db as PGlite
+        await typedDb.query(
+          `
+            INSERT INTO lcm_summaries (
+              summary_id,
+              conversation_id,
+              summary_type,
+              content_text,
+              source_token_count,
+              summary_token_count,
+              summary_level,
+              prompt_version,
+              strategy,
+              objective_status,
+              fallback_mode,
+              created_at_ms
+            )
+            VALUES ('sum_m08_bindle_root', $1, 'bindle', 'root bindle', 20, 8, 1,
+                    'summary-condense-v2', 'dolt', 'accepted', 'none', 1777500007100)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+        )
+        await typedDb.query(
+          `
+            INSERT INTO lcm_summary_parents (summary_id, parent_summary_id, parent_order)
+            VALUES ('sum_m08_bindle_root', $1, 1)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.summaryID],
+        )
+        await typedDb.query(
+          `
+            INSERT INTO lcm_summary_lineage_pointers (
+              pointer_id,
+              conversation_id,
+              summary_id,
+              root_summary_id,
+              pointer_kind,
+              created_at_ms
+            )
+            VALUES ('ptr_m08_bindle_root', $1, 'sum_m08_bindle_root', 'sum_m08_bindle_root',
+                    'archive_stub', 1777500007200)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+        )
+        await typedDb.query("DELETE FROM lcm_context_items WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+      },
+    }),
+  )
+
+  const result = await runContext(
+    worker,
+    LcmContextService.use((svc) =>
+      svc.rebuildActiveContext({ conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID, reason: "lineage-roots" }),
+    ),
+  )
+  expect(result).toMatchObject({ status: "rebuilt", itemsRebuilt: 1 })
+  const rows = await query<{
+    item_type: string
+    summary_id: string | null
+    pointer_id: string | null
+    message_row_id: string | null
+  }>(
+    worker,
+    `
+      SELECT item_type, summary_id, pointer_id, message_row_id
+      FROM lcm_context_items
+      WHERE conversation_id = $1
+      ORDER BY item_order
+    `,
+    [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+  )
+  expect(rows).toEqual([
+    {
+      item_type: "archive_stub",
+      summary_id: "sum_m08_bindle_root",
+      pointer_id: "ptr_m08_bindle_root",
+      message_row_id: null,
+    },
+  ])
+  const lineage = await worker.executeForeground(
+    request({
+      run: async (db) => {
+        const typedDb = db as PGlite
+        const contextRows = await loadContextRows(typedDb, LCM_RECOVERY_FIXTURE_IDS.conversationID)
+        const metadata = await loadSummaryMetadata(typedDb, LCM_RECOVERY_FIXTURE_IDS.conversationID, contextRows)
+        const unrelatedVisibility = await loadVisibilityProvenance({
+          db: typedDb,
+          conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID,
+          contextItems: contextRows.map(rowToItem),
+          hiddenSourceMessageIDs: ["source_msg_unrelated"],
+        })
+        const hiddenVisibility = await loadVisibilityProvenance({
+          db: typedDb,
+          conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID,
+          contextItems: contextRows.map(rowToItem),
+          hiddenSourceMessageIDs: ["source_msg_harness_user"],
+        })
+        const root = metadata.get("sum_m08_bindle_root")
+        return {
+          coveredMessageRowIDs: root ? [...root.coveredMessageRowIDs] : [],
+          coveredSourceChronology: root?.coveredSourceChronology,
+          unrelatedHiddenContextItemIDs: [...unrelatedVisibility.hiddenContextItemIDs],
+          unrelatedMissingContextItemIDs: [...unrelatedVisibility.missingContextItemIDs],
+          hiddenContextItemIDs: [...hiddenVisibility.hiddenContextItemIDs],
+          contextItemIDs: contextRows.map((row) => row.context_item_id),
+        }
+      },
+    }),
+  )
+  expect(lineage).toEqual({
+    coveredMessageRowIDs: [LCM_RECOVERY_FIXTURE_IDS.messageRowID],
+    coveredSourceChronology: 1,
+    unrelatedHiddenContextItemIDs: [],
+    unrelatedMissingContextItemIDs: [],
+    hiddenContextItemIDs: lineage.contextItemIDs,
+    contextItemIDs: lineage.contextItemIDs,
+  })
+  await worker.close()
+})
+
+test("snapshot restore skips manifests that predate durable source", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  await seed(worker)
+  await worker.executeForeground(
+    request({
+      run: async (db) => {
+        const typedDb = db as PGlite
+        await writeContextSnapshot({
+          db: typedDb,
+          conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID,
+          reason: "before-later-source",
+          nowMs: 1_777_500_008_000,
+        })
+        await typedDb.query(
+          `
+            INSERT INTO lcm_messages (
+              message_row_id,
+              conversation_id,
+              source_session_id,
+              source_message_id,
+              role,
+              message_order,
+              created_at_ms,
+              metadata_json
+            )
+            VALUES ('msg_m08_later_durable', $1, $2, 'source_msg_m08_later', 'user', 2,
+                    1777500008100, '{}'::jsonb)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID, LCM_RECOVERY_FIXTURE_IDS.sessionID],
+        )
+        await typedDb.query(
+          `
+            INSERT INTO lcm_message_parts (
+              part_row_id,
+              message_row_id,
+              conversation_id,
+              source_part_key,
+              part_order,
+              part_kind,
+              text_content,
+              content_sha256,
+              search_text,
+              created_at_ms
+            )
+            VALUES ('part_m08_later_durable', 'msg_m08_later_durable', $1,
+                    'derived:source_msg_m08_later:1:text:i0s0c0', 1, 'text', 'later durable source',
+                    repeat('c', 64), 'later durable source', 1777500008100)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+        )
+        await typedDb.query("DELETE FROM lcm_context_items WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+      },
+    }),
+  )
+
+  const result = await runContext(
+    worker,
+    LcmContextService.use((svc) =>
+      svc.rebuildActiveContext({ conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID, reason: "stale-snapshot" }),
+    ),
+  )
+  expect(result).toMatchObject({ status: "rebuilt", itemsRebuilt: 2 })
+  const rows = await query<{ item_type: string; message_row_id: string | null; summary_id: string | null }>(
+    worker,
+    `
+      SELECT item_type, message_row_id, summary_id
+      FROM lcm_context_items
+      WHERE conversation_id = $1
+      ORDER BY item_order
+    `,
+    [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+  )
+  expect(rows).toEqual([
+    {
+      item_type: "summary",
+      message_row_id: null,
+      summary_id: LCM_RECOVERY_FIXTURE_IDS.summaryID,
+    },
+    {
+      item_type: "raw_message",
+      message_row_id: "msg_m08_later_durable",
+      summary_id: null,
+    },
+  ])
+  await worker.close()
+})
+
+test("durable rebuild ignores finalized metadata-only messages without raw parts", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  await seed(worker)
+  await worker.executeForeground(
+    request({
+      run: async (db) => {
+        const typedDb = db as PGlite
+        await typedDb.query(
+          `
+            INSERT INTO lcm_messages (
+              message_row_id,
+              conversation_id,
+              source_session_id,
+              source_message_id,
+              role,
+              message_order,
+              created_at_ms,
+              metadata_json
+            )
+            VALUES ('msg_m08_metadata_only', $1, $2, 'source_msg_m08_metadata_only', 'assistant', 2,
+                    1777500008125, '{"error":{"name":"MessageAbortedError"}}'::jsonb)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID, LCM_RECOVERY_FIXTURE_IDS.sessionID],
+        )
+        await typedDb.query("DELETE FROM lcm_context_snapshots WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+        await typedDb.query("DELETE FROM lcm_context_items WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+      },
+    }),
+  )
+
+  const result = await runContext(
+    worker,
+    LcmContextService.use((svc) =>
+      svc.rebuildActiveContext({ conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID, reason: "metadata-only" }),
+    ),
+  )
+  expect(result).toMatchObject({ status: "rebuilt", lifecycleState: "passive_synced", itemsRebuilt: 1 })
+  const rows = await query<{ item_type: string; summary_id: string | null; message_row_id: string | null }>(
+    worker,
+    `
+      SELECT item_type, summary_id, message_row_id
+      FROM lcm_context_items
+      WHERE conversation_id = $1
+      ORDER BY item_order
+    `,
+    [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+  )
+  expect(rows).toEqual([
+    {
+      item_type: "summary",
+      summary_id: LCM_RECOVERY_FIXTURE_IDS.summaryID,
+      message_row_id: null,
+    },
+  ])
+  await worker.close()
+})
+
+test("durable rebuild fails closed when summary lineage has no active root", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  await seed(worker)
+  await worker.executeForeground(
+    request({
+      run: async (db) => {
+        const typedDb = db as PGlite
+        await typedDb.query(
+          `
+            INSERT INTO lcm_summaries (
+              summary_id,
+              conversation_id,
+              summary_type,
+              content_text,
+              source_token_count,
+              summary_token_count,
+              summary_level,
+              prompt_version,
+              strategy,
+              objective_status,
+              fallback_mode,
+              created_at_ms
+            )
+            VALUES ('sum_m08_cycle_bindle', $1, 'bindle', 'cycle bindle', 20, 8, 1,
+                    'summary-condense-v2', 'upward', 'accepted', 'none', 1777500008150)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+        )
+        await typedDb.query(
+          `
+            INSERT INTO lcm_summary_parents (summary_id, parent_summary_id, parent_order)
+            VALUES
+              ('sum_m08_cycle_bindle', $1, 1),
+              ($1, 'sum_m08_cycle_bindle', 1)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.summaryID],
+        )
+        await typedDb.query("DELETE FROM lcm_context_snapshots WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+        await typedDb.query("DELETE FROM lcm_context_items WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+      },
+    }),
+  )
+
+  const result = await runContext(
+    worker,
+    LcmContextService.use((svc) =>
+      svc.rebuildActiveContext({ conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID, reason: "summary-cycle" }),
+    ),
+  )
+  expect(result).toMatchObject({
+    status: "failed",
+    lifecycleState: "recovery_failed",
+    safeError: {
+      code: "recovery_required",
+      diagnosticCode: "lcm_context_rebuild_summary_roots_missing",
+    },
+  })
+  const rows = await query<{ count: number | string | bigint }>(
+    worker,
+    "SELECT count(*) AS count FROM lcm_context_items WHERE conversation_id = $1",
+    [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+  )
+  expect(Number(rows[0]?.count ?? 0)).toBe(0)
+  await worker.close()
+})
+
+test("durable rebuild fails closed when a rooted summary lineage contains a descendant cycle", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  await seed(worker)
+  await worker.executeForeground(
+    request({
+      run: async (db) => {
+        const typedDb = db as PGlite
+        await typedDb.query(
+          `
+            INSERT INTO lcm_summaries (
+              summary_id,
+              conversation_id,
+              summary_type,
+              content_text,
+              source_token_count,
+              summary_token_count,
+              summary_level,
+              prompt_version,
+              strategy,
+              objective_status,
+              fallback_mode,
+              created_at_ms
+            )
+            VALUES
+              ('sum_m08_cycle_parent', $1, 'bindle', 'cycle parent', 30, 9, 1,
+               'summary-condense-v2', 'upward', 'accepted', 'none', 1777500008155),
+              ('sum_m08_cycle_root', $1, 'bindle', 'cycle root', 40, 10, 2,
+               'summary-condense-v2', 'upward', 'accepted', 'none', 1777500008156)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+        )
+        await typedDb.query(
+          `
+            INSERT INTO lcm_summary_parents (summary_id, parent_summary_id, parent_order)
+            VALUES
+              ('sum_m08_cycle_root', $1, 1),
+              ($1, 'sum_m08_cycle_parent', 1),
+              ('sum_m08_cycle_parent', $1, 1)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.summaryID],
+        )
+        await typedDb.query("DELETE FROM lcm_context_snapshots WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+        await typedDb.query("DELETE FROM lcm_context_items WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+      },
+    }),
+  )
+
+  const result = await runContext(
+    worker,
+    LcmContextService.use((svc) =>
+      svc.rebuildActiveContext({ conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID, reason: "rooted-cycle" }),
+    ),
+  )
+  expect(result).toMatchObject({
+    status: "failed",
+    lifecycleState: "recovery_failed",
+    safeError: {
+      code: "recovery_required",
+      diagnosticCode: "lcm_context_rebuild_summary_lineage_invalid",
+    },
+  })
+  await worker.close()
+})
+
+test("durable rebuild fails closed when a disconnected summary cycle exists beside a valid root", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  await seed(worker)
+  await worker.executeForeground(
+    request({
+      run: async (db) => {
+        const typedDb = db as PGlite
+        await typedDb.query(
+          `
+            INSERT INTO lcm_summaries (
+              summary_id,
+              conversation_id,
+              summary_type,
+              content_text,
+              source_token_count,
+              summary_token_count,
+              summary_level,
+              prompt_version,
+              strategy,
+              objective_status,
+              fallback_mode,
+              created_at_ms
+            )
+            VALUES
+              ('sum_m08_disconnected_a', $1, 'bindle', 'disconnected a', 30, 9, 1,
+               'summary-condense-v2', 'upward', 'accepted', 'none', 1777500008157),
+              ('sum_m08_disconnected_b', $1, 'bindle', 'disconnected b', 30, 9, 1,
+               'summary-condense-v2', 'upward', 'accepted', 'none', 1777500008158)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+        )
+        await typedDb.query(
+          `
+            INSERT INTO lcm_summary_parents (summary_id, parent_summary_id, parent_order)
+            VALUES
+              ('sum_m08_disconnected_a', 'sum_m08_disconnected_b', 1),
+              ('sum_m08_disconnected_b', 'sum_m08_disconnected_a', 1)
+          `,
+        )
+        await typedDb.query("DELETE FROM lcm_context_snapshots WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+        await typedDb.query("DELETE FROM lcm_context_items WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+      },
+    }),
+  )
+
+  const result = await runContext(
+    worker,
+    LcmContextService.use((svc) =>
+      svc.rebuildActiveContext({
+        conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        reason: "disconnected-cycle",
+      }),
+    ),
+  )
+  expect(result).toMatchObject({
+    status: "failed",
+    lifecycleState: "recovery_failed",
+    safeError: {
+      code: "recovery_required",
+      diagnosticCode: "lcm_context_rebuild_summary_lineage_invalid",
+    },
+  })
+  await worker.close()
+})
+
+test("durable rebuild fails closed when summary lineage exceeds the bounded depth", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  await seed(worker)
+  await worker.executeForeground(
+    request({
+      run: async (db) => {
+        const typedDb = db as PGlite
+        await typedDb.query(
+          `
+            INSERT INTO lcm_summaries (
+              summary_id,
+              conversation_id,
+              summary_type,
+              content_text,
+              source_token_count,
+              summary_token_count,
+              summary_level,
+              prompt_version,
+              strategy,
+              objective_status,
+              fallback_mode,
+              created_at_ms
+            )
+            SELECT format('sum_m08_depth_%s', depth),
+                   $1,
+                   'bindle',
+                   format('depth %s', depth),
+                   30,
+                   9,
+                   depth + 1,
+                   'summary-condense-v2',
+                   'upward',
+                   'accepted',
+                   'none',
+                   1777500008200 + depth
+            FROM generate_series(0, 257) AS depth
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+        )
+        await typedDb.query(
+          `
+            INSERT INTO lcm_summary_parents (summary_id, parent_summary_id, parent_order)
+            SELECT format('sum_m08_depth_%s', depth),
+                   CASE
+                     WHEN depth = 0 THEN $1
+                     ELSE format('sum_m08_depth_%s', depth - 1)
+                   END,
+                   1
+            FROM generate_series(0, 257) AS depth
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.summaryID],
+        )
+        await typedDb.query("DELETE FROM lcm_context_snapshots WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+        await typedDb.query("DELETE FROM lcm_context_items WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+      },
+    }),
+  )
+
+  const result = await runContext(
+    worker,
+    LcmContextService.use((svc) =>
+      svc.rebuildActiveContext({ conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID, reason: "summary-depth" }),
+    ),
+  )
+  expect(result).toMatchObject({
+    status: "failed",
+    lifecycleState: "recovery_failed",
+    safeError: {
+      code: "recovery_required",
+      diagnosticCode: "lcm_context_rebuild_summary_lineage_invalid",
+    },
+  })
+  await worker.close()
+})
+
+test("durable rebuild fails closed instead of omitting an invalid active summary root", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  await seed(worker)
+  await worker.executeForeground(
+    request({
+      run: async (db) => {
+        const typedDb = db as PGlite
+        await typedDb.query(
+          `
+            INSERT INTO lcm_summaries (
+              summary_id,
+              conversation_id,
+              summary_type,
+              content_text,
+              source_token_count,
+              summary_token_count,
+              summary_level,
+              prompt_version,
+              strategy,
+              objective_status,
+              fallback_mode,
+              created_at_ms
+            )
+            VALUES ('sum_m08_invalid_root', $1, 'sprig', 'invalid root', 20, 8, 1,
+                    'summary-leaf-v2', 'upward', 'accepted', 'none', 1777500008160)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+        )
+        await typedDb.query("DELETE FROM lcm_context_snapshots WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+        await typedDb.query("DELETE FROM lcm_context_items WHERE conversation_id = $1", [
+          LCM_RECOVERY_FIXTURE_IDS.conversationID,
+        ])
+      },
+    }),
+  )
+
+  const result = await runContext(
+    worker,
+    LcmContextService.use((svc) =>
+      svc.rebuildActiveContext({ conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID, reason: "invalid-root" }),
+    ),
+  )
+  expect(result).toMatchObject({
+    status: "failed",
+    lifecycleState: "recovery_failed",
+    safeError: {
+      code: "recovery_required",
+      diagnosticCode: "lcm_context_rebuild_summary_roots_invalid",
+    },
+  })
+  const rows = await query<{ count: number | string | bigint }>(
+    worker,
+    "SELECT count(*) AS count FROM lcm_context_items WHERE conversation_id = $1",
+    [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+  )
+  expect(Number(rows[0]?.count ?? 0)).toBe(0)
+  await worker.close()
+})
+
+test("retrieval cue validation rejects cyclic conversation ancestry", async () => {
+  await using tmp = await tmpdir()
+  const worker = await initialize(path.join(tmp.path, "lcm"))
+  await seed(worker)
+  await worker.executeForeground(
+    request({
+      run: async (db) => {
+        const typedDb = db as PGlite
+        await typedDb.query(
+          `
+            INSERT INTO lcm_conversations (
+              conversation_id,
+              source_session_id,
+              parent_session_id,
+              parent_conversation_id,
+              root_conversation_id,
+              project_id,
+              workspace_id,
+              session_directory,
+              worktree_path,
+              boundary_metadata_json,
+              capability_class,
+              lifecycle_state,
+              schema_version,
+              feature_version,
+              created_at_ms,
+              updated_at_ms
+            )
+            SELECT 'conv_m08_cycle_child',
+                   'session_m08_cycle_child',
+                   source_session_id,
+                   conversation_id,
+                   root_conversation_id,
+                   project_id,
+                   workspace_id,
+                   session_directory,
+                   worktree_path,
+                   boundary_metadata_json,
+                   'task_child',
+                   lifecycle_state,
+                   schema_version,
+                   feature_version,
+                   1777500008200,
+                   1777500008200
+            FROM lcm_conversations
+            WHERE conversation_id = $1
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+        )
+        await typedDb.query(
+          `
+            UPDATE lcm_conversations
+            SET parent_conversation_id = 'conv_m08_cycle_child',
+                parent_session_id = 'session_m08_cycle_child'
+            WHERE conversation_id = $1
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+        )
+        await typedDb.query(
+          `
+            INSERT INTO lcm_context_items (
+              context_item_id,
+              conversation_id,
+              item_order,
+              item_type,
+              cue_payload_json,
+              cue_id,
+              cue_lifecycle_state,
+              cue_target_source_message_id,
+              cue_generation_id,
+              created_at_ms,
+              updated_at_ms
+            )
+            VALUES ('ctx_m08_cycle_cue', $1, 3, 'retrieval_cue',
+                    '{"query":"safe","cueText":"safe","summaryIDs":[],"fileIDs":[],"messageRowIDs":[],
+                      "partRowIDs":[],"tokenCount":1,"generatedAt":"2026-07-09T00:00:00.000Z"}'::jsonb,
+                    'cue_m08_cycle', 'active', 'source_msg_harness_user', 'cuegen_m08_cycle',
+                    1777500008300, 1777500008300)
+          `,
+          [LCM_RECOVERY_FIXTURE_IDS.conversationID],
+        )
+      },
+    }),
+  )
+
+  await expect(
+    runContext(
+      worker,
+      LcmContextService.use((svc) =>
+        svc.getCurrentContext({ conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID }),
+      ),
+    ),
+  ).rejects.toMatchObject({
+    code: "invalid_request",
+    diagnosticCode: "lcm_retrieval_cue_ancestor_cycle",
+  })
   await worker.close()
 })
 
@@ -472,6 +1260,20 @@ const invalidManifestCases = [
     },
   },
   {
+    name: "duplicate durable reference",
+    mutate: (manifest: Record<string, unknown>) => {
+      const items = [...(manifest.items as Record<string, unknown>[])]
+      const first: Record<string, unknown> = {
+        ...items[0],
+        itemType: "summary",
+        summaryID: LCM_RECOVERY_FIXTURE_IDS.summaryID,
+      }
+      delete first.messageRowID
+      items[0] = first
+      return { ...manifest, items }
+    },
+  },
+  {
     name: "corrupt token metadata",
     mutate: (manifest: Record<string, unknown>) => {
       const items = [...(manifest.items as Record<string, unknown>[])]
@@ -495,13 +1297,16 @@ for (const fixture of invalidManifestCases) {
         svc.rebuildActiveContext({ conversationID: LCM_RECOVERY_FIXTURE_IDS.conversationID, reason: fixture.name }),
       ),
     )
-    expect(result).toMatchObject({ status: "rebuilt", itemsRebuilt: 1 })
+    expect(result).toMatchObject({ status: "rebuilt", itemsRebuilt: 2 })
     const rows = await query<{ item_order: number; item_type: string }>(
       worker,
       "SELECT item_order, item_type FROM lcm_context_items WHERE conversation_id = $1 ORDER BY item_order",
       [LCM_RECOVERY_FIXTURE_IDS.conversationID],
     )
-    expect(rows).toEqual([{ item_order: 1, item_type: "summary" }])
+    expect(rows).toEqual([
+      { item_order: 1, item_type: "summary" },
+      { item_order: 2, item_type: "raw_message" },
+    ])
     await worker.close()
   })
 }

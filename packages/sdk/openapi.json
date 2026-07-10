@@ -26126,29 +26126,6 @@
             "type": "string",
             "enum": ["upward", "dolt"]
           },
-          "freshTailTokens": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["NaN"]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity"]
-              },
-              {
-                "type": "string",
-                "enum": ["-Infinity"]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
           "storageWarningThresholdBytes": {
             "anyOf": [
               {
@@ -26325,14 +26302,7 @@
             ]
           }
         },
-        "required": [
-          "strategy",
-          "freshTailTokens",
-          "storageWarningThresholdBytes",
-          "storageBytes",
-          "storageWarning",
-          "effectiveScope"
-        ],
+        "required": ["strategy", "storageWarningThresholdBytes", "storageBytes", "storageWarning", "effectiveScope"],
         "additionalProperties": false
       },
       "LcmBadRequestError": {
@@ -26435,10 +26405,6 @@
           "strategy": {
             "type": "string",
             "enum": ["upward", "dolt"]
-          },
-          "freshTailTokens": {
-            "type": "integer",
-            "exclusiveMinimum": 0
           },
           "storageWarningThresholdBytes": {
             "type": "integer",

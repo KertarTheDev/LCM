@@ -20,7 +20,6 @@ import {
   describeScope,
   finiteNumber,
   formatStorageThresholdGiB,
-  LCM_FRESH_TAIL_DESCRIPTION,
   lcmMemoryActionButtons,
   type LcmMemoryActionKind,
   lcmMemoryStatusItems,
@@ -148,7 +147,6 @@ const LcmMemoryTab: Component = () => {
   const [rebuild, setRebuild] = createSignal<LcmDbRebuildReport>()
   const [promptExport, setPromptExport] = createSignal<LcmPromptExportReport>()
   const [pendingRequests, setPendingRequests] = createSignal<LcmSettingsPendingRequests>({})
-  const [freshTailDraft, setFreshTailDraft] = createSignal("")
   const [thresholdDraft, setThresholdDraft] = createSignal("")
 
   const loading = createMemo(() => pendingRequests().read !== undefined)
@@ -217,7 +215,6 @@ const LcmMemoryTab: Component = () => {
 
   const updateSettings = (patch: {
     strategy?: "upward" | "dolt"
-    freshTailTokens?: number
     storageWarningThresholdBytes?: number
   }) => {
     const requestID = nextRequestID("settings-update")
@@ -378,7 +375,6 @@ const LcmMemoryTab: Component = () => {
       return
     }
     setState(message.body)
-    setFreshTailDraft(String(message.body.freshTailTokens))
     setThresholdDraft(formatStorageThresholdGiB(message.body.storageWarningThresholdBytes))
     setError(undefined)
     if (!message.body.safeError && message.body.dbStatus?.status === "ready") {
@@ -491,16 +487,13 @@ const LcmMemoryTab: Component = () => {
   createEffect(() => {
     const current = state()
     const disabled = settingsDisabled()
-    const freshTail = freshTailDraft()
     const storageThreshold = thresholdDraft()
     if (!current || disabled) {
       numericSettingsAutosave.clear()
       return
     }
     numericSettingsAutosave.schedule({
-      freshTailDraft: freshTail,
       storageThresholdDraft: storageThreshold,
-      currentFreshTailTokens: finiteNumber(current.freshTailTokens),
       currentStorageWarningThresholdBytes: finiteNumber(current.storageWarningThresholdBytes),
     })
   })
@@ -750,20 +743,6 @@ const LcmMemoryTab: Component = () => {
             size="small"
             triggerVariant="settings"
           />
-        </SettingsRow>
-
-        <SettingsRow title="Fresh Tail" description={LCM_FRESH_TAIL_DESCRIPTION}>
-          <div style={{ width: "128px" }}>
-            <TextField
-              type="number"
-              min="1"
-              step="1"
-              value={freshTailDraft()}
-              onInput={(event) => setFreshTailDraft(event.currentTarget.value)}
-              disabled={settingsDisabled()}
-              hideLabel
-            />
-          </div>
         </SettingsRow>
 
         <SettingsRow title="Storage Warning" description={storageWarningSettingsDescription(state())} last>

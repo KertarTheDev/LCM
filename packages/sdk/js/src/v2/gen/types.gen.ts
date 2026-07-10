@@ -2254,7 +2254,6 @@ export type LcmDbStatus = {
 
 export type LcmSettingsState = {
   strategy: "upward" | "dolt"
-  freshTailTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   storageWarningThresholdBytes: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   storageBytes: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   storageWarning: boolean
@@ -2313,7 +2312,6 @@ export type LcmUpdateSettingsInput = {
   projectID?: string
   workspaceID?: string
   strategy?: "upward" | "dolt"
-  freshTailTokens?: number
   storageWarningThresholdBytes?: number
 }
 
