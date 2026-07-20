@@ -1150,6 +1150,7 @@ describe("session.llm.stream", () => {
           LLMClient.Service,
           LLMClient.Service.of({
             prepare: () => Effect.die(new Error("native LLM client should not be used when the flag is off")),
+            dispatch: () => Effect.die(new Error("native LLM client should not be used when the flag is off")), // kilocode_change
             stream: () => Stream.die(new Error("native LLM client should not be used when the flag is off")),
             generate: () => Effect.die(new Error("native LLM client should not be used when the flag is off")),
           }),

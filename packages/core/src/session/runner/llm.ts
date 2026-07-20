@@ -23,6 +23,7 @@ import { ReferenceGuidance } from "../../reference/guidance"
 import { ToolRegistry } from "../../tool/registry"
 import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
+import { SessionContextEngine } from "../context-engine" // kilocode_change
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
@@ -103,6 +104,10 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    // kilocode_change - Kilo runtimes may provide an authoritative context engine; upstream compaction remains default.
+    const engine = Option.getOrElse(yield* Effect.serviceOption(SessionContextEngine.Service), () =>
+      SessionContextEngine.upstream(compaction),
+    )
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -175,7 +180,7 @@ export const layer = Layer.effect(
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
-      recoverOverflow?: typeof compaction.compactAfterOverflow,
+      recoverOverflow?: true,
     ) {
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
@@ -216,7 +221,7 @@ export const layer = Layer.effect(
       const context = entries.map((entry) => entry.message)
       const toolMaterialization = yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
-      const request = LLM.request({
+      const draft = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
         system: [agent.info?.system, system.baseline]
@@ -225,8 +230,14 @@ export const layer = Layer.effect(
         messages: toLLMMessages(context, model),
         tools: toolMaterialization.definitions,
       })
-      if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
-        return yield* Effect.die(rebuildPreparedTurn())
+      // kilocode_change start - delegate active-context ownership behind one generic host seam
+      const input = { sessionID: session.id, entries, model, request: draft }
+      const prep = yield* engine.prepare(input)
+      if (!prep) return yield* Effect.die(rebuildPreparedTurn())
+      const request = prep.request
+      const settle = (outcome: SessionContextEngine.Outcome) =>
+        engine.settle({ sessionID: session.id, token: prep.token, outcome })
+      // kilocode_change end
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
@@ -240,9 +251,17 @@ export const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
-      if (!(yield* SessionContextEpoch.current(db, session.id, agent.id, system.revision)))
+      if (!(yield* SessionContextEpoch.current(db, session.id, agent.id, system.revision))) {
+        yield* settle("interrupted") // kilocode_change
         return yield* Effect.die(rebuildPreparedTurn())
-      const providerStream = llm.stream(request).pipe(
+      }
+      // kilocode_change start - validate the exact compiled body and stream that same prepared dispatch
+      const dispatch = yield* llm.dispatch(request).pipe(Effect.tapError(() => settle("failure")))
+      yield* engine
+        .validate({ sessionID: session.id, token: prep.token, prepared: dispatch.prepared })
+        .pipe(Effect.tapError(() => settle("failure")))
+      const providerStream = dispatch.stream.pipe(
+        // kilocode_change end
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
@@ -292,9 +311,11 @@ export const layer = Layer.effect(
             recoverOverflow &&
             !publisher.hasAssistantStarted() &&
             isContextOverflowFailure(overflowFailure ?? failure) &&
-            (yield* restore(recoverOverflow({ sessionID: session.id, entries, model, request })))
-          )
+            (yield* restore(engine.recover({ sessionID: session.id, entries, model, request })))
+          ) {
+            yield* settle("overflow") // kilocode_change
             return yield* Effect.die(continueAfterOverflowCompaction)
+          }
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = failure instanceof LLMError ? failure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
@@ -331,6 +352,14 @@ export const layer = Layer.effect(
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
           if (stream._tag === "Success" && !publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
+          // kilocode_change start - settle durable request evidence for every terminal provider outcome
+          const overflow = isContextOverflowFailure(overflowFailure ?? failure)
+          const interrupted =
+            (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) ||
+            (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
+          const failed = stream._tag === "Failure" || settled._tag === "Failure" || publisher.hasProviderError()
+          yield* settle(overflow ? "overflow" : interrupted ? "interrupted" : failed ? "failure" : "success")
+          // kilocode_change end
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
           return !publisher.hasProviderError() && needsContinuation
@@ -357,7 +386,7 @@ export const layer = Layer.effect(
     })
 
     const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion) {
-      return yield* runTurnAttempt(sessionID, promotion, compaction.compactAfterOverflow).pipe(
+      return yield* runTurnAttempt(sessionID, promotion, true).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
@@ -383,7 +412,9 @@ export const layer = Layer.effect(
       while (openActivity) {
         let needsContinuation = true
         for (let step = 0; step < MAX_STEPS; step++) {
-          needsContinuation = yield* runTurn(input.sessionID, promotion)
+          needsContinuation = yield* runTurn(input.sessionID, promotion).pipe(
+            Effect.onExit(() => engine.checkpoint({ sessionID: input.sessionID })), // kilocode_change
+          )
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
           if (!needsContinuation) break

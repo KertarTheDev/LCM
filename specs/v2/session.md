@@ -40,7 +40,7 @@ SessionExecution.resume(sessionID)
 
 `SessionExecution` and the read-side `SessionStore` are process-global. `SessionRunner`, catalog, model resolver, tool registry, permission state, and filesystem are cached per Location. No layer takes a Session ID. An omitted `Location.workspaceID` means implicit-local placement; explicit workspace identity remains reserved for future placement semantics.
 
-The local runner issues one explicit `llm.stream(request)` per provider turn, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every started tool fiber after provider-stream closure, reloads projected history once before continuation, and fails after 25 provider turns within one local drain activity only when work remains. Tool settlement events carry the owning assistant message ID because provider-local call IDs may repeat across turns. Before assembling a provider request, the runner durably fails any local tool still projected as `running` from a previous process with `Tool execution interrupted`; abandoned side effects are never silently replayed.
+The local runner issues one explicit compiled LLM dispatch per provider turn, projects each complete local tool call durably before eagerly starting its structured child execution, awaits every started tool fiber after provider-stream closure, reloads projected history once before continuation, and fails after 25 provider turns within one local drain activity only when work remains. Tool settlement events carry the owning assistant message ID because provider-local call IDs may repeat across turns. Before assembling a provider request, the runner durably fails any local tool still projected as `running` from a previous process with `Tool execution interrupted`; abandoned side effects are never silently replayed.
 
 Projected hosted tools preserve call-side and settlement-side provider metadata separately so settlement and interruption recovery cannot erase continuation identifiers. Provider-native reasoning and provider metadata replay only while the historical assistant model matches the selected continuation model; after a model switch, visible reasoning text remains ordinary assistant text and provider-native metadata is omitted.
 
@@ -105,6 +105,12 @@ Current Context Epoch follow-ups:
 - Add clustered Session execution ownership and stale-runtime fencing.
 
 ## Automatic Compaction
+
+`SessionContextEngine` is the runner's context-ownership boundary. The upstream engine wraps automatic compaction and preserves the existing behavior. A product runtime may instead provide one authoritative engine that prepares the active request, validates the exact post-overlay provider body, settles request evidence, performs at most one overflow recovery, and checkpoints finalized output between steps. The validated `PreparedRequest` and the provider stream come from one compiled dispatch, so validation cannot accidentally inspect a body that differs from the one sent by the transport.
+
+An authoritative engine fails closed: its preparation, validation, recovery, settlement, or checkpoint error does not invoke upstream compaction as a fallback. Returning no prepared request means the engine committed a durable change and asks the runner to rebuild the turn from durable state.
+
+Final-only source adapters follow the durable aggregate event cursor and reload the affected projected message at terminal boundaries. Projected message sequence numbers record insertion order; they do not advance when text, reasoning, tool, shell, or assistant state is finalized. Ephemeral delta events never advance the durable ingestion cursor.
 
 Before each provider turn, the runner estimates the complete model-visible request and compares it with the selected model's context window minus absolute reserved headroom. The reserve is the greater of the requested/model output allowance and configured `compaction.buffer`. When the request exceeds that budget and older complete turns are available, the runner compacts before executing the pending turn.
 

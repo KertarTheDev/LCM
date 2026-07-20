@@ -209,6 +209,7 @@ export const messageText = (message: string | Uint8Array, decoder: TextDecoder) 
 export interface JsonPrepared {
   readonly url: string
   readonly headers: Headers.Headers
+  readonly body: unknown
   readonly message: string
 }
 
@@ -234,9 +235,11 @@ export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransp
       return {
         url: yield* webSocketUrl(parts.url),
         headers: parts.headers,
+        body: parts.jsonBody,
         message: input.encodeMessage(yield* input.toMessage(parts.jsonBody)),
       }
     }),
+  preview: ({ prepared }) => prepared.body,
   frames: (prepared, _request, runtime) => {
     const webSocket = runtime.webSocket
     if (!webSocket) {

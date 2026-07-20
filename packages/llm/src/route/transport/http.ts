@@ -19,6 +19,7 @@ export interface JsonRequestParts<Body = unknown> {
 export interface HttpPrepared<Frame> {
   readonly request: HttpClientRequest.HttpClientRequest
   readonly framing: FramingDef<Frame>
+  readonly body: unknown
 }
 
 const applyQuery = (url: string, query: Record<string, string> | undefined) => {
@@ -78,8 +79,10 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
       Effect.map((parts) => ({
         request: ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),
         framing: input.framing,
+        body: parts.jsonBody,
       })),
     ),
+  preview: ({ prepared }) => prepared.body,
   frames: (prepared, request, runtime) =>
     Stream.unwrap(
       runtime.http

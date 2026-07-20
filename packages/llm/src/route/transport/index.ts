@@ -13,6 +13,8 @@ export interface TransportRuntime {
 export interface Transport<Body, Prepared, Frame> {
   readonly id: string
   readonly prepare: (input: TransportPrepareInput<Body>) => Effect.Effect<Prepared, LLMError>
+  /** Return the exact provider body represented by prepared transport state. */
+  readonly preview?: (input: { readonly body: Body; readonly prepared: Prepared }) => unknown
   readonly frames: (
     prepared: Prepared,
     request: LLMRequest,

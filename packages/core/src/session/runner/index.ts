@@ -7,6 +7,7 @@ import type { ContextSnapshotDecodeError, MessageDecodeError } from "../error"
 import { SessionRunnerModel } from "./model"
 import type { SystemContext } from "../../system-context/index"
 import type { SessionContextEpoch } from "../context-epoch"
+import type { SessionContextEngine } from "../context-engine" // kilocode_change
 import type { ToolOutputStore } from "../../tool-output-store"
 
 export class StepLimitExceededError extends Schema.TaggedErrorClass<StepLimitExceededError>()(
@@ -25,6 +26,7 @@ export type RunError =
   | StepLimitExceededError
   | SystemContext.InitializationBlocked
   | SessionContextEpoch.AgentReplacementBlocked
+  | SessionContextEngine.Error // kilocode_change
   | ToolOutputStore.Error
 
 /** Runs one local continuation from already-recorded Session history. */
