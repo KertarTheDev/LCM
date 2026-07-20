@@ -129,6 +129,38 @@ describe("llm route", () => {
     }),
   )
 
+  it.effect("dispatch validates and streams one exact post-overlay body", () =>
+    Effect.gen(function* () {
+      let compiled = 0
+      const protocol = Protocol.make({
+        ...fakeProtocol,
+        body: {
+          ...fakeProtocol.body,
+          from: (input) => {
+            compiled++
+            return fakeProtocol.body.from(input)
+          },
+        },
+      })
+      const route = Route.make({
+        id: "dispatch-fake",
+        protocol,
+        endpoint: Endpoint.path("/chat", { baseURL: "https://fake.local" }),
+        framing: fakeFraming,
+      })
+      const input = LLM.updateRequest(request, {
+        model: updateModel(request.model, { route }),
+        http: { body: { body: "overlaid", extra: true } },
+      })
+      const dispatch = yield* (yield* LLMClient.Service).dispatch(input)
+
+      expect(dispatch.prepared.body).toEqual({ body: "overlaid", extra: true })
+      const events = Array.from(yield* dispatch.stream.pipe(Stream.runCollect))
+      expect(events[0]).toMatchObject({ type: "text-delta", text: 'echo:{"body":"overlaid","extra":true}' })
+      expect(compiled).toBe(1)
+    }),
+  )
+
   it.effect("builds models from configured routes", () =>
     Effect.gen(function* () {
       const configured = fake.with({ provider: "fake-provider", endpoint: { baseURL: "https://fake.local" } })

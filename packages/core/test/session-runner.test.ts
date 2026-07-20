@@ -6,6 +6,7 @@ import {
   Model,
   TransportReason,
   InvalidRequestReason,
+  PreparedRequest,
   type LLMClientShape,
   type LLMRequest,
 } from "@opencode-ai/llm"
@@ -27,6 +28,7 @@ import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionContextEpoch } from "@opencode-ai/core/session/context-epoch"
+import { SessionContextEngine } from "@opencode-ai/core/session/context-engine"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
@@ -73,28 +75,41 @@ let toolExecutionsStarted: Deferred.Deferred<void> | undefined
 let toolExecutionsReady = 5
 let activeToolExecutions = 0
 let maxActiveToolExecutions = 0
+const stream = ((request: LLMRequest) => {
+  requests.push(request)
+  if (responseStream) {
+    const stream = responseStream
+    responseStream = undefined
+    return stream
+  }
+  const events = streamFailure
+    ? Stream.fail(streamFailure)
+    : Stream.fromIterable(responses === undefined ? response : (responses.shift() ?? []))
+  if (!streamGate) return events
+  return Stream.unwrap(
+    (streamStarted ? Deferred.succeed(streamStarted, undefined) : Effect.void).pipe(
+      Effect.andThen(Deferred.await(streamGate)),
+      Effect.as(events),
+    ),
+  )
+}) as unknown as LLMClientShape["stream"]
 const client = Layer.succeed(
   LLMClient.Service,
   LLMClient.Service.of({
     prepare: () => Effect.die("unused"),
-    stream: ((request: LLMRequest) => {
-      requests.push(request)
-      if (responseStream) {
-        const stream = responseStream
-        responseStream = undefined
-        return stream
-      }
-      const events = streamFailure
-        ? Stream.fail(streamFailure)
-        : Stream.fromIterable(responses === undefined ? response : (responses.shift() ?? []))
-      if (!streamGate) return events
-      return Stream.unwrap(
-        (streamStarted ? Deferred.succeed(streamStarted, undefined) : Effect.void).pipe(
-          Effect.andThen(Deferred.await(streamGate)),
-          Effect.as(events),
-        ),
-      )
-    }) as unknown as LLMClientShape["stream"],
+    dispatch: (request) =>
+      Effect.succeed({
+        prepared: new PreparedRequest({
+          id: request.id ?? "request",
+          route: request.model.route.id,
+          protocol: request.model.route.protocol,
+          model: request.model,
+          body: { messages: request.messages },
+          metadata: { transport: "test" },
+        }),
+        stream: stream(request),
+      }),
+    stream,
     generate: () => Effect.die("unused"),
   }),
 )
@@ -234,20 +249,24 @@ const config = Layer.succeed(
       ]),
   }),
 )
-const runner = SessionRunnerLLM.layer.pipe(
-  Layer.provide(database),
-  Layer.provide(store),
-  Layer.provide(events),
-  Layer.provide(client),
-  Layer.provide(registry),
-  Layer.provide(models),
-  Layer.provide(systemContext),
-  Layer.provide(location),
-  Layer.provide(agents),
-  Layer.provide(skillGuidance),
-  Layer.provide(referenceGuidance),
-  Layer.provide(config),
-)
+const makeRunner = (context?: Layer.Layer<SessionContextEngine.Service>) => {
+  const base = SessionRunnerLLM.layer.pipe(
+    Layer.provide(database),
+    Layer.provide(store),
+    Layer.provide(events),
+    Layer.provide(client),
+    Layer.provide(registry),
+    Layer.provide(models),
+    Layer.provide(systemContext),
+    Layer.provide(location),
+    Layer.provide(agents),
+    Layer.provide(skillGuidance),
+    Layer.provide(referenceGuidance),
+    Layer.provide(config),
+  )
+  return context ? base.pipe(Layer.provide(context)) : base
+}
+const runner = makeRunner()
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
   SessionExecution.Service,
@@ -268,29 +287,91 @@ const sessions = SessionV2.layer.pipe(
   Layer.provide(Project.defaultLayer),
   Layer.provide(execution),
 )
-const it = testEffect(
-  Layer.mergeAll(
-    database,
-    events,
-    questions,
-    projector,
-    store,
-    client,
-    permission,
-    applications,
-    agents,
-    registry,
-    echo,
-    models,
-    systemContext,
-    location,
-    skillGuidance,
-    config,
-    runner,
-    coordinator,
-    execution,
-    sessions,
+const common = Layer.mergeAll(
+  database,
+  events,
+  questions,
+  projector,
+  store,
+  client,
+  permission,
+  applications,
+  agents,
+  registry,
+  echo,
+  models,
+  systemContext,
+  location,
+  skillGuidance,
+  config,
+)
+const it = testEffect(Layer.mergeAll(common, runner, coordinator, execution, sessions))
+
+const contextCalls: string[] = []
+let contextBody: unknown
+let contextRecovery = false
+let contextBlocked = false
+const contextLayer = Layer.succeed(
+  SessionContextEngine.Service,
+  SessionContextEngine.Service.of({
+    prepare: (input) =>
+      Effect.suspend(() => {
+        contextCalls.push(`prepare:${input.entries.length}`)
+        if (contextBlocked)
+          return Effect.fail(
+            new SessionContextEngine.Error({
+              code: "blocked",
+              message: "Managed context unavailable",
+              retryable: true,
+            }),
+          )
+        return Effect.succeed({ request: input.request, token: "ctx_test" })
+      }),
+    validate: (input) =>
+      Effect.sync(() => {
+        contextCalls.push(`validate:${input.token}`)
+        contextBody = input.prepared.body
+      }),
+    recover: () =>
+      Effect.sync(() => {
+        contextCalls.push("recover")
+        const recover = contextRecovery
+        contextRecovery = false
+        return recover
+      }),
+    settle: (input) =>
+      Effect.sync(() => {
+        contextCalls.push(`settle:${input.outcome}`)
+      }),
+    checkpoint: () =>
+      Effect.sync(() => {
+        contextCalls.push("checkpoint")
+      }),
+  }),
+)
+const contextRunner = makeRunner(contextLayer)
+const contextCoordinator = SessionRunCoordinator.layer.pipe(Layer.provide(contextRunner))
+const contextExecution = Layer.effect(
+  SessionExecution.Service,
+  SessionRunCoordinator.Service.pipe(
+    Effect.map((coordinator) =>
+      SessionExecution.Service.of({
+        resume: coordinator.run,
+        wake: coordinator.wake,
+        interrupt: coordinator.interrupt,
+      }),
+    ),
   ),
+).pipe(Layer.provide(contextCoordinator))
+const contextSessions = SessionV2.layer.pipe(
+  Layer.provide(events),
+  Layer.provide(database),
+  Layer.provide(store),
+  Layer.provide(Project.defaultLayer),
+  Layer.provide(contextExecution),
+)
+const contextIt = testEffect(
+  Layer.mergeAll(common, contextLayer, contextRunner, contextCoordinator, contextExecution, contextSessions),
 )
 const sessionID = SessionV2.ID.make("ses_runner_test")
 const otherSessionID = SessionV2.ID.make("ses_runner_other")
@@ -322,6 +403,8 @@ const setup = Effect.gen(function* () {
   systemLoadHook = Effect.void
   modelResolveHook = Effect.void
   currentModel = model
+  contextRecovery = false
+  contextBlocked = false
   skillBaselines.clear()
   responses = undefined
   streamFailure = undefined
@@ -557,6 +640,71 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
+  contextIt.effect("delegates one provider turn through an authoritative context engine", () =>
+    Effect.gen(function* () {
+      yield* setup
+      contextCalls.length = 0
+      contextBody = undefined
+      requests.length = 0
+      response = fragmentFixture("text", "text-context", ["Prepared"]).completeEvents
+      const session = yield* SessionV2.Service
+
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Use managed context" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(contextCalls).toEqual(["prepare:1", "validate:ctx_test", "settle:success", "checkpoint"])
+      expect(contextBody).toEqual({ messages: requests[0].messages })
+      expect((yield* session.context(sessionID)).at(-1)).toMatchObject({ type: "assistant", finish: "stop" })
+    }),
+  )
+
+  contextIt.effect("recovers one overflow through the selected engine without legacy compaction", () =>
+    Effect.gen(function* () {
+      yield* setup
+      contextCalls.length = 0
+      requests.length = 0
+      contextRecovery = true
+      responses = [
+        [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+        fragmentFixture("text", "text-context-retry", ["Recovered"]).completeEvents,
+      ]
+      const session = yield* SessionV2.Service
+
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Recover managed context" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(contextCalls).toEqual([
+        "prepare:1",
+        "validate:ctx_test",
+        "recover",
+        "settle:overflow",
+        "prepare:1",
+        "validate:ctx_test",
+        "settle:success",
+        "checkpoint",
+      ])
+      expect((yield* session.context(sessionID)).some((message) => message.type === "compaction")).toBe(false)
+    }),
+  )
+
+  contextIt.effect("fails closed when the selected context engine cannot prepare", () =>
+    Effect.gen(function* () {
+      yield* setup
+      contextCalls.length = 0
+      requests.length = 0
+      contextBlocked = true
+      const session = yield* SessionV2.Service
+
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Do not fall back" }), resume: false })
+      const failure = yield* session.resume(sessionID).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({ _tag: "SessionContextEngine.Error", code: "blocked" })
+      expect(requests).toHaveLength(0)
+      expect((yield* session.context(sessionID)).some((message) => message.type === "compaction")).toBe(false)
+    }),
+  )
+
   it.effect("advertises and executes a globally attached application tool", () =>
     Effect.gen(function* () {
       yield* setup
