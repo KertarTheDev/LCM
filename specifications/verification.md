@@ -1,6 +1,6 @@
 # LCM Current-Code Verification
 
-Status date: 2026-07-20.
+Status date: 2026-07-21.
 
 This document records the verification surface for `kilocode-lcm-v7.4.13`.
 
@@ -8,7 +8,7 @@ This document records the verification surface for `kilocode-lcm-v7.4.13`.
 
 Run the smallest suite that owns the touched behavior. Use broad package/compiler/build gates only for cross-package integration, dependency/config changes, generated SDK changes, or release packaging. Do not run root `bun test`.
 
-On the constrained maintainer VPS, use the parent-workspace `support/vps-verify.ts` helper for supported CPU-heavy gates. If a helper selector names a compiler config that does not exist on this upstream tag, record that mismatch and run the real package gate rather than adding a fake project config.
+Environment-specific wrappers may select focused compiler slices, but they are not release evidence by themselves. Record any skipped or unavailable non-release probe explicitly and require the production CLI/VSIX build path to pass.
 
 ## Required Cross-Package Gates
 
@@ -16,13 +16,15 @@ For the v7.4.13 integration represented by this branch:
 
 - generated LCM contract: `bun run --cwd packages/opencode lcm:contracts:check`
 - generated OpenAPI/SDK: `bun run script/generate.ts` after public API changes, followed by a clean diff check
-- opencode typecheck: `bun run --cwd packages/opencode typecheck`
+- LCM-owned typecheck: `bun run --cwd packages/opencode typecheck:lcm`
+- full opencode typecheck for shared prompt/server/CLI integration or release packaging: `bun run --cwd packages/opencode typecheck`
+- SDK typecheck after generated API changes: `bun run --cwd packages/sdk/js typecheck`
 - annotation check: `bun run script/check-opencode-annotations.ts`
 - VSCode marker check: `bun run --cwd packages/kilo-vscode check-kilocode-change`
 - VSCode compile: `bun run --cwd packages/kilo-vscode compile`
 - snapshot: `bun run --cwd packages/kilo-vscode snapshot:build`
 
-The focused `typecheck:lcm` project is useful for the LCM-owned tree, but it does not replace the package gate after prompt/server/CLI integration changes.
+The focused `typecheck:lcm` project owns the LCM tree. It does not replace the package gate after shared prompt/server/CLI integration changes, but a repeatedly resource-killed local broad check is not a reason to add publishable bypasses: record the local limitation and require the corresponding production CI build to pass.
 
 ## Compatibility/Cutover Gate
 
@@ -71,7 +73,7 @@ The core context-engine seam is covered by:
 - `lcm:retrieval-auth`: current-lineage authorization and forged-handle rejection.
 - `lcm:retrieval-tools`: LCM grep/describe/expand/query/read behavior.
 - upstream recall tests plus the LCM cutover gate: prior-session recall remains upstream-owned; current-session recall is rejected in favor of lineage-scoped LCM retrieval.
-- `lcm:path-provenance`, `lcm:large-file`, `lcm:explorer-safety`, `lcm:regex-safety`
+- `lcm:path-provenance`, `lcm:large-file`, `lcm:explorer-safety`, `lcm:regex-safety`. Regex cases must set `mode: "regex"`; omitted mode intentionally exercises the literal default.
 - `lcm:map`, `lcm:sub-agent-scope`
 
 ## Settings And API
@@ -90,4 +92,10 @@ Settings verification must prove that sessionless calls do not require a convers
 - stable approval: `bun run --cwd packages/opencode lcm:release-long-context:strict`
 - packaged runtime: `bun run --cwd packages/opencode lcm:platform-runtime-smoke -- --runtime-path <packaged-kilo> --snapshot-path <candidate.vsix> --out-dir <evidence-dir>`
 
-Stable release approval additionally requires the exact candidate VSIX to pass installed-editor validation on the supported VSCodium/Nobara and VSCode/macOS targets.
+Release evidence must start from a clean committed worktree and bind the source commit, release target, resolved tag commit, VSIX SHA-256, bundled runtime identity, and asset manifest. Development snapshot names are derived from committed `HEAD` even when the worktree contains uncommitted bytes, so a dirty snapshot name is not exact-SHA evidence. Commands that change working directory with `--cwd` must receive workspace-absolute artifact paths.
+
+The compiled CLI and extracted-VSIX smoke must execute the registered `debug lcm-db-smoke` command and prove both `pglite-regex.worker.ts` and `retrieval-regex.worker.ts` through their compiled path defines. Source tests, typecheck, or bundle creation alone do not prove those assets are present.
+
+The completed `v7.4.13-lcm.1` prerelease targeted `cbd5d6dbb2bfca3c887fd5847744638b1ffdb59a`. Workflow run `29844020302` passed the release-critical gates, built 12 CLI archives and 8 VSIX assets, and passed the packaged Linux x64 runtime smoke. This is prerelease automation evidence, not stable approval.
+
+Stable release approval additionally requires the strict long-context gate and exact-candidate installed-editor validation on the supported VSCodium/Nobara and VSCode/macOS targets.

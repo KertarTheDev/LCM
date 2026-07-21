@@ -21,6 +21,7 @@
     "src/tool/llm-map.ts",
     "src/tool/registry.ts",
     "test/lcm/**/*.ts",
-    "test/kilocode/lcm-*.test.ts"
+    "test/kilocode/lcm-*.test.ts",
+    "test/kilocode/session-prompt-compaction-safety.test.ts"
   ]
 }

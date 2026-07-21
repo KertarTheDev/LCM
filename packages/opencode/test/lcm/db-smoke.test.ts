@@ -41,7 +41,7 @@ async function withKiloDataDir<T>(kiloDataDir: string, fn: () => Promise<T>) {
   }
 }
 
-test("lcm-db-smoke runs PGlite gate checks and keeps the report content-safe", async () => {
+test("lcm-db-smoke runs PGlite and retrieval worker gates and keeps the report content-safe", async () => {
   await using tmp = await tmpdir()
   const { kiloDataDir, familyRoot: dataDir } = testFamilyRoot(tmp.path, "ses_m31_smoke_root")
   const layout = resolveLcmDbLayout(dataDir)

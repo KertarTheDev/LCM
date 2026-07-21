@@ -18,6 +18,7 @@ import { getLcmPGliteAssetReport } from "./pglite-assets"
 import { getLcmProductionSchemaVersion } from "./migrations"
 import { LCM_PGLITE_GATE_RELEASE_SCALE, runPgliteGateProbe, type LcmPGliteGateScale } from "./pglite-gate"
 import { runPgliteRegexCancellationProbe } from "./pglite-regex-cancel"
+import { runRetrievalRegex } from "./retrieval-regex"
 import type {
   LcmDbDiagnoseReport,
   LcmDbDiagnosticCheck,
@@ -281,6 +282,17 @@ export async function runLcmDbSmoke(input: RunLcmDbSmokeInput): Promise<LcmDbSmo
       detailCode: "regex_cancellation",
     },
     async () => {
+      const retrieval = await runRetrievalRegex({
+        pattern: "packaged_regex_[0-9]+",
+        caseSensitive: false,
+        candidates: [
+          { candidateID: "packaged_match", searchText: "PACKAGED_REGEX_42" },
+          { candidateID: "packaged_miss", searchText: "literal content only" },
+        ],
+        timeoutMs: input.regexStartupTimeoutMs,
+      })
+      if (retrieval.matches.length !== 1 || retrieval.matches[0]?.candidateID !== "packaged_match") return false
+
       const cancel = await runPgliteRegexCancellationProbe({
         startupTimeoutMs: input.regexStartupTimeoutMs,
         queryTimeoutMs: input.regexQueryTimeoutMs,
