@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "lcm-fixture-manifest-v1",
+  "description": "Public index for current LCM fixture and report-schema artifacts included in this branch.",
+  "fixtures": [
+    {
+      "id": "closure-message-v2-current-shape-v1",
+      "ownerMilestone": "06",
+      "path": "specifications/fixtures/message-v2/closure-message-v2-current-shape-v1.json",
+      "implemented": true,
+      "blocksBefore": "Finalized source sync taxonomy changes",
+      "expectedEvidence": "Current persisted Kilo MessageV2 role, part, tool-state, file-source, renderer, and durable ID shape used by LCM source sync."
+    },
+    {
+      "id": "provider-safe-hash-vectors-v1",
+      "ownerMilestone": "35/36/39",
+      "path": "specifications/fixtures/provider-safe-assembly/provider-safe-hash-vectors-v1.json",
+      "implemented": true,
+      "blocksBefore": "Provider-safe assembly hash identity changes",
+      "expectedEvidence": "Canonical sorted-key JSON SHA-256 vectors for render-unit IDs, rendered spans, protocol spans, request snapshots, source selection, effective placement, and provider transform identity."
+    },
+    {
+      "id": "visibility-provenance-v1",
+      "ownerMilestone": "38",
+      "path": "specifications/fixtures/provider-safe-assembly/visibility-provenance-v1.json",
+      "implemented": true,
+      "blocksBefore": "Prompt visibility or provenance policy changes",
+      "expectedEvidence": "Machine-checkable visibility and provenance table for queued, model-visible, derived, and non-model LCM surfaces."
+    },
+    {
+      "id": "provider-family-classification-v1",
+      "ownerMilestone": "39",
+      "path": "specifications/fixtures/provider-safe-assembly/provider-family-classification-v1.json",
+      "implemented": true,
+      "blocksBefore": "Provider protocol classifier changes",
+      "expectedEvidence": "Provider-family classifier vectors for Copilot, Anthropic, Vertex Anthropic, Mistral/Devstral, OpenAI, OpenAI-compatible custom, Ollama, interleaved, and generic provider families."
+    },
+    {
+      "id": "provider-safe-report-schemas-v1",
+      "ownerMilestone": "40/41",
+      "path": "specifications/fixtures/provider-safe-assembly/provider-safe-report-schemas-v1.json",
+      "implemented": true,
+      "blocksBefore": "Family-adaptation or release provider-safe report changes",
+      "expectedEvidence": "Exact JSON report sections for lcm-family-adaptation-audit-v1 and release-scenario-script-v1 provider-safe check and step entries."
+    },
+    {
+      "id": "provider-safe-release-long-context-v1",
+      "ownerMilestone": "41",
+      "path": "specifications/fixtures/provider-safe-assembly/README.md",
+      "implemented": false,
+      "blocksBefore": "Release handoff",
+      "expectedEvidence": "Integrated long-context release report with provider-safe validation, request snapshot cleanup, cue lifecycle, snapshot v2 repair, packaged runtime, generic provider fallback, and exact provider-safe step IDs."
+    },
+    {
+      "id": "context-regression-soft-backlog-v1",
+      "ownerMilestone": "43",
+      "path": "specifications/fixtures/context-regression/README.md",
+      "implemented": false,
+      "blocksBefore": "Soft-maintenance pressure behavior changes",
+      "expectedEvidence": "Raw-lane soft-trigger evidence for activeTokens/hardLimit reporting, rawLaneTokens/softThreshold diagnostics, protected-tail accounting, and provider-capacity deferral."
+    },
+    {
+      "id": "context-regression-maintenance-summary-quality-v1",
+      "ownerMilestone": "44",
+      "path": "specifications/fixtures/context-regression/README.md",
+      "implemented": false,
+      "blocksBefore": "Maintenance summary generation behavior changes",
+      "expectedEvidence": "Summary-budget and quality evidence for target/output budget separation, maintenance input budgeting, deterministic rejection gates, and accepted-summary usage evidence."
+    },
+    {
+      "id": "context-regression-summary-quality-vectors-v1",
+      "ownerMilestone": "44",
+      "path": "specifications/fixtures/context-regression/summary-quality-vectors-v1.skeleton.json",
+      "implemented": false,
+      "blocksBefore": "Summary quality gate changes",
+      "expectedEvidence": "Content-safe summary quality vector skeleton covering tiny rejection, useful acceptance, echo/wrapper/refusal/anchorless rejection, and objective statuses."
+    },
+    {
+      "id": "context-regression-v1",
+      "ownerMilestone": "45",
+      "path": "specifications/fixtures/context-regression/README.md",
+      "implemented": true,
+      "blocksBefore": "Release handoff",
+      "expectedEvidence": "Deterministic context regression report proving active context fill, soft backlog pressure, maintenance statuses, provider-capacity and provider-unavailable behavior, long tool-output preservation, summary quality gates, hard-limit fail-closed behavior, and stale-status cleanup."
+    },
+    {
+      "id": "context-regression-maintenance-status-evidence-v1",
+      "ownerMilestone": "45",
+      "path": "specifications/fixtures/context-regression/maintenance-status-evidence-v1.skeleton.json",
+      "implemented": true,
+      "blocksBefore": "Context regression report changes",
+      "expectedEvidence": "Content-safe status evidence skeleton covering soft, manual repair, and hard-limit maintenance status envelopes."
+    },
+    {
+      "id": "context-regression-long-tool-output-cases-v1",
+      "ownerMilestone": "45",
+      "path": "specifications/fixtures/context-regression/long-tool-output-cases-v1.skeleton.json",
+      "implemented": true,
+      "blocksBefore": "Terminal tool-output source preservation changes",
+      "expectedEvidence": "Content-safe terminal output cases for completed output, terminal errors, interrupted errored output, lcm_file storage, next-turn continuation, and object-shaped error normalization."
+    },
+    {
+      "id": "context-regression-report-schemas-v1",
+      "ownerMilestone": "45",
+      "path": "specifications/fixtures/context-regression/context-regression-report-schemas-v1.json",
+      "implemented": true,
+      "blocksBefore": "Context regression report schema changes",
+      "expectedEvidence": "Exact context-regression-v1 report check IDs, status enum, mandatory pass IDs, required fields, field types, expected values, content-safe fields, safeError requirements, and deterministic artifact evidence requirements."
+    },
+    {
+      "id": "release-scenario-script-v1",
+      "ownerMilestone": "27/28/41/45",
+      "path": "specifications/fixtures/release-scenario/release-scenario-script-v1.skeleton.json",
+      "implemented": true,
+      "blocksBefore": "Release report changes",
+      "expectedEvidence": "Machine-readable release report skeleton with source/runtime DB smoke, installed-editor, platform packaged-runtime, provider-safe, context-regression, VSCode status, and local deterministic scenario steps."
+    }
+  ]
+}

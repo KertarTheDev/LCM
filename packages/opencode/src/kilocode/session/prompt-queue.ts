@@ -118,6 +118,17 @@ export namespace KiloSessionPromptQueue {
     return [...before, ...after]
   }
 
+  export function snapshot(sessionID: SessionID) {
+    const target = targets.get(sessionID)
+    return {
+      version: version(sessionID),
+      targetBaseMessageID: target?.base,
+      targetExtraMessageIDs: target ? Array.from(target.extras).sort() : [],
+      latestSeq: latest.get(sessionID) ?? 0,
+      activeSinceSeq: activeSince.get(sessionID) ?? 0,
+    }
+  }
+
   export function enqueue<A, E>(
     sessionID: SessionID,
     target: MessageID,

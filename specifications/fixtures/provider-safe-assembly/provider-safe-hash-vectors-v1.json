@@ -1,0 +1,252 @@
+{
+  "schemaVersion": "provider-safe-hash-vectors-v1",
+  "hashAlgorithm": "sha256",
+  "canonicalization": "sorted-key JSON with no insignificant whitespace, UTF-8 bytes",
+  "vectors": [
+    {
+      "id": "render-unit.raw-message.v1",
+      "input": {
+        "namespace": "lcm-render-unit-v1",
+        "kind": "raw_message",
+        "conversationID": "conv_a",
+        "contextItemID": "ctx_raw_001",
+        "itemType": "raw_message",
+        "referenceHandle": "msg_row_001",
+        "sourceVersionHash": "srcv_01"
+      },
+      "expectedSha256": "edbfec7565f9cc1729696d620654d104c7b10c454b62faf7227c284a4d8d8dbb"
+    },
+    {
+      "id": "render-unit.target-current-user.v1",
+      "input": {
+        "namespace": "lcm-render-unit-v1",
+        "kind": "target_current_user",
+        "sourceSessionID": "ses_a",
+        "sourceMessageID": "msg_user_009",
+        "messageRowID": "msg_row_009",
+        "promptOperationID": "op_prompt_77",
+        "visibilityBaseMessageID": "msg_user_009",
+        "sourceChronologicalOrder": 42
+      },
+      "expectedSha256": "71a9902a4413432c4b860aa96a1b4e4886018496dccbc67580074b100f62d319"
+    },
+    {
+      "id": "render-unit.retrieval-cue.v1",
+      "input": {
+        "namespace": "lcm-render-unit-v1",
+        "kind": "retrieval_cue",
+        "conversationID": "conv_a",
+        "contextItemID": "ctx_cue_001",
+        "cueID": "cue_001",
+        "cueLifecycleState": "active",
+        "cueTargetSourceMessageID": "msg_user_009",
+        "cueGenerationID": "cuegen_001",
+        "placementSlot": "before_current_user"
+      },
+      "expectedSha256": "a7a042cd321f77517d233e0a979fc1c8211bbc9ca7a2f469ed2d6a861927492a"
+    },
+    {
+      "id": "render-unit.render-only-helper.v1",
+      "input": {
+        "namespace": "lcm-render-unit-v1",
+        "kind": "render_only_prompt_helper",
+        "operationID": "op_prompt_77",
+        "helperKind": "environment_details",
+        "producer": "kilo.editor-context",
+        "createdAtMs": 1778150400000,
+        "clonedMessageID": "clone_msg_001",
+        "clonedPartID": "clone_part_001"
+      },
+      "expectedSha256": "3d12e07fa2a4d3ef6b052a5c321d5da2cc14abe7aeddefb146a88ea13784ccce"
+    },
+    {
+      "id": "render-unit.provider-transform-overhead.v1",
+      "input": {
+        "namespace": "lcm-provider-transform-overhead-v1",
+        "providerFamily": "mistral",
+        "providerTransformHash": "pth_001",
+        "transformStage": "provider_transformed",
+        "overheadKind": "mistral_sequence_repair",
+        "insertionIndex": 3,
+        "operationID": "op_prompt_77"
+      },
+      "expectedSha256": "721e75056fd4df612c4a9ee1686d5e434fd0766eb99cd62179c54e8bf8f33f05"
+    },
+    {
+      "id": "rendered-span.unprotected.v1",
+      "input": {
+        "namespace": "lcm-rendered-span-v1",
+        "renderUnitID": "ru_raw_001",
+        "sourceKind": "raw_message",
+        "sourceHandle": "msg_row_001",
+        "canonicalOrder": 1,
+        "effectiveOrder": 1,
+        "placementSlot": "history",
+        "startIndex": 0,
+        "messageCount": 1,
+        "protected": false,
+        "providerFamily": "openai_compatible",
+        "transformStage": "rendered",
+        "providerTransformHash": "none"
+      },
+      "expectedSha256": "3e0171d29b6fe3a52be5f45bd06194d6cacc4b044ce35c2ad462084709ae01b0"
+    },
+    {
+      "id": "rendered-span.protected.v1",
+      "input": {
+        "namespace": "lcm-rendered-span-v1",
+        "renderUnitID": "ru_tool_001",
+        "sourceKind": "raw_message",
+        "sourceHandle": "msg_row_002",
+        "canonicalOrder": 2,
+        "effectiveOrder": 2,
+        "placementSlot": "history",
+        "startIndex": 1,
+        "messageCount": 2,
+        "protected": true,
+        "protectedReason": "assistant_tool_results",
+        "protocolSpanID": "ps_tool_001",
+        "providerFamily": "openai_compatible",
+        "transformStage": "rendered",
+        "providerTransformHash": "none"
+      },
+      "expectedSha256": "fddd834d20dae9b6df32dc62d66e358cb47c237932b481d35cd3a5aaf7bc4b03"
+    },
+    {
+      "id": "rendered-span.zero-message.v1",
+      "input": {
+        "namespace": "lcm-rendered-span-v1",
+        "renderUnitID": "ru_helper_001",
+        "sourceKind": "render_only_prompt_helper",
+        "canonicalOrder": 99,
+        "effectiveOrder": 99,
+        "placementSlot": "provider_tail",
+        "startIndex": 5,
+        "messageCount": 0,
+        "protected": false,
+        "providerFamily": "generic",
+        "transformStage": "rendered",
+        "providerTransformHash": "none"
+      },
+      "expectedSha256": "1cdb10a509966f341e8461d2fde335c256c418795f78bd775624f82b6d402137"
+    },
+    {
+      "id": "protocol-span.single-unit.v1",
+      "input": {
+        "namespace": "lcm-protocol-span-v1",
+        "providerFamily": "anthropic",
+        "protocolGroupKind": "provider_media_fallback",
+        "protocolGroupID": "media_group_001",
+        "contributingRenderUnitIDs": ["ru_media_001"],
+        "startIndex": 4,
+        "messageCount": 2,
+        "transformStage": "rendered"
+      },
+      "expectedSha256": "70b4cd51cb18391139d788e6f9305312f821825e79b8fafa181dd4d490382f92"
+    },
+    {
+      "id": "protocol-span.multi-unit.v1",
+      "input": {
+        "namespace": "lcm-protocol-span-v1",
+        "providerFamily": "openai_compatible",
+        "protocolGroupKind": "assistant_tool_results",
+        "protocolGroupID": "tool_call_group_001",
+        "contributingRenderUnitIDs": ["ru_assistant_001", "ru_tool_result_001"],
+        "startIndex": 1,
+        "messageCount": 2,
+        "transformStage": "rendered"
+      },
+      "expectedSha256": "c3e7a0bfc4fd248c54b7f08280ecd2069194db7e4b564ea85fccea862d4ac699"
+    },
+    {
+      "id": "request-snapshot-protection.empty.v1",
+      "input": {
+        "namespace": "lcm-request-snapshot-protection-v1",
+        "requestSnapshots": [],
+        "protectedCueIDs": []
+      },
+      "expectedSha256": "f23fcb9ce508edede8e4c32ad4b36b5c336aa1b32c4a703338c01bb9ebbfeb4e"
+    },
+    {
+      "id": "request-snapshot-protection.nonempty.v1",
+      "input": {
+        "namespace": "lcm-request-snapshot-protection-v1",
+        "requestSnapshots": [
+          {
+            "requestSnapshotID": "rs_001",
+            "status": "in_flight",
+            "expiresAtMs": 1778152200000,
+            "cueIDs": ["cue_001"]
+          }
+        ],
+        "protectedCueIDs": ["cue_001"]
+      },
+      "expectedSha256": "303a22b3f778ce44b43a215e118e5d205b57b09545e3c6ea63fee75c0b1ad70b"
+    },
+    {
+      "id": "render-unit-order.basic.v1",
+      "input": {
+        "namespace": "lcm-render-unit-order-v1",
+        "renderUnitIDs": ["ru_raw_001", "ru_cue_001", "ru_target_001"],
+        "canonicalOrders": [1, 2, 3]
+      },
+      "expectedSha256": "109a7e20c66bbd12dd36ad0c516afd74e3365dbbb232f0d976bd00698831b5a9"
+    },
+    {
+      "id": "effective-placement.basic.v1",
+      "input": {
+        "namespace": "lcm-effective-placement-v1",
+        "entries": [
+          { "renderUnitID": "ru_raw_001", "slot": "history", "effectiveOrder": 1 },
+          { "renderUnitID": "ru_cue_001", "slot": "before_current_user", "effectiveOrder": 2 },
+          { "renderUnitID": "ru_target_001", "slot": "current_user", "effectiveOrder": 3 }
+        ]
+      },
+      "expectedSha256": "24e5bc07e0bf1ac247d15fd23f9e3282a81c17e9699c60c8b0a4c35211387c97"
+    },
+    {
+      "id": "source-selection.with-cue.v1",
+      "input": {
+        "namespace": "lcm-source-selection-v1",
+        "renderUnitIDs": ["ru_raw_001", "ru_cue_001", "ru_target_001"],
+        "targetCurrentUser": {
+          "sourceSessionID": "ses_a",
+          "sourceMessageID": "msg_user_009",
+          "messageRowID": "msg_row_009"
+        },
+        "activeCueIDs": ["cue_001"],
+        "cueLifecycleStates": ["active"],
+        "visibilityHash": "vis_001",
+        "protectedSpanHash": "spanhash_001",
+        "providerTransformHash": "pth_001",
+        "providerValidatorHash": "lcm-provider-validator-pending-m39-v1"
+      },
+      "expectedSha256": "9ed3b1ee7b552db017b4bfa14d38a51d83b5d5f1a0b1366749445e820be13911"
+    },
+    {
+      "id": "provider-transform.mistral.v1",
+      "input": {
+        "namespace": "lcm-provider-transform-v1",
+        "ruleVersion": "m39-provider-transform-rules-v1",
+        "providerFamily": "mistral",
+        "providerID": "mistral",
+        "modelID": "devstral-medium",
+        "sdkPackage": "@ai-sdk/mistral",
+        "apiIdentity": "chat",
+        "mediaHandling": "text_only",
+        "ruleFlags": ["mistral_sequence_repair"],
+        "cacheOptionsHash": "cacheopts_001",
+        "modelOptionsHash": "modelopts_001"
+      },
+      "expectedSha256": "d2271466201b6a64bff283e77cbefd169c9e1a07c7344e5e83778a9f2f8d3dc2"
+    },
+    {
+      "id": "provider-validator.pending-m39.v1",
+      "input": {
+        "namespace": "lcm-provider-validator-pending-m39-v1",
+        "value": "lcm-provider-validator-pending-m39-v1"
+      },
+      "expectedSha256": "544ae2712986e6ada34c3734a58d5fdadfe0a59ae0dec76f643aeec1240303e4"
+    }
+  ]
+}

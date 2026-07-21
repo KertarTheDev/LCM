@@ -1,0 +1,308 @@
+{
+  "scenarioID": "release-scenario-script-v1",
+  "specCommit": "<commit-or-tag>",
+  "snapshotPath": "<vsix-snapshot-path>",
+  "runtimePath": "<bundled-kilo-runtime-path>",
+  "os": "<platform-and-version>",
+  "date": "<YYYY-MM-DD>",
+  "dbPath": "<runtime-lcm-db-path>",
+  "artifactRoot": "<runtime-lcm-artifact-root>",
+  "safeStatusCaptures": [],
+  "steps": [
+    {
+      "stepID": "deterministic-suite-registry",
+      "command": "read packages/opencode/package.json scripts",
+      "expected": "Every release-critical LCM suite used by the scenario has a stable package script.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "source-db-smoke",
+      "command": "runLcmDbSmoke(release scale)",
+      "expected": "Source runtime PGlite smoke passes with content-safe status payloads.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "source-db-diagnose-rebuild",
+      "command": "diagnoseLcmDb; rebuildLcmDb --dry-run",
+      "expected": "Content-safe diagnose and dry-run rebuild reports are available for the source DB path.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "bundled-runtime-db-smoke",
+      "command": "<runtimePath> debug lcm-db-smoke --data-dir <dir> --runtime-mode vscode-bundled --json",
+      "expected": "Bundled runtime PGlite smoke passes without source-tree DB ownership.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "install-vscode-snapshot",
+      "manualAction": "Install the printed VSIX snapshot path and record `code --list-extensions --show-versions`.",
+      "expected": "The installed extension version matches the printed snapshot artifact and loads the bundled runtime.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "platform-packaged-runtime-smokes",
+      "manualAction": "Collect standalone CLI and VSIX bundled-runtime DB smokes on Windows, darwin-arm64, and darwin-x64.",
+      "expected": "Every required platform records lcm-platform-packaged-runtime-smoke-v1 JSON with exact command, OS/arch/date, artifact path/hash, DB path, and passed content-safe result.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "lcm-active-new-session",
+      "manualAction": "Start a new session from the installed snapshot.",
+      "expected": "The session is LCM-active by default and no provider request occurs after blocked preflight.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "small-threshold-summaries",
+      "manualAction": "Run a small-threshold long chat.",
+      "expected": "Summaries are created and active context remains recoverable.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "blocking-hard-limit-maintenance",
+      "manualAction": "Force blocking hard-limit maintenance.",
+      "expected": "Inline busy status appears, abort/cancel is respected, and context stays under hard limit or fails closed.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "retrieval-off-context",
+      "manualAction": "Retrieve content that has fallen out of active context.",
+      "expected": "Authorized retrieval recovers cited off-context content and denies out-of-scope handles.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "large-file-indirection",
+      "manualAction": "Produce large user/assistant/reasoning/media/tool payloads.",
+      "expected": "Required source parts use stable `file_...` IDs and authorized `lcm_read` remains lossless.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "map-async-jsonl",
+      "manualAction": "Run `llm_map` and `agentic_map` over JSONL inputs.",
+      "expected": "Map rows process asynchronously, preserve zero-based item identity, support cancel/status, and publish ordered output only after completion.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "cost-status-breakdown",
+      "manualAction": "Inspect Memory/Retrieval/File/Map cost and status surfaces.",
+      "expected": "Cost/status is content-safe, correctly categorized, and does not duplicate `agentic_map` child assistant usage.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "no-legacy-context-management",
+      "manualAction": "Inspect model context and UI controls during LCM-active turns.",
+      "expected": "No legacy pruning, routine manual compact, or old tool-result placeholder manages model context.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "provider-safe.assembly-validation",
+      "command": "run provider-safe assembly validation scenario",
+      "expected": "Render units enter shared preparation, target current user appears once, protected spans validate, and assembly failures expose only content-safe errors.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "provider-safe.final-provider-validation",
+      "command": "run final provider validation after ProviderTransform.message",
+      "expected": "The final provider payload is branded only after post-transform protocol validation and no SDK call occurs on validation failure.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "provider-safe.request-snapshot-cleanup",
+      "command": "exercise lcm_provider_request_snapshots lifecycle",
+      "expected": "Request snapshots are created after assembly validation, resolved/canceled/expired by the fixed state machine, and cleaned without raw payload leakage.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "provider-safe.cue-lifecycle",
+      "command": "exercise active/superseded/tombstoned cue transitions",
+      "expected": "Only active cues enter new assembly, protected superseded/tombstoned cues remain until snapshots resolve, cancel, or expire, and physical deletion is safe.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "provider-safe.snapshot-v2-repair",
+      "command": "restore lcm-context-restore-manifest-v2 and historical v1",
+      "expected": "V2 restore validates render-unit/provider-safe hashes and historical v1 restore clears stale token/cache/provider metadata before reuse.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "provider-safe.missing-tool-result-regression",
+      "command": "run packaged tool-call plus retrieval-cue regression",
+      "expected": "OpenAI-compatible/Copilot payloads keep assistant tool calls adjacent to matching tool results before any cue or derived message.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.context-fill-hard-ratio",
+      "command": "run packaged context-fill hard-ratio regression",
+      "expected": "User-facing context fill reports activeTokens / hardLimit with system/tool overhead and output reserve shown separately.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.soft-backlog-pressure",
+      "command": "run raw-backlog soft pressure regression",
+      "expected": "Soft pressure is labeled separately from used context and uses softBacklogTokens / softThreshold only as a maintenance diagnostic.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.over-soft-nonblocking-scheduling",
+      "command": "run over-soft nonblocking scheduling regression",
+      "expected": "Over-soft and below-hard preflight records scheduled nonblocking soft work with overSoft true, overHard false, workNeeded true, workPerformed false, and blocking false.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.maintenance-status-values",
+      "command": "run maintenance status envelope regression",
+      "expected": "Maintenance events and diagnostics include per-status evidence for soft scheduled/started/deferred/skipped/completed/canceled/failed, manual repair no_op, and hard started/completed/canceled/failed/recovery_required states without raw content.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.deterministic-fallback-counter-label",
+      "command": "run deterministic fallback counter labeling regression",
+      "expected": "Deterministic fallback token evidence is labeled with tokenCounterMode and tokenCounterVersion wherever percentages or release evidence are reported.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.summary-quality-rejected-tiny",
+      "command": "run tiny summary rejection regression",
+      "expected": "Tiny large-source summaries are rejected with summaryObjectiveStatus and no active-context replacement.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.summary-quality-accepted-useful",
+      "command": "run useful summary acceptance regression",
+      "expected": "Useful summaries are accepted with acceptedSummaryTokens plus objective/fallback/reasoning usage evidence.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.provider-capacity-deferral",
+      "command": "run local provider capacity deferral regression",
+      "expected": "Background local-provider work defers before invocation with provider_capacity_deferred, providerEndpointKeyHash, workNeeded true, workPerformed false, and blocking false.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.provider-unavailable-connection-failure",
+      "command": "run local provider connection failure regression",
+      "expected": "Post-invocation provider connection failures use provider_unavailable, not provider_capacity_deferred, and expose no raw endpoint URL, credentials, or provider error text.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.long-tool-output-source-preservation",
+      "command": "run huge terminal tool-output source preservation regression",
+      "expected": "Huge sealed terminal tool output for completed, terminal-error, and interrupted-error-output cases is persisted through lcm_file source storage with marker/preview rendering, next-turn continuation succeeds, object-shaped errors normalize to safe errors, and no [object Object], false missing_source, or legacy cleared-placeholder behavior appears.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.busy-status-finalizer",
+      "command": "run hard-limit busy status finalizer regression",
+      "expected": "Blocking Preparing memory status clears on ended, failed, canceled, abort, session idle, or operation-scoped finalizer cleanup.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.hard-limit-fail-closed",
+      "command": "run hard-limit fail-closed regression",
+      "expected": "Hard-limit unresolved behavior returns content-safe safeError and sends no over-limit foreground provider request.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.no-stale-preparing-memory",
+      "command": "run stale preparing-memory status regression",
+      "expected": "No stale Preparing memory status remains after ended, failed, canceled, abort, session idle, or finalizer cleanup.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "context-regression.release-context-regression",
+      "command": "run context-regression-v1 report generator",
+      "expected": "Aggregate release step validates the context-regression-v1 report against its schema; this step is not itself a report check ID.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "vscode-inline-status",
+      "manualAction": "Capture VSCode hard-limit busy, missing-source, stale-file, DB locked/corrupt, and settings fallback states.",
+      "expected": "All states render inline with canonical content-safe payloads.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "second-owner-db-locked",
+      "manualAction": "Open a second runtime against a non-stale owner lock.",
+      "expected": "`db_locked` fails closed with close-other-owner guidance and recovers after the owning runtime closes.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "corrupt-pglite-diagnose-rebuild",
+      "manualAction": "Exercise corrupt PGlite diagnose/rebuild support.",
+      "expected": "`db_corrupt`/`db_unavailable` fails closed, dry-run is content-safe, and apply-mode quarantine is explicit.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "preflight-result-union",
+      "manualAction": "Capture blocked prompt preflight for fail-before-conversation DB states.",
+      "expected": "Blocked preflight includes `safeError`, omits fake `conversationID`, and prevents provider calls.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "manual-compact-quarantine",
+      "manualAction": "Exercise the existing summarize/compact API shape against passive and LCM-active sessions.",
+      "expected": "LCM-active requests fail closed unless explicit LCM maintenance owns the path; passive sessions keep legacy behavior only before activation.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "pre-beta-schema-rebaseline",
+      "manualAction": "Open a fresh LCM DB and a pre-beta schema fixture.",
+      "expected": "Fresh DBs use the current baseline schema and old pre-release LCM schemas fail closed instead of migrating.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "recursive-session-delete-cleanup",
+      "manualAction": "Delete a session tree with LCM records, usage rows, map rows, and LCM-owned artifacts.",
+      "expected": "Normal deletion recursively cleans LCM-owned records/artifacts without deleting path-backed workspace source files.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "transport-status-and-map-regression",
+      "manualAction": "Capture LCM safe status events, settings/conversion webview transport, file-status payloads, and map async status/cancel behavior.",
+      "expected": "All captures use canonical content-safe DTOs and the VSCode extension host remains transport-only.",
+      "actual": "",
+      "status": "not_run"
+    }
+  ],
+  "result": "not_run"
+}

@@ -139,7 +139,14 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
             metadata: {
               ...result.metadata,
               truncated: truncated.truncated,
-              ...(truncated.truncated && { outputPath: truncated.outputPath }),
+              ...(truncated.truncated
+                ? {
+                    outputPath: truncated.outputPath,
+                    outputByteCount: truncated.outputByteCount,
+                    outputSha256: truncated.outputSha256,
+                    outputSidecarVersion: truncated.outputSidecarVersion,
+                  }
+                : {}), // kilocode_change - validated recovery sidecar metadata
             },
           }
         }).pipe(Effect.orDie, Effect.withSpan("Tool.execute", { attributes: attrs }))
