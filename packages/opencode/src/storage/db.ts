@@ -59,6 +59,21 @@ function applyMigrations(db: SQLiteBunDatabase, entries: Journal) {
   migrateFromJournal(db, entries)
 }
 
+// kilocode_change start - the core TypeScript journal and retained V1 Drizzle journal overlap on this migration
+function normalizeLegacyMigrations(db: Client, entries: Journal, skipMigrations: boolean): Journal {
+  const sessionMetadataExists = db.$client
+    .query("SELECT 1 FROM pragma_table_info('session') WHERE name = 'metadata'")
+    .get()
+  return entries.map((item) => ({
+    ...item,
+    sql:
+      skipMigrations || (item.name === "20260511173437_session-metadata" && sessionMetadataExists)
+        ? "select 1;"
+        : item.sql,
+  }))
+}
+// kilocode_change end
+
 function time(tag: string) {
   const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
   if (!match) return 0
@@ -121,12 +136,7 @@ export const Client = Object.assign(
         count: entries.length,
         mode: typeof KILO_MIGRATIONS !== "undefined" ? "bundled" : "dev",
       })
-      if (flags.skipMigrations) {
-        for (const item of entries) {
-          item.sql = "select 1;"
-        }
-      }
-      applyMigrations(db, entries)
+      applyMigrations(db, normalizeLegacyMigrations(db, entries, flags.skipMigrations)) // kilocode_change
     }
 
     client = db

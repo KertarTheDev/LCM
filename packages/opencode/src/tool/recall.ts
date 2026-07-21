@@ -127,6 +127,11 @@ async function read(
   const session = await bridge.promise(sessions.get(SessionID.make(params.sessionID))).catch(() => {
     throw new Error("Session not found. Use search mode first to find valid session IDs.")
   })
+  // kilocode_change start - current-lineage retrieval is owned by LCM; local recall remains a prior-session fallback
+  if (session.id === ctx.sessionID) {
+    throw new Error("The active session is available through the authorized LCM retrieval tools, not local recall.")
+  }
+  // kilocode_change end
   const dirs = await bridge.promise(WorktreeFamily.list().pipe(Effect.provideService(Git.Service, git))) // kilocode_change
   // kilocode_change start
   const dir = Filesystem.resolve(session.directory)
@@ -152,8 +157,7 @@ async function read(
   }
 
   const msgs = await bridge.promise(sessions.messages({ sessionID: session.id }))
-  const boundary = KiloSessionPromptQueue.active(ctx.sessionID) ?? RecallSearch.active(ctx.messages, ctx.messageID)
-  const visible = session.id === ctx.sessionID ? RecallSearch.visible(msgs, boundary) : msgs
+  const visible = msgs // kilocode_change - same-session reads are delegated to LCM above
   const lines: string[] = [
     `# Session: ${session.title}`,
     `Directory: ${session.directory}`,

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.d.ts",
+    "src/session/lcm/**/*.ts",
+    "src/config/config.ts",
+    "src/effect/app-runtime.ts",
+    "src/kilocode/lcm-system-policy.ts",
+    "src/kilocode/session/prompt-queue.ts",
+    "src/session/llm.ts",
+    "src/session/message-v2.ts",
+    "src/session/processor.ts",
+    "src/session/prompt.ts",
+    "src/session/status.ts",
+    "src/tool/agentic-map.ts",
+    "src/tool/lcm*.ts",
+    "src/tool/llm-map.ts",
+    "src/tool/registry.ts",
+    "test/lcm/**/*.ts",
+    "test/kilocode/lcm-*.test.ts"
+  ]
+}

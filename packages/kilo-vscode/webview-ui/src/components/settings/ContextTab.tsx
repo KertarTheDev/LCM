@@ -9,6 +9,7 @@ import { useConfig } from "../../context/config"
 import { useLanguage } from "../../context/language"
 import { useMemory } from "../../context/memory"
 import SettingsRow from "./SettingsRow"
+import { LcmContextSettings } from "./LcmContextSettings"
 
 const ContextTab: Component = () => {
   const { config, updateConfig } = useConfig()
@@ -17,24 +18,6 @@ const ContextTab: Component = () => {
   const [newPattern, setNewPattern] = createSignal("")
 
   const patterns = () => config().watcher?.ignore ?? []
-  const limit = () => {
-    const value = config().compaction?.threshold_percent
-    return value === null || value === undefined ? "" : String(value)
-  }
-
-  const saveLimit = (value: string) => {
-    const raw = value.trim()
-    if (!raw) {
-      updateConfig({ compaction: { ...config().compaction, threshold_percent: null } })
-      return
-    }
-
-    const percent = Number(raw)
-    if (!Number.isFinite(percent)) return
-    const next = Math.min(100, Math.max(1, percent))
-    updateConfig({ compaction: { ...config().compaction, threshold_percent: next } })
-  }
-
   const addPattern = () => {
     const value = newPattern().trim()
     if (!value) return
@@ -64,7 +47,9 @@ const ContextTab: Component = () => {
 
   return (
     <div>
-      <h4 style={{ "margin-top": "0", "margin-bottom": "8px" }}>{language.t("settings.context.memory.title")}</h4>
+      <LcmContextSettings />
+
+      <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>{language.t("settings.context.memory.title")}</h4>
       <Card>
         <SettingsRow title={language.t("settings.context.memory.project.title")} description={memoryStats()}>
           <Switch
@@ -125,57 +110,6 @@ const ContextTab: Component = () => {
             </div>
           )}
         </Show>
-      </Card>
-
-      {/* Compaction settings */}
-      <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>
-        {language.t("settings.context.compaction.title")}
-      </h4>
-      <Card>
-        <SettingsRow
-          title={language.t("settings.context.autoCompaction.title")}
-          description={language.t("settings.context.autoCompaction.description")}
-        >
-          <Switch
-            checked={config().compaction?.auto ?? true}
-            onChange={(checked) => updateConfig({ compaction: { ...config().compaction, auto: checked } })}
-            hideLabel
-          >
-            {language.t("settings.context.autoCompaction.title")}
-          </Switch>
-        </SettingsRow>
-        <SettingsRow
-          title={language.t("settings.context.compactionLimit.title")}
-          description={language.t("settings.context.compactionLimit.description")}
-        >
-          <div style={{ display: "flex", "align-items": "center", gap: "6px", width: "96px" }}>
-            <TextField
-              type="number"
-              min="1"
-              max="100"
-              step="1"
-              value={limit()}
-              placeholder="80"
-              onChange={saveLimit}
-              hideLabel
-              label={language.t("settings.context.compactionLimit.title")}
-            />
-            <span style={{ color: "var(--text-weak-base, var(--vscode-descriptionForeground))" }}>%</span>
-          </div>
-        </SettingsRow>
-        <SettingsRow
-          title={language.t("settings.context.prune.title")}
-          description={language.t("settings.context.prune.description")}
-          last
-        >
-          <Switch
-            checked={config().compaction?.prune ?? true}
-            onChange={(checked) => updateConfig({ compaction: { ...config().compaction, prune: checked } })}
-            hideLabel
-          >
-            {language.t("settings.context.prune.title")}
-          </Switch>
-        </SettingsRow>
       </Card>
 
       <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>{language.t("settings.context.watcherPatterns")}</h4>

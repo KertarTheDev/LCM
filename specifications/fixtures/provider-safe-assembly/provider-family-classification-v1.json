@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "provider-family-classification-v1",
+  "matchingPolicy": "providerID, sdkPackage, and apiIdentity comparisons are case-insensitive; transport family matches before interleaved reasoning capabilities",
+  "cases": [
+    {
+      "caseID": "copilot-provider-id",
+      "input": { "providerID": "github-copilot", "sdkPackage": "@ai-sdk/openai-compatible", "apiIdentity": "chat", "modelID": "gpt-4.1", "capabilities": [] },
+      "expectedFamily": "copilot"
+    },
+    {
+      "caseID": "anthropic-sdk",
+      "input": { "providerID": "anthropic", "sdkPackage": "@ai-sdk/anthropic", "apiIdentity": "messages", "modelID": "claude-sonnet-4", "capabilities": [] },
+      "expectedFamily": "anthropic"
+    },
+    {
+      "caseID": "vertex-anthropic-api",
+      "input": { "providerID": "vertex", "sdkPackage": "@ai-sdk/google-vertex", "apiIdentity": "vertex-anthropic", "modelID": "claude-sonnet-4", "capabilities": [] },
+      "expectedFamily": "anthropic"
+    },
+    {
+      "caseID": "mistral-devstral",
+      "input": { "providerID": "mistral", "sdkPackage": "@ai-sdk/mistral", "apiIdentity": "chat", "modelID": "devstral-medium", "capabilities": [] },
+      "expectedFamily": "mistral"
+    },
+    {
+      "caseID": "openai-native",
+      "input": { "providerID": "openai", "sdkPackage": "@ai-sdk/openai", "apiIdentity": "responses", "modelID": "gpt-5.1", "capabilities": [] },
+      "expectedFamily": "openai_compatible"
+    },
+    {
+      "caseID": "custom-openai-compatible",
+      "input": { "providerID": "local-compatible", "sdkPackage": "@ai-sdk/openai-compatible", "apiIdentity": "chat", "modelID": "custom-tool-model", "capabilities": [] },
+      "expectedFamily": "openai_compatible"
+    },
+    {
+      "caseID": "ollama-compatible",
+      "input": { "providerID": "ollama", "sdkPackage": "@ai-sdk/openai-compatible", "apiIdentity": "ollama-openai-compatible", "modelID": "qwen3", "capabilities": [] },
+      "expectedFamily": "openai_compatible"
+    },
+    {
+      "caseID": "interleaved-only",
+      "input": { "providerID": "unknown-reasoning", "sdkPackage": "@local/generic", "apiIdentity": "generic", "modelID": "reasoning-x", "capabilities": ["interleaved_reasoning"] },
+      "expectedFamily": "interleaved_reasoning"
+    },
+    {
+      "caseID": "interleaved-on-anthropic-stays-anthropic",
+      "input": { "providerID": "anthropic", "sdkPackage": "@ai-sdk/anthropic", "apiIdentity": "messages", "modelID": "claude-reasoning", "capabilities": ["interleaved_reasoning"] },
+      "expectedFamily": "anthropic"
+    },
+    {
+      "caseID": "unknown-generic",
+      "input": { "providerID": "unknown", "sdkPackage": "@local/generic", "apiIdentity": "generic", "modelID": "plain", "capabilities": [] },
+      "expectedFamily": "generic"
+    }
+  ]
+}

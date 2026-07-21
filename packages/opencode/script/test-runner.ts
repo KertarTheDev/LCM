@@ -207,6 +207,12 @@ const legend = `Legend: ${marks.pass}=pass ${marks.retry}=pass-after-retry ${mar
 async function run(file: string): Promise<Result> {
   const target = path.join("test", file)
   const cmd = ["bun", "test", target, "--timeout", String(timeout)]
+  // kilocode_change start - LCM exercises both the current core DB service and retained V1 storage adapter.
+  // A named SQLite file lets both connections observe the same migrated schema; :memory: creates one DB per connection.
+  const sharedDbPath = file.startsWith("lcm/")
+    ? path.join(os.tmpdir(), `kilo-lcm-test-${process.pid}-${crypto.randomUUID()}.db`)
+    : undefined
+  // kilocode_change end
 
   if (ci) {
     const name = file.replace(/[/\\]/g, "_") + ".xml"
@@ -218,6 +224,10 @@ async function run(file: string): Promise<Result> {
 
   const proc = Bun.spawn(cmd, {
     cwd: root,
+    env: {
+      ...process.env,
+      ...(sharedDbPath ? { KILO_TEST_SHARED_DB_PATH: sharedDbPath } : {}), // kilocode_change
+    },
     stdout: "pipe",
     stderr: "pipe",
     windowsHide: true,
@@ -236,6 +246,15 @@ async function run(file: string): Promise<Result> {
     await finish(proc)
   })
   const output = await Promise.all([stdout, stderr])
+  // kilocode_change start - remove the per-attempt shared DB after both adapters close with the child process
+  if (sharedDbPath) {
+    await Promise.all([
+      fs.rm(sharedDbPath, { force: true }),
+      fs.rm(`${sharedDbPath}-wal`, { force: true }),
+      fs.rm(`${sharedDbPath}-shm`, { force: true }),
+    ])
+  }
+  // kilocode_change end
 
   return {
     file,

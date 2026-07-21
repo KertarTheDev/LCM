@@ -25,6 +25,22 @@ import { described } from "./metadata"
 import { QueryBoolean } from "./query"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+// kilocode_change start - LCM session routes reuse isolated LCM-owned schemas
+import {
+  LcmCapabilitiesSchema,
+  LcmCancelMaintenanceInput,
+  LcmDbDiagnoseReportSchema,
+  LcmDbRecoverLockInput,
+  LcmDbRecoverLockReportSchema,
+  LcmDbRebuildInput,
+  LcmDbRebuildReportSchema,
+  LcmMaintenanceResultSchema,
+  LcmPromptExportReportSchema,
+  LcmRouteErrors,
+  LcmSettingsStateSchema,
+  LcmUpdateSettingsInput,
+} from "./lcm-contract"
+// kilocode_change end
 
 const root = "/session"
 export const ListQuery = Schema.Struct({
@@ -105,6 +121,15 @@ export const SessionPaths = {
   share: `${root}/:sessionID/share`,
   init: `${root}/:sessionID/init`,
   summarize: `${root}/:sessionID/summarize`,
+  // kilocode_change start
+  lcmCapabilities: `${root}/:sessionID/lcm/capabilities`,
+  lcmSettings: `${root}/:sessionID/lcm/settings`,
+  lcmMaintenanceCancel: `${root}/:sessionID/lcm/maintenance/cancel`,
+  lcmDbDiagnose: `${root}/:sessionID/lcm/db/diagnose`,
+  lcmDbRecoverLock: `${root}/:sessionID/lcm/db/recover-lock`,
+  lcmDbRebuild: `${root}/:sessionID/lcm/db/rebuild`,
+  lcmPromptsExport: `${root}/:sessionID/lcm/prompts/export`,
+  // kilocode_change end
   prompt: `${root}/:sessionID/message`,
   promptAsync: `${root}/:sessionID/prompt_async`,
   command: `${root}/:sessionID/command`,
@@ -319,14 +344,116 @@ export const SessionApi = HttpApi.make("session")
           query: WorkspaceRoutingQuery,
           payload: SummarizePayload,
           success: described(Schema.Boolean, "Summarized session"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
+          error: LcmRouteErrors, // kilocode_change
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.summarize",
             summary: "Summarize session",
-            description: "Generate a concise summary of the session using AI compaction to preserve key information.",
+            description: "Run LCM-owned conversation maintenance without legacy lossy compaction.", // kilocode_change
           }),
         ),
+        // kilocode_change start - trusted session-scoped LCM support surface
+        HttpApiEndpoint.get("lcmCapabilities", SessionPaths.lcmCapabilities, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(LcmCapabilitiesSchema, "LCM capabilities"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.capabilities",
+            summary: "Get LCM capabilities",
+            description: "Get content-safe LCM lifecycle and capability state for a session.",
+          }),
+        ),
+        HttpApiEndpoint.get("lcmSettingsGet", SessionPaths.lcmSettings, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(LcmSettingsStateSchema, "LCM settings state"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.settings.get",
+            summary: "Get LCM settings",
+            description: "Get effective LCM settings for the session's trusted project or workspace scope.",
+          }),
+        ),
+        HttpApiEndpoint.patch("lcmSettingsUpdate", SessionPaths.lcmSettings, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: LcmUpdateSettingsInput,
+          success: described(LcmSettingsStateSchema, "Updated LCM settings state"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.settings.update",
+            summary: "Update LCM settings",
+            description: "Update user-writable LCM settings for the session's workspace or project scope.",
+          }),
+        ),
+        HttpApiEndpoint.post("lcmMaintenanceCancel", SessionPaths.lcmMaintenanceCancel, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: [HttpApiSchema.NoContent, LcmCancelMaintenanceInput],
+          success: described(LcmMaintenanceResultSchema, "LCM maintenance cancellation result"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.maintenance.cancel",
+            summary: "Cancel queued LCM maintenance",
+            description: "Cancel a queued background LCM maintenance retry for the trusted session conversation.",
+          }),
+        ),
+        HttpApiEndpoint.post("lcmDbDiagnose", SessionPaths.lcmDbDiagnose, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(LcmDbDiagnoseReportSchema, "LCM database diagnosis report"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.db.diagnose",
+            summary: "Diagnose LCM database",
+            description: "Run a content-safe, read-only LCM database diagnosis for the trusted session family.",
+          }),
+        ),
+        HttpApiEndpoint.post("lcmDbRecoverLock", SessionPaths.lcmDbRecoverLock, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: [HttpApiSchema.NoContent, LcmDbRecoverLockInput],
+          success: described(LcmDbRecoverLockReportSchema, "LCM database owner-lock recovery report"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.db.recoverLock",
+            summary: "Recover LCM database owner lock",
+            description: "Preview or apply owner-lock recovery for the trusted session family.",
+          }),
+        ),
+        HttpApiEndpoint.post("lcmDbRebuild", SessionPaths.lcmDbRebuild, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: [HttpApiSchema.NoContent, LcmDbRebuildInput],
+          success: described(LcmDbRebuildReportSchema, "LCM database rebuild report"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.db.rebuild",
+            summary: "Rebuild LCM database",
+            description: "Preview or apply an LCM database rebuild for the trusted session family.",
+          }),
+        ),
+        HttpApiEndpoint.post("lcmPromptsExport", SessionPaths.lcmPromptsExport, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(LcmPromptExportReportSchema, "LCM prompt export report"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.prompts.export",
+            summary: "Export LCM prompts",
+            description: "Write debug files for reconstructed LCM prompts and active context.",
+          }),
+        ),
+        // kilocode_change end
         HttpApiEndpoint.post("prompt", SessionPaths.prompt, {
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
