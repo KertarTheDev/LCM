@@ -1,9 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { KiloClient, LcmSettingsState, Session } from "@kilocode/sdk/v2/client"
-import {
-  handleLcmSettingsWebviewRequest,
-  isLcmSettingsWebviewRequest,
-} from "../../src/kilo-provider/lcm-settings"
+import { handleLcmSettingsWebviewRequest, isLcmSettingsWebviewRequest } from "../../src/kilo-provider/lcm-settings"
 
 function state(strategy: "upward" | "dolt" = "upward") {
   return {
@@ -73,12 +70,8 @@ describe("LCM settings transport", () => {
       },
     )
 
-    expect(calls).toEqual([
-      { sessionID: "ses_current", directory: "/repo/ses_current", workspace: "wrk_current" },
-    ])
-    expect(posts).toEqual([
-      { type: "requestLcmSettings.result", requestID: "session", ok: true, state: value },
-    ])
+    expect(calls).toEqual([{ sessionID: "ses_current", directory: "/repo/ses_current", workspace: "wrk_current" }])
+    expect(posts).toEqual([{ type: "requestLcmSettings.result", requestID: "session", ok: true, state: value }])
   })
 
   it("uses the generated sessionless update route when no conversation is open", async () => {
@@ -117,8 +110,6 @@ describe("LCM settings transport", () => {
         lcmUpdateSettingsInput: { strategy: "dolt", storageWarningThresholdBytes: 4096 },
       },
     ])
-    expect(posts).toEqual([
-      { type: "updateLcmSettings.result", requestID: "global", ok: true, state: value },
-    ])
+    expect(posts).toEqual([{ type: "updateLcmSettings.result", requestID: "global", ok: true, state: value }])
   })
 })

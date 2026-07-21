@@ -10,6 +10,7 @@ import { Account } from "@/account/account"
 import { Config } from "@/config/config"
 import { Git } from "@/git"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Storage } from "@/storage/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
@@ -30,7 +31,13 @@ import { SessionProcessor } from "@/session/processor"
 import { SessionCompaction } from "@/session/compaction"
 import { SessionRevert } from "@/session/revert"
 import { SessionSummary } from "@/session/summary"
+import { SystemPrompt } from "@/session/system"
 import { SessionPrompt } from "@/session/prompt"
+// kilocode_change start - compose LCM beside the retained Kilo session services
+import { LcmContext } from "@/session/lcm/context"
+import { LcmDb } from "@/session/lcm/db"
+import { LcmRuntime } from "@/session/lcm/runtime"
+// kilocode_change end
 import { Instruction } from "@/session/instruction"
 import { LLM } from "@/session/llm"
 import { LSP } from "@/lsp/lsp"
@@ -65,7 +72,8 @@ import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 // kilocode_change end
 
-const CoreLayer = Layer.mergeAll( // kilocode_change
+const CoreLayer = Layer.mergeAll(
+  // kilocode_change
   Npm.defaultLayer,
   FSUtil.defaultLayer,
   Database.defaultLayer,
@@ -89,7 +97,7 @@ const CoreLayer = Layer.mergeAll( // kilocode_change
 // kilocode_change start
 const SessionLayer = Layer.mergeAll(
   AgentManager.defaultLayer,
-// kilocode_change end
+  // kilocode_change end
   Question.defaultLayer,
   Notebook.defaultLayer, // kilocode_change
   Permission.defaultLayer,
@@ -104,7 +112,7 @@ const SessionLayer = Layer.mergeAll(
   SessionCompaction.defaultLayer,
   SessionRevert.defaultLayer,
   SessionSummary.defaultLayer,
-  SessionPrompt.defaultLayer,
+  LcmDb.defaultLayer, // kilocode_change - shared runtime-owned conversation-context storage
   Instruction.defaultLayer,
   LLM.defaultLayer,
   LSP.defaultLayer,
@@ -114,7 +122,8 @@ const SessionLayer = Layer.mergeAll(
   Truncate.defaultLayer,
 ) // kilocode_change
 
-const FeatureLayer = Layer.mergeAll( // kilocode_change
+const FeatureLayer = Layer.mergeAll(
+  // kilocode_change
   ToolRegistry.defaultLayer,
   Format.defaultLayer,
   Project.defaultLayer,
@@ -133,11 +142,22 @@ const FeatureLayer = Layer.mergeAll( // kilocode_change
   SessionShare.defaultLayer,
 ) // kilocode_change
 
-export const AppLayer = Layer.mergeAll(CoreLayer, SessionLayer, FeatureLayer).pipe( // kilocode_change
+// kilocode_change start - expose one shared LCM runtime to the prompt loop and its tools
+const CoreAppLayer = Layer.mergeAll(CoreLayer, SessionLayer, FeatureLayer).pipe(
   Layer.provideMerge(Ripgrep.defaultLayer),
   Layer.provideMerge(InstanceLayer.layer),
+)
+
+const LcmAppLayer = LcmRuntime.layer.pipe(Layer.provideMerge(LcmContext.layer), Layer.provideMerge(CoreAppLayer))
+
+const appLayer = SessionPrompt.layer.pipe(
+  Layer.provide(SystemPrompt.defaultLayer),
+  Layer.provideMerge(LcmAppLayer),
+  Layer.provideMerge(CrossSpawnSpawner.defaultLayer),
   Layer.provideMerge(Observability.layer),
 )
+export const AppLayer = appLayer as Layer.Layer<Layer.Success<typeof appLayer>>
+// kilocode_change end
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
 type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">

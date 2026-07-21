@@ -3,14 +3,13 @@ import { KiloSessionHttpApi } from "@/kilocode/server/httpapi/session-fork" // k
 import { BlockedError as AgentRequirementError } from "@/kilocode/agent-requirements" // kilocode_change
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { KiloViewers } from "@/kilocode/presence/service" // kilocode_change
-import { Agent } from "@/agent/agent"
+import * as InstanceState from "@/effect/instance-state" // kilocode_change
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Command } from "@/command"
 import { Permission } from "@/permission"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
-import { SessionCompaction } from "@/session/compaction"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
@@ -19,6 +18,11 @@ import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
+// kilocode_change start - authoritative LCM route adapter
+import { lcmRouteErrorResponse, lcmRouteHttpStatus } from "@/session/lcm/route-errors"
+import { Service as LcmRuntimeService } from "@/session/lcm/runtime"
+import { createLcmSafeError, type LcmSafeError } from "@/session/lcm/types"
+// kilocode_change end
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Cause, Effect, Option, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
@@ -40,6 +44,20 @@ import {
   UpdatePayload,
   ViewedPayload, // kilocode_change
 } from "../groups/session"
+// kilocode_change start - schemas live in an isolated LCM-owned module
+import {
+  LcmBadRequestError,
+  LcmCancelMaintenanceInput,
+  LcmConflictError,
+  LcmDbRecoverLockInput,
+  LcmDbRebuildInput,
+  LcmForbiddenError,
+  LcmNotFoundError,
+  LcmServiceUnavailableError,
+  LcmTimeoutError,
+  LcmUpdateSettingsInput,
+} from "../groups/lcm-contract"
+// kilocode_change end
 import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
 
@@ -55,9 +73,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const shareSvc = yield* SessionShare.Service
     const promptSvc = yield* SessionPrompt.Service
     const revertSvc = yield* SessionRevert.Service
-    const compactSvc = yield* SessionCompaction.Service
     const runState = yield* SessionRunState.Service
-    const agentSvc = yield* Agent.Service
     const permissionSvc = yield* Permission.Service
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
@@ -65,6 +81,57 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const events = yield* EventV2Bridge.Service
     const viewers = yield* KiloViewers.Service // kilocode_change
     const scope = yield* Scope.Scope
+    const lcmRuntime = yield* LcmRuntimeService // kilocode_change
+
+    // kilocode_change start - content-safe LCM error mapping and route assertions
+    function createLcmRouteInvalidRequest(diagnosticCode: string) {
+      return createLcmSafeError({
+        code: "invalid_request",
+        templateKey: "lcm.request.invalid",
+        safeParams: {},
+        retryable: false,
+        diagnosticCode,
+      })
+    }
+
+    function lcmHttpError(error: LcmSafeError) {
+      const body = lcmRouteErrorResponse(error)
+      switch (lcmRouteHttpStatus(error)) {
+        case 403:
+          return new LcmForbiddenError(body)
+        case 404:
+          return new LcmNotFoundError(body)
+        case 409:
+          return new LcmConflictError(body)
+        case 503:
+          return new LcmServiceUnavailableError(body)
+        case 504:
+          return new LcmTimeoutError(body)
+        default:
+          return new LcmBadRequestError(body)
+      }
+    }
+
+    const mapLcmError = <A, E extends LcmSafeError, R>(effect: Effect.Effect<A, E, R>) =>
+      effect.pipe(Effect.mapError((error) => lcmHttpError(error)))
+
+    function validateSettingsPayload(payload: typeof LcmUpdateSettingsInput.Type, sessionID: SessionID) {
+      const allowed = new Set(["sessionID", "projectID", "workspaceID", "strategy", "storageWarningThresholdBytes"])
+      if (Object.keys(payload).some((key) => !allowed.has(key))) {
+        return createLcmRouteInvalidRequest("lcm_settings_unsupported_field")
+      }
+      if (payload.sessionID && payload.sessionID !== sessionID) {
+        return createLcmRouteInvalidRequest("lcm_settings_path_body_session_mismatch")
+      }
+      return undefined
+    }
+
+    function validateObjectKeys(payload: object, allowed: ReadonlySet<string>, diagnosticCode: string) {
+      return Object.keys(payload).some((key) => !allowed.has(key))
+        ? createLcmRouteInvalidRequest(diagnosticCode)
+        : undefined
+    }
+    // kilocode_change end
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
       return yield* session.list({
@@ -266,23 +333,182 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof SummarizePayload.Type
     }) {
-      yield* revertSvc.cleanup(yield* requireSession(ctx.params.sessionID))
-      const messages = yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
-      const defaultAgent = yield* agentSvc.defaultAgent()
-      const currentAgent = messages.findLast((message) => message.info.role === "user")?.info.agent ?? defaultAgent
-
-      yield* compactSvc.create({
-        sessionID: ctx.params.sessionID,
-        agent: currentAgent,
-        model: {
-          providerID: ctx.payload.providerID,
-          modelID: ctx.payload.modelID,
-        },
-        auto: ctx.payload.auto ?? false,
-      })
-      yield* promptSvc.loop({ sessionID: ctx.params.sessionID })
+      yield* mapLcmError(
+        Effect.gen(function* () {
+          yield* lcmRuntime.getOrCreateConversation({ sessionID: ctx.params.sessionID })
+          yield* lcmRuntime.syncFinalizedMessages({ sessionID: ctx.params.sessionID })
+          const maintenance = yield* lcmRuntime.runManualMaintenance({
+            sessionID: ctx.params.sessionID,
+            reason: "manual",
+            blocking: true,
+            renderOptions: {
+              providerID: ctx.payload.providerID,
+              modelID: ctx.payload.modelID,
+              providerMediaCapability: "unknown",
+              stripMedia: false,
+              taskCapabilityClass: "root",
+              clockPolicy: "runtime_per_preparation",
+            },
+          })
+          if (maintenance.safeError) return yield* Effect.fail(maintenance.safeError)
+        }),
+      )
       return true
     })
+
+    // kilocode_change start - trusted session-scoped LCM support handlers
+    const lcmCapabilities = Effect.fn("SessionHttpApi.lcmCapabilities")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      const capabilities = yield* mapLcmError(lcmRuntime.getCapabilities({ sessionID: ctx.params.sessionID }))
+      return { ...capabilities, sessionID: ctx.params.sessionID }
+    })
+
+    const lcmSettingsGet = Effect.fn("SessionHttpApi.lcmSettingsGet")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      const instance = yield* InstanceState.context
+      const workspaceID = yield* InstanceState.workspaceID
+      return yield* mapLcmError(
+        lcmRuntime.getSettingsState({
+          sessionID: ctx.params.sessionID,
+          projectID: instance.project.id,
+          workspaceID,
+        }),
+      )
+    })
+
+    const lcmSettingsUpdate = Effect.fn("SessionHttpApi.lcmSettingsUpdate")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof LcmUpdateSettingsInput.Type
+    }) {
+      const instance = yield* InstanceState.context
+      const workspaceID = yield* InstanceState.workspaceID
+      const assertionError = validateSettingsPayload(ctx.payload, ctx.params.sessionID)
+      if (assertionError) return yield* Effect.fail(lcmHttpError(assertionError))
+      if (ctx.payload.projectID !== undefined && ctx.payload.projectID !== instance.project.id) {
+        return yield* Effect.fail(lcmHttpError(createLcmRouteInvalidRequest("lcm_settings_project_assertion_mismatch")))
+      }
+      if (ctx.payload.workspaceID !== undefined && ctx.payload.workspaceID !== workspaceID) {
+        return yield* Effect.fail(
+          lcmHttpError(createLcmRouteInvalidRequest("lcm_settings_workspace_assertion_mismatch")),
+        )
+      }
+      return yield* mapLcmError(
+        lcmRuntime.updateSettings({
+          sessionID: ctx.params.sessionID,
+          projectID: instance.project.id,
+          workspaceID,
+          strategy: ctx.payload.strategy,
+          storageWarningThresholdBytes: ctx.payload.storageWarningThresholdBytes,
+        }),
+      )
+    })
+
+    const lcmMaintenanceCancel = Effect.fn("SessionHttpApi.lcmMaintenanceCancel")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof LcmCancelMaintenanceInput.Type | typeof HttpApiSchema.NoContent.Type
+    }) {
+      const payload = ctx.payload && typeof ctx.payload === "object" && "reason" in ctx.payload ? ctx.payload : {}
+      return yield* mapLcmError(
+        lcmRuntime.cancelDeferredMaintenance({
+          sessionID: ctx.params.sessionID,
+          reason: payload.reason ?? "user",
+        }),
+      )
+    })
+
+    const lcmDbDiagnose = Effect.fn("SessionHttpApi.lcmDbDiagnose")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      return yield* mapLcmError(lcmRuntime.diagnoseDb({ sessionID: ctx.params.sessionID }))
+    })
+
+    const lcmDbRecoverLock = Effect.fn("SessionHttpApi.lcmDbRecoverLock")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof LcmDbRecoverLockInput.Type
+    }) {
+      const assertionError = validateObjectKeys(
+        ctx.payload,
+        new Set(["dryRun", "force"]),
+        "lcm_db_recover_lock_unsupported_field",
+      )
+      if (assertionError) return yield* Effect.fail(lcmHttpError(assertionError))
+      return yield* mapLcmError(
+        lcmRuntime.recoverDbLock({
+          sessionID: ctx.params.sessionID,
+          dryRun: ctx.payload.dryRun ?? true,
+          force: ctx.payload.force ?? false,
+        }),
+      )
+    })
+
+    const lcmDbRecoverLockRaw = Effect.fn("SessionHttpApi.lcmDbRecoverLockRaw")(function* (ctx: {
+      params: { sessionID: SessionID }
+      request: HttpServerRequest.HttpServerRequest
+    }) {
+      const body = yield* Effect.orDie(ctx.request.text)
+      if (!body.trim()) return yield* lcmDbRecoverLock({ params: ctx.params, payload: {} })
+      const json = yield* Effect.try({
+        try: () => JSON.parse(body) as unknown,
+        catch: () => lcmHttpError(createLcmRouteInvalidRequest("lcm_db_recover_lock_invalid_payload")),
+      })
+      if (!json || typeof json !== "object" || Array.isArray(json)) {
+        return yield* Effect.fail(lcmHttpError(createLcmRouteInvalidRequest("lcm_db_recover_lock_invalid_payload")))
+      }
+      const assertionError = validateObjectKeys(
+        json,
+        new Set(["dryRun", "force"]),
+        "lcm_db_recover_lock_unsupported_field",
+      )
+      if (assertionError) return yield* Effect.fail(lcmHttpError(assertionError))
+      const payload = yield* Schema.decodeUnknownEffect(LcmDbRecoverLockInput)(json).pipe(
+        Effect.mapError(() => lcmHttpError(createLcmRouteInvalidRequest("lcm_db_recover_lock_invalid_payload"))),
+      )
+      return yield* lcmDbRecoverLock({ params: ctx.params, payload })
+    })
+
+    const lcmDbRebuild = Effect.fn("SessionHttpApi.lcmDbRebuild")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof LcmDbRebuildInput.Type
+    }) {
+      const assertionError = validateObjectKeys(ctx.payload, new Set(["dryRun"]), "lcm_db_rebuild_unsupported_field")
+      if (assertionError) return yield* Effect.fail(lcmHttpError(assertionError))
+      return yield* mapLcmError(
+        lcmRuntime.rebuildDb({ sessionID: ctx.params.sessionID, dryRun: ctx.payload.dryRun ?? true }),
+      )
+    })
+
+    const lcmDbRebuildRaw = Effect.fn("SessionHttpApi.lcmDbRebuildRaw")(function* (ctx: {
+      params: { sessionID: SessionID }
+      request: HttpServerRequest.HttpServerRequest
+    }) {
+      const body = yield* Effect.orDie(ctx.request.text)
+      if (!body.trim()) return yield* lcmDbRebuild({ params: ctx.params, payload: {} })
+      const json = yield* Effect.try({
+        try: () => JSON.parse(body) as unknown,
+        catch: () => lcmHttpError(createLcmRouteInvalidRequest("lcm_db_rebuild_invalid_payload")),
+      })
+      if (!json || typeof json !== "object" || Array.isArray(json)) {
+        return yield* Effect.fail(lcmHttpError(createLcmRouteInvalidRequest("lcm_db_rebuild_invalid_payload")))
+      }
+      const assertionError = validateObjectKeys(json, new Set(["dryRun"]), "lcm_db_rebuild_unsupported_field")
+      if (assertionError) return yield* Effect.fail(lcmHttpError(assertionError))
+      const payload = yield* Schema.decodeUnknownEffect(LcmDbRebuildInput)(json).pipe(
+        Effect.mapError(() => lcmHttpError(createLcmRouteInvalidRequest("lcm_db_rebuild_invalid_payload"))),
+      )
+      return yield* lcmDbRebuild({ params: ctx.params, payload })
+    })
+
+    const lcmPromptsExport = Effect.fn("SessionHttpApi.lcmPromptsExport")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      const instance = yield* InstanceState.context
+      return yield* mapLcmError(
+        lcmRuntime.exportPrompts({ sessionID: ctx.params.sessionID, workspaceRoot: instance.directory }),
+      )
+    })
+    // kilocode_change end
 
     const prompt = Effect.fn("SessionHttpApi.prompt")(function* (ctx: {
       params: { sessionID: SessionID }
@@ -425,34 +651,46 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
     // kilocode_change end
 
-    return handlers
-      .handle("list", list)
-      .handle("status", status)
-      .handle("get", get)
-      .handle("children", children)
-      .handle("todo", todo)
-      .handle("diff", diff)
-      .handle("messages", messages)
-      .handle("message", message)
-      .handleRaw("create", createRaw)
-      .handle("remove", remove)
-      .handle("update", update)
-      .handleRaw("fork", forkRaw) // kilocode_change - carry upstream bodyless full-session fork support
-      .handle("abort", abort)
-      .handle("init", init)
-      .handle("share", share)
-      .handle("unshare", unshare)
-      .handle("summarize", summarize)
-      .handle("prompt", prompt)
-      .handle("promptAsync", promptAsync)
-      .handle("command", command)
-      .handle("shell", shell)
-      .handle("revert", revert)
-      .handle("unrevert", unrevert)
-      .handle("permissionRespond", permissionRespond)
-      .handle("deleteMessage", deleteMessage)
-      .handle("deletePart", deletePart)
-      .handle("updatePart", updatePart)
-      .handle("viewed", viewed) // kilocode_change
+    return (
+      handlers
+        .handle("list", list)
+        .handle("status", status)
+        .handle("get", get)
+        .handle("children", children)
+        .handle("todo", todo)
+        .handle("diff", diff)
+        .handle("messages", messages)
+        .handle("message", message)
+        .handleRaw("create", createRaw)
+        .handle("remove", remove)
+        .handle("update", update)
+        .handleRaw("fork", forkRaw) // kilocode_change - carry upstream bodyless full-session fork support
+        .handle("abort", abort)
+        .handle("init", init)
+        .handle("share", share)
+        .handle("unshare", unshare)
+        .handle("summarize", summarize)
+        // kilocode_change start
+        .handle("lcmCapabilities", lcmCapabilities)
+        .handle("lcmSettingsGet", lcmSettingsGet)
+        .handle("lcmSettingsUpdate", lcmSettingsUpdate)
+        .handle("lcmMaintenanceCancel", lcmMaintenanceCancel)
+        .handle("lcmDbDiagnose", lcmDbDiagnose)
+        .handleRaw("lcmDbRecoverLock", lcmDbRecoverLockRaw)
+        .handleRaw("lcmDbRebuild", lcmDbRebuildRaw)
+        .handle("lcmPromptsExport", lcmPromptsExport)
+        // kilocode_change end
+        .handle("prompt", prompt)
+        .handle("promptAsync", promptAsync)
+        .handle("command", command)
+        .handle("shell", shell)
+        .handle("revert", revert)
+        .handle("unrevert", unrevert)
+        .handle("permissionRespond", permissionRespond)
+        .handle("deleteMessage", deleteMessage)
+        .handle("deletePart", deletePart)
+        .handle("updatePart", updatePart)
+        .handle("viewed", viewed)
+    ) // kilocode_change
   }),
 )

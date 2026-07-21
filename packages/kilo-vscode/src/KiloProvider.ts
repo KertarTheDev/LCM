@@ -141,6 +141,7 @@ import { nativeTitle } from "./kilo-provider/native-tab-title"
 import { parseReview, reviewMetadata, type ReviewMessageData } from "./shared/review-comments"
 import { completesWithoutStatus } from "./kilo-provider/command-completion"
 import { KiloProviderMemory } from "./kilo-provider/memory"
+import { routeLcmSettingsWebviewRequest } from "./kilo-provider/lcm-settings"
 
 import {
   buildActionContext,
@@ -938,6 +939,15 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           post: (msg) => this.postMessage(msg),
           exportTranscript: (sessionID) => this.handleExportSessionTranscript(sessionID),
           openSessions: (ids) => this.trackOpenSessions(ids),
+          lcmSettings: (input) =>
+            routeLcmSettingsWebviewRequest(input, {
+              client: this.client ?? undefined,
+              connected: this.connectionState === "connected",
+              currentSession: this.currentSession ?? undefined,
+              contextSessionID: this.contextSessionID,
+              directory: (sessionID) => this.getWorkspaceDirectory(sessionID),
+              post: (response) => this.postMessage(response),
+            }),
         })
       ) {
         return

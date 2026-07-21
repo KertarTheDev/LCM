@@ -17,9 +17,7 @@ describe("LCM context settings UI", () => {
   })
 
   it("presents only the supported conversation-context settings", async () => {
-    const source = await Bun.file(
-      path.join(root, "webview-ui/src/components/settings/LcmContextSettings.tsx"),
-    ).text()
+    const source = await Bun.file(path.join(root, "webview-ui/src/components/settings/LcmContextSettings.tsx")).text()
 
     expect(source).toContain("LCM conversation context")
     expect(source).toContain('strategy?: "upward" | "dolt"')

@@ -55,6 +55,22 @@ export const ContextOverflowError = NamedError.create("ContextOverflowError", {
 export const ContentFilterError = NamedError.create("ContentFilterError", {
   message: Schema.String,
 })
+// kilocode_change start - structured fail-closed error carried by Kilo context engines
+export const LcmMemoryError = NamedError.create("LcmMemoryError", {
+  message: Schema.String,
+  code: Schema.String,
+  safeMessage: Schema.String,
+  retryable: Schema.Boolean,
+  diagnosticCode: Schema.optional(Schema.String),
+  action: Schema.optional(Schema.String),
+  operationID: Schema.optional(Schema.String),
+  conversationID: Schema.optional(Schema.String),
+  templateKey: Schema.optional(Schema.String),
+  safeParams: Schema.optional(
+    Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Number, Schema.Boolean])),
+  ),
+})
+// kilocode_change end
 
 export class OutputFormatText extends Schema.Class<OutputFormatText>("OutputFormatText")({
   type: Schema.Literal("text"),
@@ -413,6 +429,7 @@ const AssistantErrorSchema = Schema.Union([
   StructuredOutputError.EffectSchema,
   ContextOverflowError.EffectSchema,
   ContentFilterError.EffectSchema,
+  LcmMemoryError.EffectSchema, // kilocode_change
   APIError.EffectSchema,
 ]).annotate({ discriminator: "name" })
 type AssistantError = Schema.Schema.Type<typeof AssistantErrorSchema>

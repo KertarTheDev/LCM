@@ -10,12 +10,15 @@ import {
   CompactionPart,
   ContextOverflowError,
   Info,
+  LcmMemoryError,
+  type OutputFormat,
   OutputLengthError,
   Part,
   StructuredOutputError,
   SubtaskPart,
   User,
   WithParts,
+  ReasoningPart,
   type ToolPart,
 } from "@opencode-ai/core/v1/session"
 
@@ -43,6 +46,10 @@ import { CodexAuthExpiredError } from "@/kilocode/provider/codex-refresh" // kil
 import { KiloSessionMessageOrder } from "@/kilocode/session/message-order" // kilocode_change
 import * as TextStream from "@/kilocode/text-stream" // kilocode_change
 import { Effect, Schema } from "effect"
+// kilocode_change start - preserve structured LCM failures in the authoritative V1 message schema
+import { isLcmSafeError } from "./lcm/db-errors"
+import { LcmSafeErrorFailure, type LcmSafeError } from "./lcm/types"
+// kilocode_change end
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -66,7 +73,9 @@ export {
   FilePart,
   FilePartInput,
   Info,
+  LcmMemoryError,
   Part,
+  ReasoningPart,
   StepFinishPart,
   StepStartPart,
   StructuredOutputError,
@@ -78,6 +87,38 @@ export {
   User,
   WithParts,
 } from "@opencode-ai/core/v1/session"
+export type { OutputFormat } from "@opencode-ai/core/v1/session" // kilocode_change
+
+// kilocode_change start - convert internal LCM failures to the durable public message error shape
+function flatLcmSafeParams(input: Record<string, unknown>) {
+  const result: Record<string, string | number | boolean> = {}
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") result[key] = value
+  }
+  return Object.keys(result).length ? result : undefined
+}
+
+export function fromLcmSafeError(safeError: LcmSafeError): NonNullable<Assistant["error"]> {
+  const safeParams = flatLcmSafeParams(safeError.safeParams as Record<string, unknown>)
+  const enrichedSafeParams = {
+    ...(safeParams ?? {}),
+    ...(safeError.summaryID ? { summaryID: safeError.summaryID } : {}),
+    ...(safeError.fileID ? { fileID: safeError.fileID } : {}),
+  }
+  return new LcmMemoryError({
+    message: safeError.safeMessage,
+    code: safeError.code,
+    safeMessage: safeError.safeMessage,
+    retryable: safeError.retryable,
+    ...(safeError.diagnosticCode ? { diagnosticCode: safeError.diagnosticCode } : {}),
+    ...(safeError.action ? { action: safeError.action } : {}),
+    ...(safeError.operationID ? { operationID: safeError.operationID } : {}),
+    ...(safeError.conversationID ? { conversationID: safeError.conversationID } : {}),
+    ...(safeError.templateKey ? { templateKey: safeError.templateKey } : {}),
+    ...(Object.keys(enrichedSafeParams).length ? { safeParams: enrichedSafeParams } : {}),
+  }).toObject()
+}
+// kilocode_change end
 
 function truncateToolOutput(text: string, maxChars?: number) {
   if (!maxChars || text.length <= maxChars) return text
@@ -741,6 +782,12 @@ export function fromError(
   ctx: { providerID: ProviderV2.ID; aborted?: boolean },
 ): NonNullable<Assistant["error"]> {
   switch (true) {
+    // kilocode_change start
+    case e instanceof LcmSafeErrorFailure:
+      return fromLcmSafeError(e.safeError)
+    case isLcmSafeError(e):
+      return fromLcmSafeError(e)
+    // kilocode_change end
     case e instanceof DOMException && e.name === "AbortError":
       return new AbortedError(
         { message: e.message },

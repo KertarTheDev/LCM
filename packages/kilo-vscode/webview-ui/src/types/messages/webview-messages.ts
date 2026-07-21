@@ -185,6 +185,20 @@ export interface CompactRequest {
   modelID?: string
 }
 
+export interface RequestLcmSettingsMessage {
+  type: "requestLcmSettings"
+  requestID: string
+  sessionID?: string
+}
+
+export interface UpdateLcmSettingsMessage {
+  type: "updateLcmSettings"
+  requestID: string
+  sessionID?: string
+  strategy?: "upward" | "dolt"
+  storageWarningThresholdBytes?: number
+}
+
 export interface OpenSettingsPanelRequest {
   type: "openSettingsPanel"
   tab?: string
@@ -1413,6 +1427,8 @@ export type WebviewMessage =
   | MemoryShowMessage
   | MemoryOperationMessage
   | MemoryPromptMessage
+  | RequestLcmSettingsMessage
+  | UpdateLcmSettingsMessage
   | CreateSectionRequest
   | RenameSectionRequest
   | DeleteSectionRequest

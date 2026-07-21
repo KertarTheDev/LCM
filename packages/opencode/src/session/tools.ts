@@ -137,7 +137,8 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   }
 
   const mcpTools = (yield* SandboxPolicy.networkRestricted(input.session.id)) ? {} : yield* mcp.tools() // kilocode_change
-  for (const [key, item] of Object.entries(mcpTools)) { // kilocode_change
+  for (const [key, item] of Object.entries(mcpTools)) {
+    // kilocode_change
     const execute = item.execute
     if (!execute) continue
 
@@ -206,7 +207,14 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           const metadata = {
             ...result.metadata,
             truncated: truncated.truncated,
-            ...(truncated.truncated && { outputPath: truncated.outputPath }),
+            ...(truncated.truncated
+              ? {
+                  outputPath: truncated.outputPath,
+                  outputByteCount: truncated.outputByteCount,
+                  outputSha256: truncated.outputSha256,
+                  outputSidecarVersion: truncated.outputSidecarVersion,
+                }
+              : {}), // kilocode_change - recovery evidence; pruned persisted output remains canonical
           }
 
           const output = {

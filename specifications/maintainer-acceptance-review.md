@@ -2,7 +2,7 @@
 
 Review date: 2026-07-20.
 
-Reviewer stance: Kilo Code maintainer evaluating `kilocode-lcm-v7.4.11` for demonstrable beta use and eventual low-conflict upstream integration.
+Reviewer stance: Kilo Code maintainer evaluating `kilocode-lcm-v7.4.13` for demonstrable beta use and eventual low-conflict upstream integration.
 
 ## Assessment
 
@@ -47,4 +47,4 @@ The largest remaining conflict surface is `session/prompt.ts`, because the curre
 
 ## Recommendation
 
-Accept this design for continued implementation and beta demonstration on v7.4.11. Do not declare stable/default integration until the verification and external candidate evidence above are complete.
+Accept this design for continued implementation and beta demonstration on v7.4.13. Do not declare stable/default integration until the verification and external candidate evidence above are complete.

@@ -1,6 +1,6 @@
 # API, Settings, VSCode, And Packaging
 
-This document describes the current public route and VSCode/webview integration for LCM on the v7.4.11 base.
+This document describes the current public route and VSCode/webview integration for LCM on the v7.4.13 base.
 
 ## Route Surface
 

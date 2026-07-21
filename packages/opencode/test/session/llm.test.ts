@@ -1995,7 +1995,9 @@ describe("session.llm.stream", () => {
                     delta: {
                       role: "assistant",
                       content: null,
-                      tool_calls: [{ index: 0, id: "call-1", type: "function", function: { name: " bash", arguments: "" } }],
+                      tool_calls: [
+                        { index: 0, id: "call-1", type: "function", function: { name: " bash", arguments: "" } },
+                      ],
                     },
                   },
                 ],

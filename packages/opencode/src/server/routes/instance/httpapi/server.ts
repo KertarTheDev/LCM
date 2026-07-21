@@ -21,6 +21,7 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Format } from "@/format"
 import { Git } from "@/git" // kilocode_change
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { LcmRuntime } from "@/session/lcm/runtime" // kilocode_change
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { Permission } from "@/permission"
@@ -91,6 +92,7 @@ import { experimentalHandlers } from "./handlers/experimental"
 import { fileHandlers } from "./handlers/file"
 import { globalHandlers } from "./handlers/global"
 import { instanceHandlers } from "./handlers/instance"
+import { lcmHandlers } from "./handlers/lcm" // kilocode_change
 import { mcpHandlers } from "./handlers/mcp"
 import { permissionHandlers } from "./handlers/permission"
 import { projectHandlers } from "./handlers/project"
@@ -165,6 +167,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     experimentalHandlers,
     fileHandlers,
     instanceHandlers,
+    lcmHandlers, // kilocode_change
     mcpHandlers,
     projectHandlers,
     projectCopyHandlers,
@@ -247,6 +250,7 @@ export function createRoutes(
       Config.defaultLayer,
       Format.defaultLayer,
       Git.defaultLayer, // kilocode_change
+      LcmRuntime.defaultLayer, // kilocode_change
       LSP.defaultLayer,
       MemoryService.layer, // kilocode_change
       LLM.defaultLayer,

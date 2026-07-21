@@ -1,4 +1,4 @@
-// kilocode_change - keep LCM provider/model identity local to the adapter boundary
+// kilocode_change - new file; keep LCM provider/model identity local to the adapter boundary
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"

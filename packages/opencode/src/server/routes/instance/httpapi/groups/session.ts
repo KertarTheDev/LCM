@@ -339,6 +339,7 @@ export const SessionApi = HttpApi.make("session")
             description: "Remove the shareable link for a session, making it private again.",
           }),
         ),
+        // kilocode_change start - route summarization through authoritative conversation memory
         HttpApiEndpoint.post("summarize", SessionPaths.summarize, {
           params: { sessionID: SessionID },
           query: WorkspaceRoutingQuery,
@@ -352,6 +353,7 @@ export const SessionApi = HttpApi.make("session")
             description: "Run LCM-owned conversation maintenance without legacy lossy compaction.", // kilocode_change
           }),
         ),
+        // kilocode_change end
         // kilocode_change start - trusted session-scoped LCM support surface
         HttpApiEndpoint.get("lcmCapabilities", SessionPaths.lcmCapabilities, {
           params: { sessionID: SessionID },

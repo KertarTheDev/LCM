@@ -1181,6 +1181,8 @@
     "lint": "eslint src webview-ui",
     "test": "vscode-test",
     "test:unit": "bun test tests/unit/ --dots",
+    "lcm:settings-ui": "bun test tests/unit/lcm-settings-transport.test.ts",
+    "lcm:context-ui": "bun test tests/unit/lcm-context-ui.test.ts",
     "rebuild-sdk": "bun run --cwd ../sdk/js build",
     "storybook": "storybook dev -p 6007",
     "build-storybook": "storybook build -o storybook-static",

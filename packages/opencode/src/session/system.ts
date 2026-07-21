@@ -26,7 +26,7 @@ import { Reference } from "@opencode-ai/core/reference"
 
 // kilocode_change start
 import SOUL from "../kilocode/soul.txt"
-import type { EditorContext } from "../kilocode/editor-context"
+import type { EditorContext, RenderTimeInput } from "../kilocode/editor-context"
 import { KilocodeSystemPrompt } from "../kilocode/system-prompt"
 import { isLing } from "../kilocode/model-match"
 import { Config } from "@/config/config"
@@ -88,7 +88,11 @@ export function provider(model: Provider.Model) {
 }
 
 export interface Interface {
-  readonly environment: (model: Provider.Model, editorContext?: EditorContext) => Effect.Effect<string[]> // kilocode_change
+  readonly environment: (
+    model: Provider.Model,
+    editorContext?: EditorContext,
+    input?: RenderTimeInput,
+  ) => Effect.Effect<string[]> // kilocode_change
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
 }
 
@@ -106,6 +110,7 @@ export const layer = Layer.effect(
       environment: Effect.fn("SystemPrompt.environment")(function* (
         model: Provider.Model,
         editorContext?: EditorContext,
+        input?: RenderTimeInput,
       ) {
         const ctx = yield* InstanceState.context
         const cfg = yield* config.get()
@@ -119,7 +124,7 @@ export const layer = Layer.effect(
           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
         return [
-          ...KilocodeSystemPrompt.environment({ ctx, model, editor: editorContext }),
+          ...KilocodeSystemPrompt.environment({ ctx, model, editor: editorContext, time: input }),
           references.length === 0
             ? undefined
             : [

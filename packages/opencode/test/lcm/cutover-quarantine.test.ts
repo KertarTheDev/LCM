@@ -42,10 +42,10 @@ describe("milestone 27 cutover quarantine", () => {
     expect(contextTab).not.toContain("settings.context.prune")
     expect(contextTab).not.toContain("config().compaction")
 
-    const tuiApp = await packageFile("src/cli/cmd/tui/app.tsx")
+    const tuiApp = await implementationFile("packages/tui/src/app.tsx")
     expect(tuiApp).toContain('slashName: "lcm"')
     expect(tuiApp).toContain('slashAliases: ["lcm-settings"]')
-    const tuiPrompt = await packageFile("src/cli/cmd/tui/component/prompt/index.tsx")
+    const tuiPrompt = await implementationFile("packages/tui/src/component/prompt/index.tsx")
     expect(tuiPrompt).toContain('trimmed === "/lcm"')
     expect(tuiPrompt).toContain("MemoryPrompt.run")
     expect(tuiPrompt).not.toContain('trimmed === "/memory"')

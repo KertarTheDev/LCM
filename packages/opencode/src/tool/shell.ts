@@ -16,6 +16,7 @@ import { Shell } from "@/shell/shell"
 import { ShellID } from "./shell/id"
 
 import * as Truncate from "./truncate"
+import { truncationOutputMetadata } from "./truncation-dir" // kilocode_change - validated recovery sidecar
 import { Plugin } from "@/plugin"
 import { normalizeUrls } from "@/kilocode/util/url" // kilocode_change
 import { CommandTimeout } from "@/kilocode/command-timeout" // kilocode_change
@@ -481,6 +482,7 @@ export const ShellTool = Tool.define(
     const config = yield* Config.Service
     const spawner = yield* ChildProcessSpawner
     const trunc = yield* Truncate.Service
+    const fs = yield* FSUtil.Service
     const plugin = yield* Plugin.Service
     const flags = yield* RuntimeFlags.Service
     const permission = yield* ShellPermission // kilocode_change
@@ -558,7 +560,8 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
-          const reader = yield* Effect.forkScoped( // kilocode_change - keep the fiber so trailing output can be drained
+          const reader = yield* Effect.forkScoped(
+            // kilocode_change - keep the fiber so trailing output can be drained
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
               const size = Buffer.byteLength(chunk, "utf-8")
               list.push({ text: chunk, size })
@@ -668,6 +671,13 @@ export const ShellTool = Tool.define(
       if (meta.length > 0) {
         output += "\n\n<shell_metadata>\n" + meta.join("\n") + "\n</shell_metadata>"
       }
+      const sidecar =
+        cut && file
+          ? yield* fs.readFileString(file).pipe(
+              Effect.map((text) => truncationOutputMetadata({ outputPath: file, text })),
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+          : undefined
       return {
         title: input.description,
         metadata: {
@@ -675,7 +685,7 @@ export const ShellTool = Tool.define(
           exit: code,
           description: input.description,
           truncated: cut,
-          ...(cut && file ? { outputPath: file } : {}),
+          ...(sidecar ?? (cut && file ? { outputPath: file } : {})), // kilocode_change
         },
         output,
       }

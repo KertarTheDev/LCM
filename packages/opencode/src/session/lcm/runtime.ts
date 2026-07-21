@@ -255,6 +255,16 @@ export {
 // to LcmContext, storage ownership to LcmDb/lifecycle, and tool semantics to
 // retrieval/map modules.
 
+type LcmSessionDeletionInput = { sessionID: string; recursive: boolean }
+
+let activeSessionCleanup:
+  | {
+      readonly owner: symbol
+      readonly run: (input: LcmSessionDeletionInput) => Promise<void>
+      readonly close: () => Promise<void>
+    }
+  | undefined
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -858,10 +868,9 @@ export const layer = Layer.effect(
       })
     })
 
-    const handleSessionDeleted = Effect.fn("LcmRuntime.handleSessionDeleted")(function* (input: {
-      sessionID: string
-      recursive: boolean
-    }) {
+    const handleSessionDeleted = Effect.fn("LcmRuntime.handleSessionDeleted")(function* (
+      input: LcmSessionDeletionInput,
+    ) {
       // Snapshot the trusted LCM tree before lifecycle cleanup removes it. Each
       // process-local scheduler is keyed by source session rather than conversation.
       const sessionIDs = yield* sessionDeletionTree(input).pipe(Effect.catch(() => Effect.succeed([input.sessionID])))
@@ -2518,6 +2527,18 @@ export const layer = Layer.effect(
       yield* lcmDb.close()
     })
 
+    const sessionCleanupOwner = Symbol("lcm-session-cleanup")
+    activeSessionCleanup = {
+      owner: sessionCleanupOwner,
+      run: (input) => Effect.runPromise(handleSessionDeleted(input)),
+      close: () => Effect.runPromise(closeRuntime()),
+    }
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        if (activeSessionCleanup?.owner === sessionCleanupOwner) activeSessionCleanup = undefined
+      }),
+    )
+
     yield* Effect.addFinalizer(() => closeRuntime().pipe(Effect.ignore))
 
     return Service.of({
@@ -2611,7 +2632,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
+export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide(Provider.defaultLayer),
   Layer.provide(LcmContext.layer),
   Layer.provide(Config.defaultLayer),
@@ -2620,7 +2641,54 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Bus.defaultLayer),
 )
 
-const { runPromise } = makeRuntime(Service, defaultLayer)
+const runtime = makeRuntime(Service, defaultLayer)
+const { runPromise } = runtime
+
+async function handleSessionDeletedStandalone(input: LcmSessionDeletionInput) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const sessionIDs = yield* Effect.gen(function* () {
+        if (!input.recursive) return [input.sessionID]
+        const ready = yield* ensureLcmDbReady(input)
+        const root = yield* LcmDb.Service
+        const db = LcmDb.scoped(root, ready.target)
+        const rows = yield* db.executeForeground({
+          operationID: createOperationID(),
+          purpose: "cleanup",
+          run: async (client) =>
+            (
+              await (client as PGlite).query<{ source_session_id: string }>(
+                `
+                  WITH RECURSIVE tree(conversation_id, source_session_id) AS (
+                    SELECT conversation_id, source_session_id
+                    FROM lcm_conversations
+                    WHERE source_session_id = $1
+                    UNION ALL
+                    SELECT child.conversation_id, child.source_session_id
+                    FROM lcm_conversations child
+                    JOIN tree parent ON child.parent_conversation_id = parent.conversation_id
+                  )
+                  SELECT source_session_id
+                  FROM tree
+                `,
+                [input.sessionID],
+              )
+            ).rows,
+        })
+        return [...new Set([input.sessionID, ...rows.map((row) => row.source_session_id)])]
+      }).pipe(Effect.catch(() => Effect.succeed([input.sessionID])))
+
+      const pending = createLcmFinalizedSyncPendingStore()
+      for (const sessionID of sessionIDs) {
+        yield* pending.delete(sessionID as RuntimeSessionID).pipe(Effect.ignore)
+      }
+      yield* handleLifecycleSessionDeleted(input)
+    }).pipe(
+      Effect.ensuring(LcmDb.Service.use((db) => db.close()).pipe(Effect.ignore)),
+      Effect.provide(LcmDb.defaultLayer),
+    ),
+  )
+}
 
 export function getCapabilities(input: { sessionID: string }) {
   return runPromise((svc) => svc.getCapabilities(input))
@@ -2646,8 +2714,8 @@ export function syncFinalizedMessages(input: { sessionID: string; upToMessageID?
   return runPromise((svc) => svc.syncFinalizedMessages(input))
 }
 
-export function handleSessionDeleted(input: { sessionID: string; recursive: boolean }) {
-  return runPromise((svc) => svc.handleSessionDeleted(input))
+export function handleSessionDeleted(input: LcmSessionDeletionInput) {
+  return activeSessionCleanup?.run(input) ?? handleSessionDeletedStandalone(input)
 }
 
 export function runManualMaintenance(input: LcmManualMaintenanceInput) {
@@ -2741,7 +2809,11 @@ export function mapCancel(input: { sessionID: string; abortSignal?: AbortSignal 
 }
 
 export function close() {
-  return runPromise((svc) => svc.close())
+  const active = activeSessionCleanup
+  if (!active) return runtime.dispose()
+  return active.close().finally(() => {
+    if (activeSessionCleanup?.owner === active.owner) activeSessionCleanup = undefined
+  })
 }
 
 export * as LcmRuntime from "./runtime"

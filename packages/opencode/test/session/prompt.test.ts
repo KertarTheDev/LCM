@@ -41,6 +41,8 @@ import { SessionSummary } from "../../src/session/summary"
 import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
+import { Service as LcmRuntimeService } from "../../src/session/lcm/runtime-interface" // kilocode_change
+import type { ConversationID } from "../../src/session/lcm/types" // kilocode_change
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { KiloSession } from "../../src/kilocode/session" // kilocode_change
@@ -165,6 +167,23 @@ const status = SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.default
 const run = SessionRunState.layer.pipe(Layer.provide(status))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
 
+// kilocode_change start - ordinary prompt tests keep LCM unavailable unless a focused LCM suite supplies an active runtime
+const lcm = Layer.mock(LcmRuntimeService)({
+  getOrCreateConversation: () => Effect.succeed("conv_prompt_test" as ConversationID),
+  getCapabilities: ({ sessionID }) =>
+    Effect.succeed({
+      sessionID: SessionID.make(sessionID),
+      lifecycleState: "db_unavailable",
+      strategy: "upward",
+      dbReady: false,
+      lcmActive: false,
+      canAssemble: false,
+      canMaintain: false,
+      canRetrieve: false,
+    }),
+})
+// kilocode_change end
+
 // kilocode_change start
 const agent: AgentSvc.Info = {
   name: "build",
@@ -250,6 +269,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provideMerge(deps),
   )
   return SessionPrompt.layer.pipe(
+    Layer.provide(lcm), // kilocode_change
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(Image.defaultLayer),
     Layer.provide(summary),

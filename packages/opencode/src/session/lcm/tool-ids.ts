@@ -1,3 +1,4 @@
+// kilocode_change - new file; LCM infrastructure tool identifiers
 export const LCM_RETRIEVAL_TOOL_IDS = [
   "lcm_grep",
   "lcm_describe",

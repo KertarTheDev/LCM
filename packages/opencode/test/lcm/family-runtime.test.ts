@@ -172,14 +172,12 @@ test("trusted session family resolution follows root lineage and rejects untrust
     expect(resolved.target.rootSessionID).toBe(sessions.root.id)
     expect(resolved.target.familyID).toBe(deriveLcmFamilyID(sessions.root.id))
     expect(resolved.target.familyRoot).toBe(
-      await fs
-        .realpath(tmp.path)
-        .then((realTmp) =>
-          resolveLcmFamilyRoot({
-            kiloDataDir: path.join(realTmp, "kilo-data"),
-            familyID: deriveLcmFamilyID(sessions.root.id),
-          }),
-        ),
+      await fs.realpath(tmp.path).then((realTmp) =>
+        resolveLcmFamilyRoot({
+          kiloDataDir: path.join(realTmp, "kilo-data"),
+          familyID: deriveLcmFamilyID(sessions.root.id),
+        }),
+      ),
     )
 
     await expect(resolveSessionFamilyTarget({ sessionID: sessions.missingParent.id })).rejects.toMatchObject({

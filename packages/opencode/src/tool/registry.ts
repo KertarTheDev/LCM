@@ -68,6 +68,17 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache" // kilocode_change
 import { RipgrepBinary } from "@opencode-ai/core/ripgrep/binary" // kilocode_change
 import { AppProcess } from "@opencode-ai/core/process" // kilocode_change
+// kilocode_change start - LCM-owned retrieval and durable map tools
+import { AgenticMapTool } from "./agentic-map"
+import { LcmDescribeTool } from "./lcm-describe"
+import { LcmExpandQueryTool } from "./lcm-expand-query"
+import { LcmExpandTool } from "./lcm-expand"
+import { LcmGrepTool } from "./lcm-grep"
+import { LcmMapCancelTool } from "./lcm-map-cancel"
+import { LcmMapStatusTool } from "./lcm-map-status"
+import { LcmReadTool } from "./lcm-read"
+import { LlmMapTool } from "./llm-map"
+// kilocode_change end
 
 export function webSearchEnabled(
   providerID: ProviderV2.ID,
@@ -130,6 +141,17 @@ export const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    // kilocode_change start
+    const lcmgrep = yield* LcmGrepTool
+    const lcmdescribe = yield* LcmDescribeTool
+    const lcmexpand = yield* LcmExpandTool
+    const lcmexpandquery = yield* LcmExpandQueryTool
+    const lcmread = yield* LcmReadTool
+    const llmmap = yield* LlmMapTool
+    const agenticmap = yield* AgenticMapTool
+    const lcmmapstatus = yield* LcmMapStatusTool
+    const lcmmapcancel = yield* LcmMapCancelTool
+    // kilocode_change end
     const agent = yield* Agent.Service
     // kilocode_change start
     const suggesttool = yield* SuggestTool
@@ -184,7 +206,14 @@ export const layer = Layer.effect(
                   metadata: {
                     ...metadata,
                     truncated: out.truncated,
-                    ...(out.truncated && { outputPath: out.outputPath }),
+                    ...(out.truncated
+                      ? {
+                          outputPath: out.outputPath,
+                          outputByteCount: out.outputByteCount,
+                          outputSha256: out.outputSha256,
+                          outputSidecarVersion: out.outputSidecarVersion,
+                        }
+                      : {}), // kilocode_change - validated recovery sidecar metadata
                   },
                 }
               }).pipe(
@@ -250,6 +279,17 @@ export const layer = Layer.effect(
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
           suggest: Tool.init(suggesttool), // kilocode_change
+          // kilocode_change start
+          lcmgrep: Tool.init(lcmgrep),
+          lcmdescribe: Tool.init(lcmdescribe),
+          lcmexpand: Tool.init(lcmexpand),
+          lcmexpandquery: Tool.init(lcmexpandquery),
+          lcmread: Tool.init(lcmread),
+          llmmap: Tool.init(llmmap),
+          agenticmap: Tool.init(agenticmap),
+          lcmmapstatus: Tool.init(lcmmapstatus),
+          lcmmapcancel: Tool.init(lcmmapcancel),
+          // kilocode_change end
         })
 
         // kilocode_change start
@@ -284,6 +324,17 @@ export const layer = Layer.effect(
               ...(["cli", "vscode"].includes(flags.client) ? [tool.suggest] : []),
               ...KiloToolRegistry.extra(kilo, cfg),
               ...(flags.experimentalLspTool ? [tool.lsp] : []),
+              // kilocode_change start
+              tool.lcmgrep,
+              tool.lcmdescribe,
+              tool.lcmexpand,
+              tool.lcmexpandquery,
+              tool.lcmread,
+              tool.llmmap,
+              tool.agenticmap,
+              tool.lcmmapstatus,
+              tool.lcmmapcancel,
+              // kilocode_change end
             ],
             kilo,
           ),

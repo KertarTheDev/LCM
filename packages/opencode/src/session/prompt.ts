@@ -84,6 +84,21 @@ import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache" // kilocode_change
+// kilocode_change start - LCM adapter over the retained v7.4.13 prompt loop
+import { renderLcmSystemPolicy } from "@/kilocode/lcm-system-policy"
+import { markLcmRenderOnlyPart, prepareKiloMessageVisibility, prepareKiloModelInput } from "./lcm/render-prep"
+import type { LcmRawLeafRenderPreparationInput } from "./lcm/context"
+import { getLcmRuntimePreparedProviderPayload } from "./lcm/provider-payload"
+import { Service as LcmRuntimeService, defaultLayer as LcmRuntimeDefaultLayer } from "./lcm/runtime"
+import { LCM_MAP_TOOL_IDS, LCM_RETRIEVAL_TOOL_IDS } from "./lcm/tool-ids"
+import {
+  createLcmSafeError,
+  type ConversationID,
+  type LcmLifecycleState,
+  type LcmSafeError,
+  type LcmThresholdDecision,
+} from "./lcm/types"
+// kilocode_change end
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -105,6 +120,68 @@ export const shouldAskPlanFollowup = KiloSessionPrompt.shouldAskPlanFollowup // 
 
 // kilocode_change start - persistent tool-output pruning when payload is already large
 const REQUEST_PRUNE_BYTES = 1_250_000
+// kilocode_change end
+// kilocode_change start - authoritative LCM provider-overflow recovery is bounded to one physical retry
+const LCM_PROVIDER_OVERFLOW_RECOVERY_MAX_ATTEMPTS = 2
+const LCM_RETRIEVAL_TOOL_ID_SET = new Set<string>(LCM_RETRIEVAL_TOOL_IDS)
+const LCM_MAP_TOOL_ID_SET = new Set<string>(LCM_MAP_TOOL_IDS)
+
+type LcmAllowedToolIDs = {
+  readonly retrieval: Set<string>
+  readonly map: Set<string>
+}
+
+type LcmProviderOverflowDecision =
+  | { readonly action: "retry"; readonly nextAttempt: number; readonly providerOverflowRecovery: { attempt: number } }
+  | { readonly action: "fail"; readonly safeError: LcmSafeError }
+
+export function assembleKiloSystemContext(input: {
+  readonly env: readonly string[]
+  readonly memory?: readonly string[]
+  readonly instructions: readonly string[]
+  readonly skills?: string
+  readonly lcmPolicy?: string
+  readonly structuredOutput?: string
+}) {
+  return [
+    ...(input.lcmPolicy ? [input.lcmPolicy] : []),
+    ...input.env,
+    ...(input.memory ?? []),
+    ...input.instructions,
+    ...(input.skills ? [input.skills] : []),
+    ...(input.structuredOutput ? [input.structuredOutput] : []),
+  ]
+}
+
+export function resolveLcmProviderOverflowResult(input: {
+  readonly lifecycleState: LcmLifecycleState
+  readonly retryAttempt: number
+  readonly conversationID?: ConversationID
+  readonly threshold?: Pick<LcmThresholdDecision, "activeTokens" | "hardLimit">
+}): LcmProviderOverflowDecision {
+  if (input.lifecycleState === "lcm_active" && input.retryAttempt < LCM_PROVIDER_OVERFLOW_RECOVERY_MAX_ATTEMPTS - 1) {
+    const nextAttempt = input.retryAttempt + 1
+    return { action: "retry", nextAttempt, providerOverflowRecovery: { attempt: nextAttempt } }
+  }
+  return {
+    action: "fail",
+    safeError: createLcmSafeError({
+      code: "hard_limit_unresolved",
+      templateKey: "lcm.hard_limit.unresolved",
+      safeParams: {
+        ...(input.conversationID ? { conversationID: input.conversationID } : {}),
+        ...(input.threshold?.activeTokens !== undefined ? { beforeTokens: input.threshold.activeTokens } : {}),
+        ...(input.threshold?.hardLimit !== undefined ? { hardLimit: input.threshold.hardLimit } : {}),
+        action: "start_new_thread",
+      },
+      retryable: false,
+      diagnosticCode:
+        input.lifecycleState === "lcm_active"
+          ? "lcm_prompt_provider_overflow_after_lcm_retry_exhausted"
+          : "lcm_prompt_provider_overflow_without_active_lcm_rejected",
+    }),
+  }
+}
 // kilocode_change end
 function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   // cleanup() marks abandoned tool_use blocks this way after retries/aborts.
@@ -163,6 +240,7 @@ export const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const cache = Option.getOrUndefined(yield* Effect.serviceOption(RepositoryCache.Service)) // kilocode_change
+    const lcmRuntime = yield* LcmRuntimeService // kilocode_change - shared process-owned LCM runtime
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
@@ -171,6 +249,49 @@ export const layer = Layer.effect(
         prompt: (input: PromptInput) => prompt(input).pipe(Effect.catch(Effect.die)),
       } satisfies TaskPromptOps
     })
+
+    // kilocode_change start - expose only the LCM tools authorized for the proven conversation scope
+    const resolveAllowedLcmToolIDs = Effect.fn("SessionPrompt.resolveAllowedLcmToolIDs")(function* (
+      sessionID: SessionID,
+    ) {
+      const allowed: LcmAllowedToolIDs = { retrieval: new Set(), map: new Set() }
+      const capabilities = yield* lcmRuntime
+        .getCapabilities({ sessionID })
+        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (!capabilities?.lcmActive) return allowed
+      const conversation = yield* lcmRuntime
+        .getConversationScope({ sessionID })
+        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (!conversation || conversation.lifecycleState !== "lcm_active") return allowed
+      if (conversation.capabilityClass === "root" || conversation.capabilityClass === "map_child") {
+        for (const id of LCM_MAP_TOOL_IDS) allowed.map.add(id)
+      }
+      allowed.retrieval.add("lcm_grep")
+      allowed.retrieval.add("lcm_describe")
+      allowed.retrieval.add("lcm_expand_query")
+      if (conversation.capabilityClass !== "root") allowed.retrieval.add("lcm_expand")
+      if (conversation.directContentToolsAllowed) allowed.retrieval.add("lcm_read")
+      return allowed
+    })
+
+    const resolveLcmSystemPolicy = Effect.fn("SessionPrompt.resolveLcmSystemPolicy")(function* (sessionID: SessionID) {
+      return renderLcmSystemPolicy(yield* resolveAllowedLcmToolIDs(sessionID))
+    })
+
+    const completeLcmPromptFailure = Effect.fnUntraced(function* (input: {
+      sessionID: SessionID
+      message: SessionV1.Assistant
+      safeError: LcmSafeError
+    }) {
+      const error = MessageV2.fromLcmSafeError(input.safeError)
+      input.message.error = error
+      input.message.finish = "error"
+      input.message.time.completed = input.message.time.completed ?? Date.now()
+      yield* sessions.updateMessage(input.message)
+      yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error })
+      yield* status.set(input.sessionID, { type: "idle" })
+    })
+    // kilocode_change end
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* Effect.logInfo("cancel", { "session.id": sessionID })
@@ -1459,6 +1580,9 @@ export const layer = Layer.effect(
       const memoryCache = KiloSessionPrompt.memoryCache() // kilocode_change
       closeReasons.delete(sessionID) // kilocode_change
       let compactionAttempts = 0 // kilocode_change - cap compaction attempts per turn to avoid infinite loops
+      let lcmProviderOverflowRetryAttempt = 0 // kilocode_change - one bounded authoritative rebuild
+      let pendingLcmProviderOverflowRecovery: { readonly attempt: number } | undefined // kilocode_change
+      let usedLcmManagedHistory = false // kilocode_change - suppress legacy end-of-turn pruning
       const ctx = yield* InstanceState.context
       let structured: unknown
       let step = 0
@@ -1468,13 +1592,22 @@ export const layer = Layer.effect(
         yield* status.set(sessionID, { type: "busy" })
         yield* Effect.logInfo("loop", { "session.id": sessionID, step })
 
-        // kilocode_change start - provide the upstream Effect database to Kilo's retained prompt loop
-        let msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
-          Effect.provideService(Database.Service, database),
-        )
+        // kilocode_change start - LCM sees finalized durable source; legacy compaction remains the non-LCM adapter
+        yield* lcmRuntime.getOrCreateConversation({ sessionID }).pipe(Effect.catch(() => Effect.void))
+        const lcmCapabilities = yield* lcmRuntime.getCapabilities({ sessionID })
+        const useLcmManagedHistory =
+          lcmCapabilities.lifecycleState === "lcm_active" || lcmCapabilities.lifecycleState === "passive_synced"
+        usedLcmManagedHistory ||= useLcmManagedHistory
+        let msgs = useLcmManagedHistory
+          ? (yield* MessageV2.stream(sessionID).pipe(Effect.provideService(Database.Service, database))).reverse()
+          : yield* MessageV2.filterCompactedEffect(sessionID).pipe(Effect.provideService(Database.Service, database))
+        if (!useLcmManagedHistory) {
+          msgs = KiloSessionPromptQueue.scope(sessionID, msgs)
+          msgs = KiloSessionPrompt.trimBeforeLastSummary(msgs)
+        }
+        const scopedMessages = prepareKiloMessageVisibility({ sessionID, messages: msgs })
+        msgs = scopedMessages.messages
         // kilocode_change end
-        msgs = KiloSessionPromptQueue.scope(sessionID, msgs) // kilocode_change - hide later queued prompts
-        msgs = KiloSessionPrompt.trimBeforeLastSummary(msgs) // kilocode_change - trim on any completed summary (e.g. manual /compact against a text user)
 
         // kilocode_change start - select loop state by chronology after retained-tail projection
         const latest = KiloSessionMessageOrder.latest(msgs)
@@ -1563,7 +1696,7 @@ export const layer = Layer.effect(
           continue
         }
 
-        if (task?.type === "compaction") {
+        if (task?.type === "compaction" && !useLcmManagedHistory) {
           const result = yield* compaction.process({
             messages: msgs,
             parentID: lastUser.id,
@@ -1582,6 +1715,7 @@ export const layer = Layer.effect(
         }
 
         if (
+          !useLcmManagedHistory &&
           lastFinished &&
           lastFinished.summary !== true &&
           (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
@@ -1616,11 +1750,13 @@ export const layer = Layer.effect(
         }
         const maxSteps = agent.steps ?? Infinity
         const isLastStep = step >= maxSteps
-        msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
-          Effect.provideService(RuntimeFlags.Service, flags),
-          Effect.provideService(FSUtil.Service, fsys),
-          Effect.provideService(Session.Service, sessions),
-        )
+        if (!useLcmManagedHistory) {
+          msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
+            Effect.provideService(RuntimeFlags.Service, flags),
+            Effect.provideService(FSUtil.Service, fsys),
+            Effect.provideService(Session.Service, sessions),
+          )
+        }
 
         const msg: MessageV2.Assistant = {
           id: MessageID.ascending(),
@@ -1658,6 +1794,332 @@ export const layer = Layer.effect(
           .pipe(Effect.onInterrupt(() => finalize))
 
         const outcome: "break" | "continue" = yield* Effect.gen(function* () {
+          // kilocode_change start - authoritative LCM adapter; upstream prompt behavior continues below for non-LCM runs
+          if (useLcmManagedHistory) {
+            const renderClockMs = Date.now()
+            const renderPreparation: LcmRawLeafRenderPreparationInput = {
+              sessionID,
+              session,
+              agent,
+              model,
+              lastUser,
+              lastUserMessageID: lastUser.id,
+              permissionProfile: Permission.merge(agent.permission, session.permission ?? []),
+              taskCapabilityClass: "root",
+              messageVisibility: scopedMessages.visibility,
+              envCache,
+              clock: {
+                now: () => renderClockMs,
+                policy: "runtime_per_preparation",
+              },
+              format: lastUser.format ?? { type: "text" },
+              isLastStep,
+              maxStepMessage: MAX_STEPS,
+              prepareRenderOnlyMessages: ({ messages, clockMs, operationID }) =>
+                Effect.gen(function* () {
+                  const durable = new Set(messages.flatMap((message) => message.parts.map((part) => part.id)))
+                  const prepared = yield* SessionReminders.apply({ messages, agent, session }).pipe(
+                    Effect.provideService(RuntimeFlags.Service, flags),
+                    Effect.provideService(FSUtil.Service, fsys),
+                    Effect.provideService(Session.Service, sessions),
+                  )
+                  for (const message of prepared) {
+                    for (const part of message.parts) {
+                      if (durable.has(part.id) || part.type !== "text") continue
+                      markLcmRenderOnlyPart(part, {
+                        kind: "plan_reminder",
+                        producer: "kilo.session.prompt",
+                        operationID,
+                        createdAtMs: clockMs,
+                      })
+                    }
+                  }
+                  if (step > 1 && lastFinished) {
+                    for (const message of prepared) {
+                      const afterFinished =
+                        latest.finishedMessage && KiloSessionMessageOrder.compare(latest.finishedMessage, message) < 0
+                      if (message.info.role !== "user" || !afterFinished) continue
+                      for (const part of message.parts) {
+                        if (part.type !== "text" || part.ignored || part.synthetic || !part.text.trim()) continue
+                        part.text = [
+                          "<system-reminder>",
+                          "The user sent the following message:",
+                          part.text,
+                          "",
+                          "Please address this message and continue with your tasks.",
+                          "</system-reminder>",
+                        ].join("\n")
+                        markLcmRenderOnlyPart(part, {
+                          kind: "plan_followup",
+                          producer: "kilo.session.prompt-queue",
+                          operationID,
+                          createdAtMs: clockMs,
+                        })
+                      }
+                    }
+                  }
+                  return prepared
+                }),
+              transformMessages: ({ messages }) =>
+                plugin.trigger("experimental.chat.messages.transform", {}, { messages }),
+              resolveSystem: ({ clockMs }) =>
+                Effect.gen(function* () {
+                  const [skills, env, memory, instructions, lcmPolicy] = yield* Effect.all([
+                    sys.skills(agent),
+                    sys.environment(model, lastUser.editorContext, { now: clockMs }),
+                    KiloSessionPrompt.memoryInject({ ctx, sessionID, record: step === 1, cache: memoryCache }),
+                    instruction.system().pipe(Effect.orDie),
+                    resolveLcmSystemPolicy(sessionID),
+                  ])
+                  const format = lastUser.format ?? { type: "text" as const }
+                  return assembleKiloSystemContext({
+                    env,
+                    memory,
+                    instructions,
+                    skills,
+                    lcmPolicy,
+                    structuredOutput: format.type === "json_schema" ? STRUCTURED_OUTPUT_SYSTEM_PROMPT : undefined,
+                  })
+                }),
+              resolveTools: ({ messages }) =>
+                Effect.gen(function* () {
+                  const preparedLastUser =
+                    messages.findLast((message) => message.info.role === "user" && message.info.id === lastUser.id) ??
+                    messages.findLast((message) => message.info.role === "user")
+                  const bypassAgentCheck = preparedLastUser?.parts.some((part) => part.type === "agent") ?? false
+                  const tools = yield* SessionTools.resolve({
+                    agent,
+                    session,
+                    model,
+                    processor: handle,
+                    bypassAgentCheck,
+                    messages,
+                    promptOps: yield* ops(),
+                    memoryCache,
+                  }).pipe(
+                    Effect.provideService(Plugin.Service, plugin),
+                    Effect.provideService(Permission.Service, permission),
+                    Effect.provideService(Agent.Service, agents),
+                    Effect.provideService(Session.Service, sessions),
+                    Effect.provideService(ToolRegistry.Service, registry),
+                    Effect.provideService(MCP.Service, mcp),
+                    Effect.provideService(Truncate.Service, truncate),
+                    Effect.provideService(Config.Service, config),
+                    Effect.provideService(Provider.Service, provider),
+                    Effect.provideService(Database.Service, database),
+                  )
+                  const allowed = yield* resolveAllowedLcmToolIDs(sessionID)
+                  for (const id of Object.keys(tools)) {
+                    if (LCM_RETRIEVAL_TOOL_ID_SET.has(id) && !allowed.retrieval.has(id)) delete tools[id]
+                    if (LCM_MAP_TOOL_ID_SET.has(id) && !allowed.map.has(id)) delete tools[id]
+                  }
+                  return tools
+                }),
+              structuredOutputTool: ({ format }) =>
+                createStructuredOutputTool({
+                  schema: format.schema,
+                  onSuccess(output) {
+                    structured = output
+                  },
+                }),
+            }
+
+            const prepared = yield* prepareKiloModelInput({
+              ...renderPreparation,
+              messages: msgs,
+              lastUser,
+              lcmActive: true,
+            }).pipe(
+              Effect.map((value) => ({ ok: true as const, value })),
+              Effect.catch((safeError) => Effect.succeed({ ok: false as const, safeError })),
+            )
+            if (!prepared.ok) {
+              yield* completeLcmPromptFailure({ sessionID, message: handle.message, safeError: prepared.safeError })
+              return "break" as const
+            }
+
+            const renderOptions = {
+              renderInputManifest: prepared.value.renderInputManifest,
+              providerMediaCapability: prepared.value.providerMediaCapability,
+              stripMedia: prepared.value.stripMedia,
+              providerID: model.providerID,
+              modelID: model.id,
+              providerModelRevision: model.release_date,
+              agentName: agent.name,
+              permissionProfileVersion: prepared.value.renderInputManifest.permissionProfileVersion,
+              taskCapabilityClass: "root" as const,
+              clockPolicy: "runtime_per_preparation" as const,
+            }
+            const providerOverflowRecovery = pendingLcmProviderOverflowRecovery
+            pendingLcmProviderOverflowRecovery = undefined
+            const preflight = yield* lcmRuntime.preflightBeforeModel({
+              sessionID,
+              providerID: model.providerID,
+              modelID: model.id,
+              agentName: agent.name,
+              reason: providerOverflowRecovery ? "retry" : "prompt",
+              renderOptions,
+              renderPreparation,
+              // Include every finalized step from this turn before rendering the next request.
+              syncUpToMessageID: msgs.at(-1)?.info.id,
+              ...(providerOverflowRecovery ? { providerOverflowRecovery } : {}),
+            })
+            if (!preflight.canProceed) {
+              yield* completeLcmPromptFailure({ sessionID, message: handle.message, safeError: preflight.safeError })
+              return "break" as const
+            }
+            const providerPayload = getLcmRuntimePreparedProviderPayload(preflight.assembly.preparedProviderPayload)
+            if (!providerPayload) {
+              yield* completeLcmPromptFailure({
+                sessionID,
+                message: handle.message,
+                safeError: createLcmSafeError({
+                  code: "invalid_request",
+                  templateKey: "lcm.request.invalid",
+                  safeParams: { action: "retry" },
+                  retryable: true,
+                  diagnosticCode: "lcm_prompt_prepared_payload_runtime_fields_missing",
+                }),
+              })
+              return "break" as const
+            }
+
+            if (step === 1)
+              yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
+
+            const processExit = yield* handle
+              .process({
+                user: lastUser,
+                agent,
+                permission: KiloSessionPrompt.guardPermissions({ agent, session }),
+                sessionID,
+                parentSessionID: session.parentID,
+                system: providerPayload.system,
+                messages: providerPayload.modelMessages as typeof prepared.value.modelMessages,
+                tools: providerPayload.tools,
+                model,
+                toolChoice: providerPayload.toolChoice,
+                reportedContextTokens:
+                  lastFinished && lastFinished.summary !== true
+                    ? KiloSessionOverflow.count(lastFinished.tokens)
+                    : undefined,
+                lcmProviderProtocol: {
+                  preparedProviderPayload: preflight.assembly.preparedProviderPayload,
+                  recordFinalProviderValidation: ({
+                    providerValidatorHash,
+                    providerFamily,
+                    providerTransformOverheadTokenCount,
+                  }) =>
+                    Effect.runPromise(
+                      lcmRuntime.recordProviderRequestSnapshotFinalValidation({
+                        sessionID,
+                        conversationID: providerPayload.conversationID,
+                        requestSnapshotID: preflight.assembly.providerRequestSnapshotID,
+                        providerValidatorHash,
+                        providerFamily,
+                        providerTransformOverheadTokenCount,
+                      }),
+                    ),
+                },
+              })
+              .pipe(Effect.exit)
+            const result = Exit.isSuccess(processExit) ? processExit.value : undefined
+            yield* lcmRuntime
+              .finalizeProviderRequestSnapshot({
+                sessionID,
+                conversationID: providerPayload.conversationID,
+                requestSnapshotID: preflight.assembly.providerRequestSnapshotID,
+                status: Exit.isSuccess(processExit) && processExit.value !== "compact" ? "resolved" : "canceled",
+              })
+              .pipe(Effect.ignore)
+            if (Exit.isFailure(processExit)) return yield* Effect.failCause(processExit.cause)
+
+            const marker = KiloSessionPrompt.memoryPart({ sessionID, message: handle.message, cache: memoryCache })
+            if (marker) yield* sessions.updatePart(marker)
+
+            if (result === "compact") {
+              const overflow = resolveLcmProviderOverflowResult({
+                lifecycleState: preflight.lifecycleState,
+                retryAttempt: lcmProviderOverflowRetryAttempt,
+                conversationID: preflight.conversationID,
+                threshold: preflight.threshold,
+              })
+              if (overflow.action === "retry") {
+                lcmProviderOverflowRetryAttempt = overflow.nextAttempt
+                pendingLcmProviderOverflowRecovery = overflow.providerOverflowRecovery
+                yield* sessions.removeMessage({ sessionID, messageID: handle.message.id })
+                return "continue" as const
+              }
+              yield* completeLcmPromptFailure({ sessionID, message: handle.message, safeError: overflow.safeError })
+              closeReasons.set(sessionID, "error")
+              return "break" as const
+            }
+
+            const synced = yield* lcmRuntime
+              .syncFinalizedMessages({ sessionID, upToMessageID: handle.message.id })
+              .pipe(
+                Effect.map(() => ({ ok: true as const })),
+                Effect.catch((safeError) => Effect.succeed({ ok: false as const, safeError })),
+              )
+            if (!synced.ok) {
+              yield* completeLcmPromptFailure({ sessionID, message: handle.message, safeError: synced.safeError })
+              closeReasons.set(sessionID, "error")
+              return "break" as const
+            }
+
+            yield* lcmRuntime
+              .queueSoftMaintenanceAfterTurn({
+                sessionID,
+                providerID: model.providerID,
+                modelID: model.id,
+                renderOptions,
+                protectedCurrentUser: { sourceSessionID: lastUser.sessionID, sourceMessageID: lastUser.id },
+                recordNoOpAttempt: false,
+              })
+              .pipe(Effect.ignore)
+
+            if (structured !== undefined) {
+              handle.message.structured = structured
+              handle.message.finish = handle.message.finish ?? "stop"
+              yield* sessions.updateMessage(handle.message)
+              yield* lcmRuntime
+                .syncFinalizedMessages({ sessionID, upToMessageID: handle.message.id })
+                .pipe(Effect.ignore)
+              return "break" as const
+            }
+
+            const format = providerPayload.format
+            const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
+            if (finished && !handle.message.error && format.type === "json_schema") {
+              handle.message.error = new MessageV2.StructuredOutputError({
+                message: "Model did not produce structured output",
+                retries: 0,
+              }).toObject()
+              yield* sessions.updateMessage(handle.message)
+              yield* lcmRuntime
+                .syncFinalizedMessages({ sessionID, upToMessageID: handle.message.id })
+                .pipe(Effect.ignore)
+              return "break" as const
+            }
+            if (result === "stop") {
+              if (handle.message.error) closeReasons.set(sessionID, "error")
+              return "break" as const
+            }
+            if (!handle.message.finish) {
+              handle.message.finish = "unknown"
+              yield* sessions.updateMessage(handle.message)
+              yield* lcmRuntime
+                .syncFinalizedMessages({ sessionID, upToMessageID: handle.message.id })
+                .pipe(Effect.ignore)
+            }
+            if (KiloSessionPromptQueue.hasFollowup(sessionID)) {
+              closeReasons.set(sessionID, "interrupted")
+              return "break" as const
+            }
+            return "continue" as const
+          }
+          // kilocode_change end
+
           const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
           const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
           const promptOps = yield* ops()
@@ -1885,12 +2347,20 @@ export const layer = Layer.effect(
         }).pipe(
           Effect.ensuring(instruction.clear(handle.message.id)),
           Effect.onInterrupt(() => finalize),
+          // kilocode_change start - final-only ingestion also covers error and interruption
+          Effect.onExit(() =>
+            useLcmManagedHistory
+              ? lcmRuntime.syncFinalizedMessages({ sessionID, upToMessageID: handle.message.id }).pipe(Effect.ignore)
+              : Effect.void,
+          ),
+          // kilocode_change end
         )
         if (outcome === "break") break
         continue
       }
 
-      yield* compaction.prune({ sessionID, reason: "normal" }).pipe(Effect.ignore, Effect.forkIn(scope))
+      if (!usedLcmManagedHistory)
+        yield* compaction.prune({ sessionID, reason: "normal" }).pipe(Effect.ignore, Effect.forkIn(scope))
       return yield* lastAssistant(sessionID)
     })
 
@@ -2145,6 +2615,7 @@ export const defaultLayer: Layer.Layer<Service> = Layer.suspend(() =>
   layer
     .pipe(
       Layer.provide(SessionRunState.defaultLayer),
+      Layer.provide(LcmRuntimeDefaultLayer), // kilocode_change - standalone prompt/test runtime uses authoritative LCM
       Layer.provide(SessionStatus.defaultLayer),
       Layer.provide(SessionCompaction.defaultLayer),
       Layer.provide(SessionProcessor.defaultLayer),
@@ -2318,8 +2789,9 @@ const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
 
 const repositoryCacheNode = LayerNode.make(RepositoryCache.defaultLayer, []) // kilocode_change
+const nodeLayer = layer.pipe(Layer.provide(LcmRuntimeDefaultLayer)) // kilocode_change
 
-export const node = LayerNode.make(layer, [
+export const node = LayerNode.make(nodeLayer, [
   SessionStatus.node,
   Session.node,
   Agent.node,

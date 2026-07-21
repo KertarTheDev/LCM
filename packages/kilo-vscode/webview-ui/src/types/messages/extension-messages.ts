@@ -1,4 +1,5 @@
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@kilocode/sdk/v2/client"
+import type { LcmSafeError, LcmSettingsState } from "@kilocode/sdk/v2/client"
 import type { DiffSourceCapabilities, DiffSourceDescriptor } from "../../../../src/diff/sources/types"
 import type { PartBatch, PartRemove, PartUpdate } from "../../../../src/shared/stream-messages"
 import type { SessionMode } from "../../context/worktree-mode"
@@ -97,6 +98,20 @@ export interface ErrorMessage {
   code?: string
   sessionID?: string
 }
+
+export type LcmSettingsResultMessage =
+  | {
+      type: "requestLcmSettings.result" | "updateLcmSettings.result"
+      requestID: string
+      ok: true
+      state: LcmSettingsState
+    }
+  | {
+      type: "requestLcmSettings.result" | "updateLcmSettings.result"
+      requestID: string
+      ok: false
+      error: LcmSafeError
+    }
 
 export interface SendMessageFailedMessage {
   type: "sendMessageFailed"
@@ -1264,3 +1279,4 @@ export type ExtensionMessage =
   | MemoryLoadedMessage
   | MemoryEventMessage
   | MemoryOperationResultMessage
+  | LcmSettingsResultMessage

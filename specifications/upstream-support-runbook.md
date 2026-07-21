@@ -8,7 +8,7 @@ This runbook records local operational guidance for maintaining and supporting L
 
 LCM release syncs are maintained as clean branches on top of a specific upstream Kilo release tag. For a new upstream release, create a fresh `kilocode-lcm-v<upstream-release>` branch from that tag, replay or squash-merge the current LCM delta with explicit conflict review, update these current-code specs to the new base, then rebase prerelease-only release workflow/README changes on top of the corrected branch.
 
-The current release-sync branch is `kilocode-lcm-v7.4.11`, based on upstream `v7.4.11`. The older rolling and release-specific branches are archaeology/cherry-pick sources only. Future ports must design and validate the compatibility seam on the new target tag before transplanting isolated LCM-owned modules.
+The current release-sync branch is `kilocode-lcm-v7.4.13`, based on upstream `v7.4.13`. The older rolling and release-specific branches are archaeology/cherry-pick sources only. Future ports must design and validate the compatibility seam on the new target tag before transplanting isolated LCM-owned modules.
 
 ## Current Upstream Package Policy
 

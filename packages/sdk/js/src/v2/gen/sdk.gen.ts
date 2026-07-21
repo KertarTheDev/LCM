@@ -219,6 +219,14 @@ import type {
   KiloOrganizationSetResponses,
   KiloProfileErrors,
   KiloProfileResponses,
+  LcmCancelMaintenanceInput,
+  LcmDbRebuildInput,
+  LcmDbRecoverLockInput,
+  LcmSettingsGetErrors,
+  LcmSettingsGetResponses,
+  LcmSettingsUpdateErrors,
+  LcmSettingsUpdateResponses,
+  LcmUpdateSettingsInput,
   LocationRef,
   LspStatusErrors,
   LspStatusResponses,
@@ -365,6 +373,22 @@ import type {
   SessionGetResponses,
   SessionInitErrors,
   SessionInitResponses,
+  SessionLcmCapabilitiesErrors,
+  SessionLcmCapabilitiesResponses,
+  SessionLcmDbDiagnoseErrors,
+  SessionLcmDbDiagnoseResponses,
+  SessionLcmDbRebuildErrors,
+  SessionLcmDbRebuildResponses,
+  SessionLcmDbRecoverLockErrors,
+  SessionLcmDbRecoverLockResponses,
+  SessionLcmMaintenanceCancelErrors,
+  SessionLcmMaintenanceCancelResponses,
+  SessionLcmPromptsExportErrors,
+  SessionLcmPromptsExportResponses,
+  SessionLcmSettingsGetErrors,
+  SessionLcmSettingsGetResponses,
+  SessionLcmSettingsUpdateErrors,
+  SessionLcmSettingsUpdateResponses,
   SessionListErrors,
   SessionListResponses,
   SessionMessageErrors,
@@ -2888,6 +2912,90 @@ export class Formatter extends HeyApiClient {
   }
 }
 
+export class Settings extends HeyApiClient {
+  /**
+   * Get LCM settings
+   *
+   * Get config-backed LCM settings for the current project or workspace without requiring a session.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      projectID?: string
+      workspaceID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "projectID" },
+            { in: "query", key: "workspaceID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LcmSettingsGetResponses, LcmSettingsGetErrors, ThrowOnError>({
+      url: "/lcm/settings",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update LCM settings
+   *
+   * Update config-backed LCM settings for the current project or workspace without requiring a session.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      projectID?: string
+      workspaceID?: string
+      lcmUpdateSettingsInput?: LcmUpdateSettingsInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "projectID" },
+            { in: "query", key: "workspaceID" },
+            { key: "lcmUpdateSettingsInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<LcmSettingsUpdateResponses, LcmSettingsUpdateErrors, ThrowOnError>({
+      url: "/lcm/settings",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Lcm extends HeyApiClient {
+  private _settings?: Settings
+  get settings(): Settings {
+    return (this._settings ??= new Settings({ client: this.client }))
+  }
+}
+
 export class Auth2 extends HeyApiClient {
   /**
    * Remove MCP OAuth
@@ -4096,6 +4204,350 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Settings2 extends HeyApiClient {
+  /**
+   * Get LCM settings
+   *
+   * Get effective LCM settings for the session's trusted project or workspace scope.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionLcmSettingsGetResponses,
+      SessionLcmSettingsGetErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/lcm/settings",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update LCM settings
+   *
+   * Update user-writable LCM settings for the session's workspace or project scope.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      lcmUpdateSettingsInput?: LcmUpdateSettingsInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "lcmUpdateSettingsInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      SessionLcmSettingsUpdateResponses,
+      SessionLcmSettingsUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/lcm/settings",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Maintenance extends HeyApiClient {
+  /**
+   * Cancel queued LCM maintenance
+   *
+   * Cancel a queued background LCM maintenance retry for the trusted session conversation.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      lcmCancelMaintenanceInput?: LcmCancelMaintenanceInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "lcmCancelMaintenanceInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionLcmMaintenanceCancelResponses,
+      SessionLcmMaintenanceCancelErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/lcm/maintenance/cancel",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Db extends HeyApiClient {
+  /**
+   * Diagnose LCM database
+   *
+   * Run a content-safe, read-only LCM database diagnosis for the trusted session family.
+   */
+  public diagnose<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionLcmDbDiagnoseResponses,
+      SessionLcmDbDiagnoseErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/lcm/db/diagnose",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Recover LCM database owner lock
+   *
+   * Preview or apply owner-lock recovery for the trusted session family.
+   */
+  public recoverLock<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      lcmDbRecoverLockInput?: LcmDbRecoverLockInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "lcmDbRecoverLockInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionLcmDbRecoverLockResponses,
+      SessionLcmDbRecoverLockErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/lcm/db/recover-lock",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Rebuild LCM database
+   *
+   * Preview or apply an LCM database rebuild for the trusted session family.
+   */
+  public rebuild<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      lcmDbRebuildInput?: LcmDbRebuildInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "lcmDbRebuildInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionLcmDbRebuildResponses, SessionLcmDbRebuildErrors, ThrowOnError>(
+      {
+        url: "/session/{sessionID}/lcm/db/rebuild",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+}
+
+export class Prompts extends HeyApiClient {
+  /**
+   * Export LCM prompts
+   *
+   * Write debug files for reconstructed LCM prompts and active context.
+   */
+  public export<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionLcmPromptsExportResponses,
+      SessionLcmPromptsExportErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/lcm/prompts/export",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Lcm2 extends HeyApiClient {
+  /**
+   * Get LCM capabilities
+   *
+   * Get content-safe LCM lifecycle and capability state for a session.
+   */
+  public capabilities<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionLcmCapabilitiesResponses,
+      SessionLcmCapabilitiesErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/lcm/capabilities",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _settings?: Settings2
+  get settings(): Settings2 {
+    return (this._settings ??= new Settings2({ client: this.client }))
+  }
+
+  private _maintenance?: Maintenance
+  get maintenance(): Maintenance {
+    return (this._maintenance ??= new Maintenance({ client: this.client }))
+  }
+
+  private _db?: Db
+  get db(): Db {
+    return (this._db ??= new Db({ client: this.client }))
+  }
+
+  private _prompts?: Prompts
+  get prompts(): Prompts {
+    return (this._prompts ??= new Prompts({ client: this.client }))
+  }
+}
+
 export class Session2 extends HeyApiClient {
   /**
    * List sessions
@@ -4797,7 +5249,7 @@ export class Session2 extends HeyApiClient {
   /**
    * Summarize session
    *
-   * Generate a concise summary of the session using AI compaction to preserve key information.
+   * Run LCM-owned conversation maintenance without legacy lossy compaction.
    */
   public summarize<ThrowOnError extends boolean = false>(
     parameters: {
@@ -5129,6 +5581,11 @@ export class Session2 extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  private _lcm?: Lcm2
+  get lcm(): Lcm2 {
+    return (this._lcm ??= new Lcm2({ client: this.client }))
   }
 }
 
@@ -10408,6 +10865,11 @@ export class KiloClient extends HeyApiClient {
   private _formatter?: Formatter
   get formatter(): Formatter {
     return (this._formatter ??= new Formatter({ client: this.client }))
+  }
+
+  private _lcm?: Lcm
+  get lcm(): Lcm {
+    return (this._lcm ??= new Lcm({ client: this.client }))
   }
 
   private _mcp?: Mcp

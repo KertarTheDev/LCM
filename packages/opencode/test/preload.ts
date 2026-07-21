@@ -86,8 +86,9 @@ delete process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
 delete process.env["OTEL_EXPORTER_OTLP_HEADERS"]
 delete process.env["OTEL_RESOURCE_ATTRIBUTES"]
 
-// Use in-memory sqlite
-process.env["KILO_DB"] = ":memory:"
+// kilocode_change start - LCM integration tests need core and retained V1 adapters to share one SQLite schema
+process.env["KILO_DB"] = process.env["KILO_TEST_SHARED_DB_PATH"] ?? ":memory:"
+// kilocode_change end
 
 // Now safe to import from src/
 const { initProjectors } = await import("../src/server/projectors")

@@ -42,6 +42,7 @@ import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
+import { DialogLcmSettings } from "./component/dialog-lcm-settings" // kilocode_change
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
@@ -774,6 +775,20 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
         category: "System",
       },
+      // kilocode_change start - keep upstream /memory for project memory; LCM owns /lcm
+      {
+        name: "lcm.settings",
+        title: "LCM conversation context",
+        slashName: "lcm",
+        slashAliases: ["lcm-settings"],
+        run: () => {
+          dialog.replace(() => (
+            <DialogLcmSettings sessionID={route.data.type === "session" ? route.data.sessionID : undefined} />
+          ))
+        },
+        category: "System",
+      },
+      // kilocode_change end
       {
         name: "theme.switch",
         title: "Switch theme",
