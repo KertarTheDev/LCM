@@ -10,15 +10,15 @@ import {
   CompactionPart,
   ContextOverflowError,
   Info,
-  LcmMemoryError,
-  type OutputFormat,
+  LcmMemoryError, // kilocode_change
+  type OutputFormat, // kilocode_change
   OutputLengthError,
   Part,
   StructuredOutputError,
   SubtaskPart,
   User,
   WithParts,
-  ReasoningPart,
+  ReasoningPart, // kilocode_change
   type ToolPart,
 } from "@opencode-ai/core/v1/session"
 
@@ -61,7 +61,7 @@ interface FetchDecompressionError extends Error {
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached media from tool result:"
 export { isMedia }
 
-// kilocode_change - upstream moved these message/part types to SessionV1; re-export them so the
+// kilocode_change start - upstream moved these message/part types to SessionV1; re-export them so the
 // existing MessageV2.<Type> call sites keep resolving.
 export {
   APIError,
@@ -87,6 +87,7 @@ export {
   User,
   WithParts,
 } from "@opencode-ai/core/v1/session"
+// kilocode_change end
 export type { OutputFormat } from "@opencode-ai/core/v1/session" // kilocode_change
 
 // kilocode_change start - convert internal LCM failures to the durable public message error shape
@@ -781,8 +782,8 @@ export function fromError(
   e: unknown,
   ctx: { providerID: ProviderV2.ID; aborted?: boolean },
 ): NonNullable<Assistant["error"]> {
+  // kilocode_change start - preserve structured LCM failures in message history
   switch (true) {
-    // kilocode_change start
     case e instanceof LcmSafeErrorFailure:
       return fromLcmSafeError(e.safeError)
     case isLcmSafeError(e):

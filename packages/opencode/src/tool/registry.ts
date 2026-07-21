@@ -206,6 +206,7 @@ export const layer = Layer.effect(
                   metadata: {
                     ...metadata,
                     truncated: out.truncated,
+                    // kilocode_change start - validated recovery sidecar metadata
                     ...(out.truncated
                       ? {
                           outputPath: out.outputPath,
@@ -213,7 +214,8 @@ export const layer = Layer.effect(
                           outputSha256: out.outputSha256,
                           outputSidecarVersion: out.outputSidecarVersion,
                         }
-                      : {}), // kilocode_change - validated recovery sidecar metadata
+                      : {}),
+                    // kilocode_change end
                   },
                 }
               }).pipe(
@@ -277,9 +279,9 @@ export const layer = Layer.effect(
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
+          // kilocode_change start - LCM-owned retrieval and durable map tools
           plan: Tool.init(plan),
           suggest: Tool.init(suggesttool), // kilocode_change
-          // kilocode_change start
           lcmgrep: Tool.init(lcmgrep),
           lcmdescribe: Tool.init(lcmdescribe),
           lcmexpand: Tool.init(lcmexpand),

@@ -1,4 +1,4 @@
-// kilocode_change - bounded fail-closed provider-overflow recovery for LCM-managed prompts
+// kilocode_change - new file
 import { expect, test } from "bun:test"
 import { resolveLcmProviderOverflowResult } from "../../src/session/prompt"
 

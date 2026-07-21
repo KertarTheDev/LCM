@@ -317,6 +317,7 @@ const live: Layer.Layer<
 
       // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
       // either returns a ready LLMEvent stream or a concrete fallback reason.
+      // kilocode_change start - LCM final-payload validation currently requires the AI SDK transform hook
       if (flags.experimentalNativeLlm && input.lcmProviderProtocol) {
         l.info("native runtime unavailable; falling back to ai-sdk", {
           reason: "LCM provider validation requires AI SDK transform",
@@ -366,15 +367,18 @@ const live: Layer.Layer<
           reason: native.reason,
         })
       }
+      // kilocode_change end
 
       yield* Effect.logInfo("llm runtime selected", {
         "llm.runtime": "ai-sdk",
         "llm.provider": input.model.providerID,
         "llm.model": input.model.id,
       })
+      // kilocode_change start - reuse exact provider options for final LCM payload validation
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       const requestProviderOptions = ProviderTransform.providerOptions(input.model, prepared.params.options)
+      // kilocode_change end
       const result = streamText({
         onError(error) {
           bridge.fork(
@@ -391,6 +395,7 @@ const live: Layer.Layer<
         },
         // Copilot returns the authoritative billed amount only in provider-specific response fields.
         includeRawChunks: input.model.providerID.includes("github-copilot"),
+        // kilocode_change start - repair Kilo tool names and reuse exact provider options for LCM validation
         async experimental_repairToolCall(failed) {
           const lower = failed.toolCall.toolName.trim().toLowerCase() // kilocode_change
           if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
@@ -410,6 +415,7 @@ const live: Layer.Layer<
         topP: prepared.params.topP,
         topK: prepared.params.topK,
         providerOptions: requestProviderOptions,
+        // kilocode_change end
         activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
         tools: prepared.tools,
         toolChoice: input.toolChoice,
@@ -421,6 +427,7 @@ const live: Layer.Layer<
         headers: prepared.headers,
         maxRetries: input.retries ?? 0,
         messages: prepared.messages,
+        // kilocode_change start - validate the final transformed provider payload for LCM prompts
         model: wrapLanguageModel({
           model: language,
           middleware: [
@@ -455,6 +462,7 @@ const live: Layer.Layer<
             },
           ],
         }),
+        // kilocode_change end
         // kilocode_change start - disable AI SDK span recording (ai.* / gen_ai.*)
         experimental_telemetry: { isEnabled: false },
       })
