@@ -25,6 +25,7 @@ test("lcm:regex-safety uses PGlite-compatible regex matching with deterministic 
         sessionID: retrievalIDs.rootSession,
         dataDir,
         pattern: "regex_token_[0-9]+",
+        mode: "regex",
       }),
     )
     expect(regex.ok).toBe(true)
@@ -40,6 +41,7 @@ test("lcm:regex-safety uses PGlite-compatible regex matching with deterministic 
         sessionID: retrievalIDs.rootSession,
         dataDir,
         pattern: "(",
+        mode: "regex",
       }),
     )
     expect(invalid).toMatchObject({ ok: false, error: { code: "invalid_request" } })
