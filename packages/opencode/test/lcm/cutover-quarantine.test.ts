@@ -56,7 +56,7 @@ describe("milestone 27 cutover quarantine", () => {
     expect(route).toContain("syncFinalizedMessages")
 
     const vscodeProvider = await implementationFile("packages/kilo-vscode/src/KiloProvider.ts")
-    expect(vscodeProvider).toContain("isLcmSettingsWebviewRequest")
+    expect(vscodeProvider).toContain("routeLcmSettingsWebviewRequest")
     expect(vscodeProvider).toContain("handleMemoryMessage")
 
     const sdkV2Types = await implementationFile("packages/sdk/js/src/v2/gen/types.gen.ts")

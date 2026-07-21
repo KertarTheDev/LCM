@@ -38,6 +38,8 @@ import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
+import { Service as LcmRuntimeService } from "../../src/session/lcm/runtime-interface"
+import type { ConversationID } from "../../src/session/lcm/types"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -126,6 +128,21 @@ const status = Layer.mergeAll(SessionStatus.defaultLayer, Bus.layer)
 const run = SessionRunState.layer.pipe(Layer.provide(status))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
 
+const lcm = Layer.mock(LcmRuntimeService)({
+  getOrCreateConversation: () => Effect.succeed("conv_prompt_safety_test" as ConversationID),
+  getCapabilities: ({ sessionID }) =>
+    Effect.succeed({
+      sessionID: SessionID.make(sessionID),
+      lifecycleState: "db_unavailable",
+      strategy: "upward",
+      dbReady: false,
+      lcmActive: false,
+      canAssemble: false,
+      canMaintain: false,
+      canRetrieve: false,
+    }),
+})
+
 function makeHttp() {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
@@ -175,6 +192,7 @@ function makeHttp() {
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
+      Layer.provide(lcm),
       Layer.provide(SessionRevert.defaultLayer),
       Layer.provide(Image.defaultLayer),
       Layer.provide(summary),

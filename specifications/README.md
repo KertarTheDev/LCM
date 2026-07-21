@@ -1,6 +1,6 @@
 # LCM Current-Code Specifications
 
-Status date: 2026-07-20.
+Status date: 2026-07-21.
 
 These documents describe the LCM implementation on the current release-sync branch. Current code is the authority.
 
@@ -43,10 +43,10 @@ The generated OpenAPI/SDK artifacts dominate raw line statistics, so this spec s
 
 The LCM subsystem was transplanted onto a clean upstream `v7.4.13` base after first designing and validating the integration seams on that target. The older LCM tree was used only as a source of isolated LCM-owned modules and tests. Notable upstream behavior retained in the new base includes:
 
-- upstream project memory under `packages/kilo-memory` and `packages/opencode/src/kilocode/memory`, exposed through `/memory` and the project-memory settings surface;
+- upstream project memory under `packages/kilo-memory` and `packages/opencode/src/kilocode/memory`, with its own files, index, digests, lifecycle, `/memory` command, and settings surface outside the LCM family database;
 - upstream prior-session recall, while LCM owns recall and retrieval for the current conversation lineage;
 - upstream SWE-pruned finalized tool parts as canonical persisted source; truncation sidecars are validated recovery evidence and are not silently substituted for the persisted tool result;
-- upstream V2 context-engine dispatch plus the retained V1 prompt path used by the current product;
+- upstream V2 context-engine dispatch, context epochs, automatic non-LCM compaction, and bounded recovery, plus the retained V1 prompt path used by the current product;
 - upstream `SessionCompaction` and its public events as a non-LCM compatibility adapter, never as an active-LCM fallback;
 - current provider, permission, sandbox, worktree, SDK, packaging, and VSCode behavior.
 

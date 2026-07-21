@@ -1,6 +1,6 @@
 # LCM Upstream Support Runbook
 
-Status date: 2026-07-20.
+Status date: 2026-07-21.
 
 This runbook records local operational guidance for maintaining and supporting LCM after upstream integration. It does not replace external installed-editor release evidence.
 
@@ -68,6 +68,8 @@ DB diagnosis, stale-lock recovery, and rebuild are runtime-owned session routes.
 
 For packaged-runtime evidence use `lcm:platform-runtime-smoke` with the `extension/bin/kilo` binary extracted from the candidate VSIX. Do not treat a source-tree runtime as packaged evidence.
 
+The packaged command must execute `debug lcm-db-smoke` through that extracted binary. Its regex check proves both the PGlite cancellation worker and the isolated retrieval-regex worker resolved through their compiled paths. A compile-only result or source-tree smoke does not prove the VSIX contains those entrypoints.
+
 ## Operator Diagnostics
 
 Use metrics/status events first for threshold and tuning triage. `lcm.metrics.updated` is content-safe and reports active tokens, hard limit, soft threshold, provider context/input/output limits, output reserve, system/tool overhead tokens, fresh-tail budget/counts, unconsumed post-current raw counts, protected-tail raw tokens/items, soft backlog tokens/items, raw lane tokens, lane counts, lane-latch diagnostics, budget status, storage warning state, last maintenance status, and queued deferred soft-maintenance debt.
@@ -113,3 +115,5 @@ Before stable release, collect installed-editor evidence that includes:
 - large-file/path-backed behavior
 - map behavior
 - normal Kilo workflow smoke
+
+For any published candidate, also record the committed workflow head SHA, release ID/tag, resolved tag SHA, draft/prerelease flags, and exact nonempty asset manifest. The current prerelease profile is 12 CLI archives plus 8 platform VSIX files. A successful workflow conclusion without those postconditions is not sufficient release evidence.

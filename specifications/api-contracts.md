@@ -339,7 +339,7 @@ interface LcmPageInfo {
 Safe-message templates are part of the API contract for non-model surfaces. For v1, implementations must emit the canonical English `safeMessage` text from the fixed templates below. Static UI labels, page headings, and surrounding explanatory text may use Kilo's existing i18n system, but runtime/API `safeMessage` payloads must not be localized, replaced, or lightly reworded in v1. Future safe-message localization requires a new spec decision plus updated golden and sentinel leak fixtures; it must preserve the template key, allowed parameters, and content-safety constraints below.
 
 | Template Key | Error Codes | Allowed Parameters | Default Safe Message |
-| --- | --- | --- | --- |
+|---|---|---|---|
 | `lcm.db.unavailable` | `db_unavailable`, `db_locked`, `db_migration_failed`, `db_corrupt` | `operationID`, `conversationID`, `retryable`, `action` | `Memory storage is not ready. Follow the shown recovery action.` |
 | `lcm.settings.unavailable` | `settings_unavailable` | `operationID`, `retryable`, `action` | `Memory settings are not ready. Retry or check the project configuration.` |
 | `lcm.auth.denied` | `unauthorized`, `not_found`, `legacy_read_only` | `operationID`, `conversationID`, `summaryID`, `fileID`, `action` | `That memory item is not available from this session.` |
@@ -375,7 +375,7 @@ Paged retrieval cursors are opaque runtime-issued strings. Callers must pass the
 Canonical safe-error code selection is deterministic for v1:
 
 | Situation | Error code | Notes |
-| --- | --- | --- |
+|---|---|---|
 | Malformed input, unsupported fields, invalid cursor/read window, conflicting map resume settings, or scope conflict before writes | `invalid_request` | Reject before content, metadata, filesystem, provenance, or DB mutation when applicable. |
 | Valid-looking handle outside current-lineage authorization, root/main direct `lcm_expand` or `lcm_read`, wrong project/workspace map operation, or permission denial after provenance succeeds | `unauthorized` or `permission_denied` | Use `permission_denied` only for Kilo read/external-directory permission denial after LCM provenance and lineage pass; otherwise use `unauthorized`. |
 | Well-formed authorized lookup for a row/run/report that does not exist in the authorized scope | `not_found` | Do not reveal whether the same handle exists elsewhere. |
@@ -393,7 +393,7 @@ When an operation could plausibly be either unauthorized or not found, derive th
 The table below is the v1 deterministic error-code contract. It is intentionally redundant with individual tool/runtime sections so tests can assert one matrix instead of re-interpreting prose. All listed failures must reject before reading content, metadata, filesystem state, provenance, or mutating DB rows unless the `Shape` column explicitly says the existing safe state snapshot is returned.
 
 | Subsystem | Condition | Code | Template | Action | Retryable | Shape |
-| --- | --- | --- | --- | --- | --- | --- |
+|---|---|---|---|---|---|---|
 | DB startup/worker | Non-stale owner lock before PGlite open | `db_locked` | `lcm.db.unavailable` | `close_other_owner` | `true` | `LcmDbStatus.status = "locked"` or route error for writes/actions. |
 | DB startup/worker | Migration/startup corruption | `db_corrupt` | `lcm.db.unavailable` | `contact_support` | `false` unless a known retryable startup condition exists | `LcmDbStatus.status = "corrupt"`; LCM-required actions fail closed. |
 | Settings read | Normal Kilo config store cannot be read | `settings_unavailable` | `lcm.settings.unavailable` | `retry` or `contact_support` | By config failure | `200` `LcmSettingsState` with built-in defaults plus `safeError`; family `dbStatus` may appear only as optional memory status when a current family is in scope. |
@@ -984,7 +984,7 @@ interface LcmContext {
 The generated contract artifact must include this table as `surfaceClassifications`. Types classified as `internal_model_visible` may appear in implementation TypeScript and focused model-visible fixtures, but they must not be emitted through public API routes, generated SDKs, webview messages, events, status payloads, settings payloads, usage rows, debug reports, or non-model logs.
 
 | Type | Classification | Exposure policy |
-| --- | --- | --- |
+|---|---|---|
 | `LcmAssemblyResult` | `internal_model_visible` | Runtime-only assembly union; expose only content-safe safe errors/counts outside provider assembly. |
 | `LcmAssemblySuccessResult` | `internal_model_visible` | Runtime-only success payload; `preparedProviderPayload` and branded messages stay inside the provider boundary. |
 | `LcmAssemblyBlockedResult` | `internal_model_visible` | Runtime-only blocked result; callers may forward only `safeError` and content-safe scope/status fields. |
@@ -1506,7 +1506,7 @@ Maintenance events use `status` to disambiguate terminal behavior without adding
 Phase/reason/status mapping is fixed for v1:
 
 | Operation | Phase | Reason | Event | Statuses | Blocking | workNeeded | workPerformed |
-| --- | --- | --- | --- | --- | --- | --- | --- |
+|---|---|---|---|---|---|---|---|
 | Soft raw-backlog scheduling before work starts | `leaf_summary` | `soft_threshold` | `lcm.maintenance.ended` when emitted | `scheduled`, `deferred`, `skipped`, `canceled` | `false` | `true` | `false` |
 | Soft raw-backlog scheduling failure | `leaf_summary` | `soft_threshold` | `lcm.maintenance.failed` | `failed` | `false` | `true` | `false` |
 | Soft raw-to-sprig work start | `leaf_summary` | `soft_threshold` | `lcm.maintenance.started` | `started` | `false` | `true` | `false` |
@@ -1657,7 +1657,7 @@ interface LcmReadResult {
 
 Deferred soft-maintenance metrics are operator diagnostics only. `deferredSoftMaintenanceQueued`, `deferredSoftMaintenanceQueuedCount`, `deferredSoftMaintenanceAttemptCount`, and `deferredSoftMaintenanceNextRunAtMs` report queued retry debt for the current conversation from `lcm_deferred_jobs`; they must not expose provider text, prompt text, raw source, model output, or deferred-job payload JSON. Provider limit warnings remain represented by `budgetStatus = "provider_limit_fallback"` and normalized finite provider limit fields; storage pressure remains represented by `storageBytes`, `storageWarningThresholdBytes`, and `storageWarning`.
 
-`LcmGrepInput.mode` defaults to `"regex"` for compatibility with the LCM paper and Volt's `lcm_grep` behavior. `"literal"` treats punctuation, code symbols, Unicode, and regex metacharacters as ordinary content and is the preferred exact-recall path for identifiers, command output, logs, paths, hashes, and multilingual text.
+`LcmGrepInput.mode` defaults to `"literal"`. Literal mode treats punctuation, code symbols, Unicode, and regex metacharacters as ordinary content and is the preferred exact-recall path for identifiers, command output, logs, paths, hashes, and multilingual text. `"regex"` is opt-in and must be selected explicitly when the caller needs regular-expression syntax.
 
 `LcmGrepInput.caseSensitive` defaults to `false`. Case-insensitive literal and regex modes must use the stable PostgreSQL/PGlite-compatible behavior validated by the search gate and must not depend on English tokenization, stemming, or locale-specific full-text search. `caseSensitive = true` uses the matching case-sensitive literal or regex operator over the same canonical searchable text.
 
@@ -1776,7 +1776,7 @@ interface LcmFileStatus {
 Canonical v1 source-kind mapping:
 
 | Payload or file source | `LcmFileSourceKind` |
-| --- | --- |
+|---|---|
 | Large finalized user prompt text, assistant text, and assistant reasoning stored as LCM-owned artifacts | `inline` |
 | Provider media payload bytes, including images and other provider-supported media | `image` |
 | Terminal tool output and terminal tool error payload bytes | `tool_output` |
@@ -1850,7 +1850,7 @@ The generated session prompt export method is `client.session.lcm.prompts.export
 Runtime route failures that are request-level failures return `LcmRouteErrorResponse` with a content-safe `LcmSafeError`; generated SDKs must preserve `error.code`, `templateKey`, typed `safeParams`, `safeMessage`, `retryable`, `action`, IDs, and `diagnosticCode`. State-bearing reads such as capabilities and settings may return `200` with their normal DTO plus `safeError` when the safe fallback/status is itself the requested state. Request validation, authorization, missing route resources, DB-unavailable actions, and config-store write failures use non-2xx route errors:
 
 | Error code class | HTTP status |
-| --- | ---: |
+|---|---:|
 | `invalid_request`, `over_limit` | `400` |
 | `unauthorized`, `permission_denied`, `legacy_read_only` | `403` |
 | `not_found` | `404` |

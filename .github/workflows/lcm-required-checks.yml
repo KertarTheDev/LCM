@@ -4,21 +4,43 @@ name: LCM required checks
 on:
   pull_request:
     paths:
+      - "packages/core/src/session/context-engine.ts"
+      - "packages/core/src/session/context-epoch.ts"
+      - "packages/core/src/session/compaction.ts"
+      - "packages/core/test/session-*.test.ts"
+      - "packages/kilo-memory/**"
+      - "packages/llm/src/**"
+      - "packages/llm/test/adapter.test.ts"
       - "packages/opencode/src/session/**"
       - "packages/opencode/src/provider/**"
       - "packages/opencode/src/plugin/**"
       - "packages/opencode/src/server/**"
       - "packages/opencode/src/config/**"
       - "packages/opencode/src/effect/app-runtime.ts"
+      - "packages/opencode/src/cli/cmd/debug/**"
+      - "packages/opencode/src/kilocode/cli/cmd/tui/**"
+      - "packages/opencode/src/kilocode/memory/**"
       - "packages/opencode/src/kilocode/provider/**"
+      - "packages/opencode/src/kilocode/server/httpapi/**"
       - "packages/opencode/src/kilocode/session/**"
+      - "packages/opencode/src/kilocode/swe-pruner.ts"
+      - "packages/opencode/src/kilocode/tool/**"
       - "packages/opencode/src/tool/**"
       - "packages/opencode/test/lcm/**"
+      - "packages/opencode/test/kilocode/memory/**"
+      - "packages/opencode/test/kilocode/recall-search.test.ts"
+      - "packages/opencode/test/kilocode/session-compaction-*.test.ts"
+      - "packages/opencode/test/kilocode/session-prompt-compaction-safety.test.ts"
+      - "packages/opencode/test/kilocode/swe-pruner.test.ts"
       - "packages/opencode/test/session/prompt.test.ts"
+      - "packages/opencode/script/build.ts"
+      - "packages/opencode/script/build-node.ts"
       - "packages/opencode/script/lcm-*.ts"
       - "packages/opencode/package.json"
       - "packages/sdk/**"
       - "packages/tui/src/**"
+      - "packages/kilo-vscode/esbuild.js"
+      - "packages/kilo-vscode/script/**"
       - "packages/kilo-vscode/src/**"
       - "packages/kilo-vscode/webview-ui/src/**"
       - "packages/kilo-vscode/tests/unit/lcm-*.test.ts"
@@ -92,6 +114,22 @@ jobs:
       - name: System context composition
         working-directory: packages/opencode
         run: bun run lcm:system-context
+
+      - name: Upstream memory compatibility
+        run: |
+          bun run --cwd packages/kilo-memory test
+          bun run --cwd packages/opencode test \
+            test/kilocode/memory/memory-integration.test.ts \
+            test/kilocode/recall-search.test.ts \
+            test/kilocode/session-prompt-compaction-safety.test.ts \
+            test/kilocode/swe-pruner.test.ts \
+            --timeout 60000
+
+      - name: Context-engine seam
+        run: |
+          bun run --cwd packages/core test test/session-runner.test.ts
+          bun run --cwd packages/llm test test/adapter.test.ts
+          bun run --cwd packages/opencode test test/session/llm.test.ts --timeout 60000
 
       - name: Runtime typecheck
         working-directory: packages/opencode

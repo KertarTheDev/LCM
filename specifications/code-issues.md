@@ -1,6 +1,6 @@
 # LCM Current-Code Issues
 
-Status date: 2026-07-20.
+Status date: 2026-07-21.
 
 This file records current engineering or evidence gaps for the v7.4.13 integration.
 
@@ -19,9 +19,14 @@ This file records current engineering or evidence gaps for the v7.4.13 integrati
 
 The V1 `session/prompt.ts` adapter is the largest upstream conflict surface until the product prompt path can use the core context-engine dispatch directly.
 
+`packages/opencode/script/build-node.ts` currently fails on an upstream browser/Bun-builtin compatibility path that is not used by the compiled CLI or VSIX release workflow. Keep the limitation visible, but do not weaken the production `build.ts`, VSCode, or packaged-runtime gates and do not add environment-specific bypasses to publishable source.
+
+## Completed Prerelease Evidence
+
+GitHub workflow run `29844020302` published `v7.4.13-lcm.1` from `cbd5d6dbb2bfca3c887fd5847744638b1ffdb59a`. The run completed the release-critical LCM gates, built 12 CLI archives and 8 VSIX assets, and passed packaged Linux x64 LCM DB smoke. This closes the earlier compiler/candidate-build automation gap for that prerelease, but it is not stable-release approval.
+
 ## Evidence Gaps
 
-- Complete the focused/package compiler gates and candidate VSIX build for this v7.4.13 branch.
 - Collect installed-editor evidence from the exact candidate VSIX on the supported Nobara/VSCodium and macOS/VSCode targets.
 - Strict long-context release approval requires packaged-runtime DB smoke and external/manual evidence; source-tree checks alone are insufficient.
 

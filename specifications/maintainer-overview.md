@@ -1,6 +1,6 @@
 # Kilo LCM Maintainer Overview
 
-Status date: 2026-07-20.
+Status date: 2026-07-21.
 
 This overview describes the LCM integration relative to upstream Kilo Code `v7.4.13` (`7060f8cb21d79abf00f9c9d5df07f6e95e4956ec`).
 
@@ -25,11 +25,11 @@ The memory subsystems have distinct ownership:
 | Legacy lossy compaction for non-LCM prompt paths | upstream `SessionCompaction` adapter |
 | Active-LCM overflow/failure recovery | LCM only, fail closed |
 
-Upstream project memory is injected into the normal system context before LCM provider assembly. It is complementary evidence, not a competing conversation-history store. Upstream recall remains available for prior sessions; current-session recall is rejected so that authorization and lineage semantics stay with LCM retrieval.
+Upstream project memory keeps its own project files, index, digests, save/recall lifecycle, and user controls outside the LCM family database. It is injected into the normal system context before LCM provider assembly and budgeted as complementary model-visible evidence, not adopted as immutable lineage source or treated as a competing conversation-history store. Upstream recall remains available for prior sessions; current-session recall is rejected so that authorization and lineage semantics stay with LCM retrieval.
 
 ## Target-Release Integration Seams
 
-`packages/core/src/session/context-engine.ts` adds a pluggable core runner seam and retains the upstream engine as the default. The current Kilo product still uses the V1 prompt service, so `packages/opencode/src/session/prompt.ts` is the narrow production adapter: non-LCM paths retain upstream filtering/compaction, while passive-synced and active conversations use LCM preflight and assembly.
+`packages/core/src/session/context-engine.ts` adds a pluggable core runner seam and retains the upstream engine as the default. Upstream V2 context epochs, automatic compaction, and their bounded overflow recovery remain upstream-owned. The current Kilo product still uses the V1 prompt service, so `packages/opencode/src/session/prompt.ts` is the narrow production adapter: non-LCM paths retain upstream filtering/compaction, while passive-synced and active conversations use LCM preflight and assembly.
 
 `packages/opencode/src/effect/app-runtime.ts` installs one shared LCM runtime. It also retains `SessionCompaction.defaultLayer` because upstream non-LCM behavior and public compatibility events still depend on it. Every active-LCM legacy path is guarded, and an LCM failure never falls back to lossy pruning or compaction.
 
@@ -49,7 +49,7 @@ Lifecycle states gate all behavior:
 - `lcm_active`: LCM is authoritative for the conversation;
 - `legacy_read_only`, `recovery_required`, `recovery_failed`, `db_unavailable`: continuation fails closed when proof is unavailable.
 
-Prompt preflight syncs finalized source, validates authority and lifecycle, runs blocking hard-limit maintenance if necessary, assembles the provider-safe request, and records a request snapshot. Provider overflow gets bounded LCM-only retries with tighter reserves, then a canonical `hard_limit_unresolved` error.
+Prompt preflight syncs finalized source, validates authority and lifecycle, runs blocking hard-limit maintenance if necessary, assembles the provider-safe request, and records a request snapshot. Provider overflow gets one LCM-only rebuild and physical retry with a tighter reserve, then a canonical `hard_limit_unresolved` error.
 
 ## Product Surface
 
