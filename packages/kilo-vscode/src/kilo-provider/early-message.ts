@@ -13,11 +13,13 @@ type Ctx = {
   post: (msg: unknown) => void
   exportTranscript: (sessionID: string) => Promise<void>
   openSessions: (ids: string[]) => void
+  lcmSettings: (message: { type: string }) => Promise<boolean>
 }
 
 export async function routeEarlyMessage(message: { type: string }, ctx: Ctx): Promise<boolean> {
   await routeSuggestionWebviewMessage(ctx.question, message)
   if (await ModelState.handleMessage(message.type, message, ctx.client, ctx.post)) return true
+  if (await ctx.lcmSettings(message)) return true
   if (message.type === "exportSessionTranscript") {
     const input = message as { sessionID?: unknown }
     if (typeof input.sessionID === "string") await ctx.exportTranscript(input.sessionID)

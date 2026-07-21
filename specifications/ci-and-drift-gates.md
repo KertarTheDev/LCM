@@ -1,6 +1,6 @@
 # LCM CI And Drift Gates
 
-Status date: 2026-07-10.
+Status date: 2026-07-21.
 
 This document defines the upstream ownership checks for LCM-sensitive changes.
 
@@ -11,8 +11,8 @@ For runtime LCM changes, run the focused owning suite and then:
 ```sh
 bun run --cwd packages/opencode lcm:contracts:check
 bun run --cwd packages/opencode lcm:prompt-static
-bun run --cwd packages/opencode lcm:prompt-first-message
-bun run --cwd packages/opencode lcm:prompt-mcp-schema
+bun run --cwd packages/opencode lcm:system-context
+bun run --cwd packages/opencode lcm:provider-overflow
 bun run --cwd packages/opencode typecheck
 bun run --cwd packages/kilo-vscode compile
 ```
@@ -33,14 +33,14 @@ The non-strict `lcm:release-long-context` script remains a permissive local repo
 - migration smoke and recursive LCM-owned cleanup
 - activation and raw-leaf parity
 - active-context rebuild and summary-graph validation
-- provider-safe assembly, exact assembly-token-budget binding, and provider protocol
-- retrieval authorization and path provenance
-- hard-limit and prompt-boundary behavior
+- finalized-source sync and active-context rebuild
+- provider-safe assembly, exact assembly-token-budget binding, provider protocol, and bounded overflow recovery
+- retrieval authorization, retrieval tools, and path provenance
+- hard-limit and cutover-quarantine behavior
 - prompt/runtime static unresolved-symbol check
-- first-message prompt smoke
-- MCP prompt schema smoke
+- system-context composition
 - runtime typecheck
-- VSCode LCM settings UI tests
+- VSCode LCM settings and context UI tests
 - VSCode compile
 
 The trigger paths include generated SDK/OpenAPI output under `packages/sdk/**`, the VSCode bundler entrypoint `packages/kilo-vscode/esbuild.js`, and extension packaging helpers under `packages/kilo-vscode/script/**`. Changes to any of these surfaces must run the owning runtime or VSCode job; the obsolete `sdks/**` path is not a valid generated-SDK trigger.

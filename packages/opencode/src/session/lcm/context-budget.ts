@@ -1,4 +1,4 @@
-// kilocode_change - extracted from the LCM context service
+// kilocode_change - new file; extracted from the LCM context service
 import { Effect } from "effect"
 import { stableHash } from "./hash"
 import { MessageV2 } from "../message-v2"

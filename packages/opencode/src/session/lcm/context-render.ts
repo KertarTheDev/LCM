@@ -1,4 +1,4 @@
-// kilocode_change - extracted from the LCM context service
+// kilocode_change - new file; extracted from the LCM context service
 import { Effect } from "effect"
 import { namespacedHash, stableHash } from "./hash"
 import { RUNTIME_DEFAULTS } from "./config"

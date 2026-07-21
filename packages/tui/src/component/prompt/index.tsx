@@ -1044,13 +1044,23 @@ export function Prompt(props: PromptProps) {
     // kilocode_change start - in-memory cost alert command
     if (costAlert.handle(store.prompt.input.trim())) return true
     // kilocode_change end
-    const agent = local.agent.current()
-    if (!agent) return false
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
       return true
     }
+    // kilocode_change start - /memory remains upstream project memory; /lcm opens conversation-context settings
+    if (trimmed === "/lcm" || trimmed === "/lcm-settings") {
+      history.append({ ...store.prompt, mode: store.mode })
+      input.extmarks.clear()
+      input.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      keymap.dispatchCommand("lcm.settings")
+      props.onSubmit?.()
+      return true
+    }
+    // kilocode_change end
     // kilocode_change start
     const memory = await MemoryPrompt.run({
       text: store.prompt.input,
@@ -1077,6 +1087,8 @@ export function Prompt(props: PromptProps) {
     })
     if (memory) return true
     // kilocode_change end
+    const agent = local.agent.current()
+    if (!agent) return false
     const selectedModel = local.model.current()
     if (!selectedModel) {
       void promptModelWarning()

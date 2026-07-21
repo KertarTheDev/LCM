@@ -725,13 +725,8 @@ test("normal session deletion invokes recursive LCM cleanup", async () => {
   await expect(Effect.runPromise(pendingStore.load(root.id))).resolves.toMatchObject({ attempts: 1 })
 
   await withLcmEnv(dataDir, async () => {
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        await Session.remove(root.id)
-        await LcmRuntime.close()
-      },
-    })
+    await Session.remove(root.id)
+    await LcmRuntime.close()
   })
 
   const remaining = await runLcm(

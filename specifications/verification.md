@@ -2,7 +2,7 @@
 
 Status date: 2026-07-20.
 
-This document records the verification surface for `kilocode-lcm-v7.4.11`.
+This document records the verification surface for `kilocode-lcm-v7.4.13`.
 
 ## Selection Rule
 
@@ -12,7 +12,7 @@ On the constrained maintainer VPS, use the parent-workspace `support/vps-verify.
 
 ## Required Cross-Package Gates
 
-For the v7.4.11 integration represented by this branch:
+For the v7.4.13 integration represented by this branch:
 
 - generated LCM contract: `bun run --cwd packages/opencode lcm:contracts:check`
 - generated OpenAPI/SDK: `bun run script/generate.ts` after public API changes, followed by a clean diff check
@@ -49,9 +49,10 @@ The core context-engine seam is covered by:
 - `lcm:raw-leaf-parity`: shared MessageV2 reconstruction.
 - `lcm:provider-assembly`: provider-safe message assembly and request snapshots.
 - `lcm:provider-protocol`: final transformed provider payload rules.
+- `lcm:provider-overflow`: one bounded active-LCM rebuild followed by fail-closed exhaustion; inactive LCM never retries.
 - `lcm:assembly-token-budget`, `lcm:token-budget`: threshold/budget binding and reserves.
 - `lcm:hard-limit`, `lcm:soft-backlog`, `lcm:maintenance-summary-quality`: blocking and deferred maintenance behavior.
-- `test/lcm/system-context.test.ts`: LCM policy plus preserved upstream project memory/environment context.
+- `lcm:system-context`: LCM policy plus preserved upstream project memory/environment context.
 
 ## Runtime And Storage Gates
 

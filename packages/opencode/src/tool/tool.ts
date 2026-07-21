@@ -139,6 +139,7 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
             metadata: {
               ...result.metadata,
               truncated: truncated.truncated,
+              // kilocode_change start - retain validated truncation sidecar provenance for LCM recovery
               ...(truncated.truncated
                 ? {
                     outputPath: truncated.outputPath,
@@ -146,7 +147,8 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
                     outputSha256: truncated.outputSha256,
                     outputSidecarVersion: truncated.outputSidecarVersion,
                   }
-                : {}), // kilocode_change - validated recovery sidecar metadata
+                : {}),
+              // kilocode_change end
             },
           }
         }).pipe(Effect.orDie, Effect.withSpan("Tool.execute", { attributes: attrs }))

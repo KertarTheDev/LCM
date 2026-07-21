@@ -19,6 +19,8 @@ await Bun.build({
     "./src/node.ts",
     "../kilo-sandbox/src/kilo-sandbox-mutation-worker.ts",
     "../kilo-sandbox/src/kilo-sandbox-network-relay.ts",
+    "./src/session/lcm/pglite-regex.worker.ts",
+    "./src/session/lcm/retrieval-regex.worker.ts",
   ],
   // kilocode_change end
   outdir: "./dist/node",

@@ -1,6 +1,6 @@
 # Current Code Map And Change Statistics
 
-This document maps the current release-sync LCM branch against upstream release `v7.4.11` (`9ac93a4c904b32801982051c636dff1cdb471136`). It describes the ownership boundaries after the LCM subsystem was transplanted onto seams designed on the target release.
+This document maps the current release-sync LCM branch against upstream release `v7.4.13` (`7060f8cb21d79abf00f9c9d5df07f6e95e4956ec`). It describes the ownership boundaries after the LCM subsystem was transplanted onto seams designed on the target release.
 
 Generated OpenAPI/SDK artifacts dominate raw line counts, so ownership boundaries and focused adapter review are more useful than aggregate diff size.
 

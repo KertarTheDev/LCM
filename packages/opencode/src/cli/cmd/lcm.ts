@@ -1,4 +1,4 @@
-// kilocode_change - LCM settings CLI
+// kilocode_change - new file; LCM settings CLI
 import { EOL } from "node:os"
 import type { Argv } from "yargs"
 import { WorkspaceContext } from "../../control-plane/workspace-context"

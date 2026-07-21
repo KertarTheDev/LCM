@@ -1,4 +1,4 @@
-// kilocode_change - project/workspace-scoped LCM settings routes
+// kilocode_change - new file; project/workspace-scoped LCM settings routes
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"

@@ -40,7 +40,10 @@ type RegressionCheckInput = {
 const packageRoot = path.resolve(import.meta.dir, "..")
 const implementationRoot = path.resolve(packageRoot, "../..")
 const workspaceRoot = implementationRoot
-const schemaPath = path.join(workspaceRoot, "specifications/fixtures/context-regression/context-regression-report-schemas-v1.json")
+const schemaPath = path.join(
+  workspaceRoot,
+  "specifications/fixtures/context-regression/context-regression-report-schemas-v1.json",
+)
 const maintenanceSkeletonPath = path.join(
   workspaceRoot,
   "specifications/fixtures/context-regression/maintenance-status-evidence-v1.skeleton.json",
@@ -509,7 +512,9 @@ function validateReport(
   }
   for (const check of report.checks) {
     assert(
-      required.has(check.checkID) || supplemental.has(check.checkID) || check.checkID.startsWith("context-regression.local-"),
+      required.has(check.checkID) ||
+        supplemental.has(check.checkID) ||
+        check.checkID.startsWith("context-regression.local-"),
       `unknown check ${check.checkID}`,
     )
     for (const field of context.globalRequiredFields) assert(field in check, `check ${check.checkID} missing ${field}`)
@@ -535,9 +540,7 @@ function validateReport(
 
 async function main() {
   const runID = new Date().toISOString().replace(/[:.]/g, "-")
-  const runRoot = path.resolve(
-    arg("run-root") ?? path.join(packageRoot, ".artifacts", "lcm-context-regression", runID),
-  )
+  const runRoot = path.resolve(arg("run-root") ?? path.join(packageRoot, ".artifacts", "lcm-context-regression", runID))
   const outPath = path.resolve(arg("out") ?? path.join(runRoot, "context-regression-v1.report.json"))
   await fs.mkdir(path.dirname(outPath), { recursive: true })
   const schema = await Bun.file(schemaPath).json()

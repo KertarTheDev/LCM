@@ -1,4 +1,4 @@
-// kilocode_change - extracted from the LCM context service
+// kilocode_change - new file; extracted from the LCM context service
 import { Effect, Schema } from "effect"
 import { renderLargeFileMarker } from "./artifacts"
 import { namespacedHash, stableHash } from "./hash"

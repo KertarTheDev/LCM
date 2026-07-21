@@ -15,7 +15,16 @@
       "provider-safe.snapshot-v2-repair",
       "provider-safe.missing-tool-result-regression"
     ],
-    "allowedFields": ["checkID", "status", "command", "artifactPath", "runtimePath", "evidencePath", "safeError", "notes"]
+    "allowedFields": [
+      "checkID",
+      "status",
+      "command",
+      "artifactPath",
+      "runtimePath",
+      "evidencePath",
+      "safeError",
+      "notes"
+    ]
   },
   "releaseScenario": {
     "reportSchemaVersion": "release-scenario-script-v1",
@@ -29,6 +38,15 @@
       "provider-safe.snapshot-v2-repair",
       "provider-safe.missing-tool-result-regression"
     ],
-    "allowedFields": ["stepID", "status", "command", "artifactPath", "runtimePath", "evidencePath", "safeError", "notes"]
+    "allowedFields": [
+      "stepID",
+      "status",
+      "command",
+      "artifactPath",
+      "runtimePath",
+      "evidencePath",
+      "safeError",
+      "notes"
+    ]
   }
 }

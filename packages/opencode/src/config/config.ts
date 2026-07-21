@@ -28,6 +28,7 @@ import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { RemoteAuthError } from "@opencode-ai/core/v1/config/error"
+import type { DeepMutable } from "@opencode-ai/core/schema" // kilocode_change - local LCM config schema extension
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { ConfigAgent } from "./agent"
@@ -56,6 +57,7 @@ import { unique } from "remeda"
 // kilocode_change end
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import * as Log from "@opencode-ai/core/util/log" // kilocode_change
+import * as LcmConfig from "@/session/lcm/config" // kilocode_change - conversation-context settings remain Kilo-owned
 
 const log = Log.create({ service: "config" }) // kilocode_change
 
@@ -145,7 +147,15 @@ async function resolveLoadedPlugins<T extends { plugin?: ConfigPluginV1.Spec[] }
   return config
 }
 
-export type Info = ConfigV1.Info & {
+// kilocode_change start - extend the Kilo host config without moving LCM settings into generic Core V1
+export const Info = Schema.Struct({
+  ...ConfigV1.Info.fields,
+  lcm: Schema.optional(LcmConfig.PublicConfigSchema).annotate({
+    description: "Lossless Context Management settings for active conversation context",
+  }),
+}).annotate({ identifier: "Config" })
+
+export type Info = DeepMutable<Schema.Schema.Type<typeof Info>> & {
   // kilocode_change - keep exported so existing Config.Info call sites don't need repo-wide migration to ConfigV1.Info
   // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
   // with the file and scope it came from so later runtime code can make location-sensitive decisions.
@@ -155,9 +165,7 @@ export type Info = ConfigV1.Info & {
   skill_path_origins?: Record<string, KilocodeMarkdown.Source>
   // kilocode_change end
 }
-
-// kilocode_change - value re-export for the call sites that pass Config.Info as a schema
-export const Info = ConfigV1.Info
+// kilocode_change end
 
 type State = {
   config: Info
@@ -169,6 +177,7 @@ type State = {
 
 export interface Interface {
   readonly get: () => Effect.Effect<Info>
+  readonly getLocal: () => Effect.Effect<Info> // kilocode_change - read the same project config target updated by LCM
   readonly getGlobal: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
@@ -312,7 +321,7 @@ export const layer = Layer.effect(
         ),
       )
       const parsed = ConfigParse.jsonc(expanded, source)
-      const data = ConfigParse.schema(ConfigV1.Info, normalizeLoadedConfig(parsed, source), source)
+      const data = ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source) // kilocode_change
       if (!("path" in options)) return data
 
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
@@ -927,6 +936,19 @@ export const layer = Layer.effect(
       return yield* InstanceState.use(state, (s) => s.config)
     })
 
+    // kilocode_change start - expose the current project file independently from merged global configuration
+    const getLocal = Effect.fn("Config.getLocal")(function* () {
+      const ctx = yield* InstanceState.context
+      const file = yield* KilocodeConfig.projectConfigUpdateTarget({
+        fs,
+        directory: ctx.directory,
+        worktree: ctx.worktree,
+      })
+      const root = ctx.worktree === "/" ? ctx.directory : ctx.worktree
+      return yield* loadFile(file, undefined, false, { root, source: file })
+    })
+    // kilocode_change end
+
     const directories = Effect.fn("Config.directories")(function* () {
       return yield* InstanceState.use(state, (s) => s.directories)
     })
@@ -950,7 +972,7 @@ export const layer = Layer.effect(
         worktree: ctx.worktree,
         config,
         read: readConfigFile,
-        parse: (input, file) => ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(input, file), file),
+        parse: (input, file) => ConfigParse.schema(Info, ConfigParse.jsonc(input, file), file), // kilocode_change
         patch: (input, patch) => patchJsonc(input, patch),
         writable,
       })
@@ -988,7 +1010,7 @@ export const layer = Layer.effect(
             const patch = writableGlobal(config)
 
             if (!file.endsWith(".jsonc")) {
-              const existing = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(before, file), file)
+              const existing = ConfigParse.schema(Info, ConfigParse.jsonc(before, file), file) // kilocode_change
               const next = KilocodeConfig.mergeConfig(writable(existing), patch)
               const serialized = JSON.stringify(next, null, 2)
               const changed = serialized !== before
@@ -997,7 +1019,7 @@ export const layer = Layer.effect(
             }
 
             const updated = patchJsonc(before, patch)
-            const next = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(updated, file), file)
+            const next = ConfigParse.schema(Info, ConfigParse.jsonc(updated, file), file) // kilocode_change
             const changed = updated !== before
             if (changed) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
             return { next, changed }
@@ -1046,6 +1068,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       get,
+      getLocal, // kilocode_change
       getGlobal,
       getConsoleState,
       update,

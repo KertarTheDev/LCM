@@ -1,4 +1,4 @@
-// kilocode_change - focused prompt-path binding gate without building the full TS program
+// kilocode_change - new file; focused prompt-path binding gate without building the full TS program
 import fs from "node:fs"
 import path from "node:path"
 import ts from "typescript"
@@ -7,7 +7,6 @@ const packageRoot = path.resolve(import.meta.dir, "..")
 const promptPath = path.join(packageRoot, "src/session/prompt.ts")
 const indexPath = path.join(packageRoot, "src/index.ts")
 const processorPath = path.join(packageRoot, "src/session/processor.ts")
-const processorCheckpointTestPath = path.join(packageRoot, "test/kilocode/session-processor-lcm-checkpoint.test.ts")
 
 type ImportBinding = {
   readonly module: string
@@ -75,7 +74,6 @@ const hasImport = (source: ParsedSource, input: { module: string; local: string;
 const prompt = parseSource(promptPath)
 const index = parseSource(indexPath)
 const processor = parseSource(processorPath)
-const processorCheckpointTest = parseSource(processorCheckpointTestPath)
 
 if (
   prompt.identifiers.has("CODE_SWITCH") &&
@@ -105,10 +103,6 @@ if (
 
 if (processor.text.includes("LLM.Event")) {
   errors.push("src/session/processor.ts must not reference non-existent LLM.Event")
-}
-
-if (processorCheckpointTest.text.includes("LLM.Event")) {
-  errors.push("test/kilocode/session-processor-lcm-checkpoint.test.ts must not reference non-existent LLM.Event")
 }
 
 if (errors.length > 0) {

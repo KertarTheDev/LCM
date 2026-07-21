@@ -110,3 +110,9 @@ export async function handleLcmSettingsWebviewRequest(message: LcmSettingsWebvie
     })
   }
 }
+
+export async function routeLcmSettingsWebviewRequest(message: { type?: unknown }, ctx: Context) {
+  if (!isLcmSettingsWebviewRequest(message)) return false
+  await handleLcmSettingsWebviewRequest(message, ctx)
+  return true
+}

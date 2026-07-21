@@ -43,7 +43,7 @@ import * as SandboxPolicy from "@/kilocode/sandbox/policy"
 import { carryForkDiff } from "@/kilocode/session-portability/cumulative-diff" // kilocode_change
 import { BlockedError as AgentRequirementError } from "@/kilocode/agent-requirements"
 // kilocode_change end
-import { Effect, Layer, Option, Context, Schema, Types } from "effect"
+import { Cause, Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { AbsolutePath } from "@opencode-ai/core/schema" // kilocode_change
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -687,50 +687,68 @@ export const layer: Layer.Layer<
     })
     // kilocode_change end
 
-    const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
-      const session = yield* get(sessionID)
-      try {
-        // `remove` needs to work in all cases, such as broken sessions that
-        // run cleanup without instance state.
-        const hasInstance = yield* InstanceState.directory.pipe(
-          Effect.as(true),
-          Effect.catchCause(() => Effect.succeed(false)),
-        )
+    const removeTree: (sessionID: SessionID, cleanupLcm: boolean) => Effect.Effect<void, NotFound> = Effect.fnUntraced(
+      function* (sessionID: SessionID, cleanupLcm: boolean) {
+        const session = yield* get(sessionID)
+        try {
+          // `remove` needs to work in all cases, such as broken sessions that
+          // run cleanup without instance state.
+          const hasInstance = yield* InstanceState.directory.pipe(
+            Effect.as(true),
+            Effect.catchCause(() => Effect.succeed(false)),
+          )
 
-        if (hasInstance) yield* cancelBackgroundJobs(background, sessionID)
-        const kids = yield* children(sessionID)
-        for (const child of kids) {
-          yield* remove(child.id)
+          if (hasInstance) yield* cancelBackgroundJobs(background, sessionID)
+
+          // kilocode_change start - remove runtime-owned conversation memory with the session tree
+          if (cleanupLcm) {
+            yield* Effect.promise(() =>
+              import("./lcm/runtime").then((lcm) => lcm.handleSessionDeleted({ sessionID, recursive: true })),
+            ).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logError("failed to remove LCM session state", { sessionID, cause: Cause.pretty(cause) }),
+              ),
+            )
+          }
+          // kilocode_change end
+
+          const kids = yield* children(sessionID)
+          for (const child of kids) {
+            yield* removeTree(child.id, false)
+          }
+
+          // kilocode_change start
+          yield* SandboxPolicy.dispose(
+            sessionID,
+            Effect.gen(function* () {
+              // kilocode_change - deletion must continue when the projected session store is unavailable
+              yield* Effect.tryPromise(() => KiloSession.removeSession(sessionID)).pipe(Effect.ignore)
+              KiloSession.clearPlatformOverride(sessionID)
+              if (hasInstance) {
+                yield* Effect.promise(() => BackgroundProcess.stopSession(sessionID)).pipe(Effect.ignore)
+                yield* Effect.promise(() => InteractiveTerminal.stopSession(sessionID)).pipe(Effect.ignore)
+                void Promise.all([import("@/effect/app-runtime"), import("./run-state")]).then(([app, run]) =>
+                  app.AppRuntime.runPromise(run.SessionRunState.Service.use((svc) => svc.cancel(sessionID))).catch(
+                    () => {},
+                  ),
+                )
+              }
+              // kilocode_change - migrated from legacy sync.run/sync.remove to EventV2 (events.publish/remove)
+              yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
+              // kilocode_change - capture final session-export workspace delta on close/delete
+              const workspaceKey = hasInstance ? yield* InstanceState.directory : undefined // kilocode_change
+              yield* Effect.promise(() => SessionExport.onSessionClose(sessionID, workspaceKey)) // kilocode_change
+              yield* events.remove(sessionID)
+            }),
+          )
+          // kilocode_change end
+        } catch (error) {
+          yield* Effect.logError("failed to remove session", { sessionID, error })
         }
+      },
+    )
 
-        // kilocode_change start
-        yield* SandboxPolicy.dispose(
-          sessionID,
-          Effect.gen(function* () {
-            yield* Effect.promise(() => KiloSession.removeSession(sessionID)).pipe(Effect.ignore)
-            KiloSession.clearPlatformOverride(sessionID)
-            if (hasInstance) {
-              yield* Effect.promise(() => BackgroundProcess.stopSession(sessionID)).pipe(Effect.ignore)
-              yield* Effect.promise(() => InteractiveTerminal.stopSession(sessionID)).pipe(Effect.ignore)
-              void Promise.all([import("@/effect/app-runtime"), import("./run-state")]).then(([app, run]) =>
-                app.AppRuntime.runPromise(run.SessionRunState.Service.use((svc) => svc.cancel(sessionID))).catch(
-                  () => {},
-                ),
-              )
-            }
-            // kilocode_change - migrated from legacy sync.run/sync.remove to EventV2 (events.publish/remove)
-            yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
-            // kilocode_change - capture final session-export workspace delta on close/delete
-            const workspaceKey = hasInstance ? yield* InstanceState.directory : undefined // kilocode_change
-            yield* Effect.promise(() => SessionExport.onSessionClose(sessionID, workspaceKey)) // kilocode_change
-            yield* events.remove(sessionID)
-          }),
-        )
-        // kilocode_change end
-      } catch (error) {
-        yield* Effect.logError("failed to remove session", { sessionID, error })
-      }
-    })
+    const remove: Interface["remove"] = (sessionID) => removeTree(sessionID, true)
 
     const updateMessage = <T extends SessionV1.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
@@ -826,9 +844,7 @@ export const layer: Layer.Layer<
       // kilocode_change start - historical forks must use the model from retained context, not a later source-session selection
       const msgs = yield* messages({ sessionID: input.sessionID })
       const point = input.messageID
-      const message = point
-        ? msgs.findLast((msg) => msg.info.id < point && msg.info.role === "user")
-        : undefined
+      const message = point ? msgs.findLast((msg) => msg.info.id < point && msg.info.role === "user") : undefined
       const model =
         message?.info.role === "user"
           ? {

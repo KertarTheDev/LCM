@@ -1,4 +1,4 @@
-// kilocode_change - extracted from the LCM context service
+// kilocode_change - new file; extracted from the LCM context service
 import { resolveLcmDbLayout } from "./db-layout"
 import { RUNTIME_DEFAULTS } from "./config"
 import {

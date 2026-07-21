@@ -164,6 +164,7 @@ export const layer = Layer.effect(
       }
       const mirrorAssistant = flags.experimentalEventSystem && !input.assistantMessage.summary
       let aborted = false
+      let lcmAuthoritative = false // kilocode_change - do not route LCM-active overflow into legacy compaction
       const ac = new AbortController() // kilocode_change — abort controller for offline handler
       let attempt = KiloSessionProcessor.attempt() // kilocode_change
 
@@ -945,6 +946,7 @@ export const layer = Layer.effect(
               .pipe(Effect.ignore, Effect.forkIn(scope))
             if (
               !ctx.assistantMessage.summary &&
+              !lcmAuthoritative && // kilocode_change - LCM threshold/overflow handling is authoritative
               // kilocode_change start
               isOverflow({
                 cfg: yield* config.get(),
@@ -1157,6 +1159,12 @@ export const layer = Layer.effect(
         // kilocode_change end
         yield* flushV2Fragments()
         if (MessageV2.ContextOverflowError.isInstance(error)) {
+          // kilocode_change start - return the bounded recovery signal without publishing or invoking legacy compaction
+          if (lcmAuthoritative && !ctx.assistantMessage.summary) {
+            ctx.needsCompaction = true
+            return
+          }
+          // kilocode_change end
           // respect compaction.auto === false by surfacing overflow as a hard error instead of auto-compacting
           if ((yield* config.get()).compaction?.auto === false && !ctx.assistantMessage.summary) {
             ctx.assistantMessage.error = error
@@ -1210,6 +1218,7 @@ export const layer = Layer.effect(
         if (!exists) return "stop"
         // kilocode_change end
         ctx.needsCompaction = false
+        lcmAuthoritative = streamInput.lcmProviderProtocol !== undefined // kilocode_change
         ctx.compactionError = undefined // kilocode_change
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
@@ -1345,10 +1354,7 @@ export const layer = Layer.effect(
             })
           }
 
-          yield* recover().pipe(
-            Effect.catch(halt),
-            Effect.ensuring(cleanup()),
-          )
+          yield* recover().pipe(Effect.catch(halt), Effect.ensuring(cleanup()))
           // kilocode_change end
 
           if (ctx.needsCompaction) return "compact"

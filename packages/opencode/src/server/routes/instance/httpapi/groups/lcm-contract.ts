@@ -1,4 +1,4 @@
-// kilocode_change - LCM-owned HTTP contract schemas shared by the session and project-scoped route groups
+// kilocode_change - new file; LCM-owned HTTP contract schemas shared by the session and project-scoped route groups
 import { SessionID } from "@/session/schema"
 import {
   LCM_SAFE_ACTIONS,

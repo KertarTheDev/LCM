@@ -1,4 +1,4 @@
-// kilocode_change - project/workspace-scoped LCM settings handlers
+// kilocode_change - new file; project/workspace-scoped LCM settings handlers
 import * as InstanceState from "@/effect/instance-state"
 import { Service as LcmRuntimeService } from "@/session/lcm/runtime"
 import { lcmRouteErrorResponse, lcmRouteHttpStatus } from "@/session/lcm/route-errors"

@@ -39,7 +39,9 @@ export const LcmGrepTool = Tool.define(
           abortSignal: ctx.abort,
         })
         return renderResult(result)
-      }).pipe(Effect.catchCause(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_grep_tool_wrapper_failed"))))),
+      }).pipe(
+        Effect.catchCause(() => Effect.succeed(renderResult(lcmToolWrapperError("lcm_grep_tool_wrapper_failed")))),
+      ),
   }),
 )
 

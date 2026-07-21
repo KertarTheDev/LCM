@@ -29,6 +29,7 @@ export const Info = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("busy"),
+    message: Schema.optional(Schema.String), // kilocode_change - surface authoritative context-engine preparation state
   }),
   // kilocode_change start
   Schema.Struct({

@@ -3,7 +3,9 @@ import { expect, test } from "bun:test"
 import path from "node:path"
 import { Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { NodeFileSystem } from "@effect/platform-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Database } from "@opencode-ai/core/database/database"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "../../src/background/job"
 import { Bus } from "../../src/bus"
@@ -17,7 +19,6 @@ import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import { Question } from "../../src/question"
-import { Reference } from "../../src/reference/reference"
 import * as Instance from "../../src/kilocode/instance"
 import { Provider } from "../../src/provider/provider"
 import { ModelID, ProviderID } from "../../src/session/lcm/provider-ids"
@@ -31,6 +32,7 @@ import { resolveLcmDbLayout, resolveLcmFamilyRoot } from "../../src/session/lcm/
 import { LLM } from "../../src/session/llm"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionCompaction } from "../../src/session/compaction"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { SessionSummary } from "../../src/session/summary"
@@ -2439,6 +2441,14 @@ test("normal prompt path returns assistant text without model-visible LCM marker
     const promptBaseLayer = SessionPrompt.layer.pipe(
       Layer.provide(SessionRunState.defaultLayer),
       Layer.provide(SessionStatus.defaultLayer),
+      Layer.provide(
+        Layer.mock(SessionCompaction.Service, {
+          isOverflow: () => Effect.succeed(false),
+          prune: () => Effect.void,
+          process: () => Effect.succeed("continue" as const),
+          create: () => Effect.void,
+        }),
+      ),
       Layer.provide(LcmRuntime.defaultLayer),
       Layer.provide(processorLayer),
       Layer.provide(Config.defaultLayer),
@@ -2453,8 +2463,6 @@ test("normal prompt path returns assistant text without model-visible LCM marker
       Layer.provide(Provider.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(Image.defaultLayer),
-      Layer.provide(Reference.defaultLayer),
-      Layer.provide(AppFileSystem.defaultLayer),
     )
     const promptLayer = promptBaseLayer.pipe(
       Layer.provide(Plugin.defaultLayer),
@@ -2467,11 +2475,13 @@ test("normal prompt path returns assistant text without model-visible LCM marker
           SystemPrompt.defaultLayer,
           llmLayer,
           Bus.layer,
-          CrossSpawnSpawner.defaultLayer,
+          FSUtil.defaultLayer,
+          Database.defaultLayer,
           BackgroundJob.defaultLayer,
           EventV2Bridge.defaultLayer,
         ),
       ),
+      Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)),
     )
     await Instance.provide({
       directory: tmp.path,

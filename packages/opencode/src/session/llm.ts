@@ -39,6 +39,10 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
+// kilocode_change start - exact provider-body validation for authoritative conversation context
+import { validateLcmFinalProviderPayload } from "./lcm/provider-protocol"
+import { LcmSafeErrorFailure, type LcmPreparedProviderPayload, type LcmRenderedSpanProviderFamily } from "./lcm/types"
+// kilocode_change end
 
 const log = Log.create({ service: "llm" }) // kilocode_change
 
@@ -59,6 +63,16 @@ export type StreamInput = {
   toolChoice?: "auto" | "required" | "none"
   preflight?: boolean // kilocode_change - enable proactive threshold compaction for normal session turns
   reportedContextTokens?: number // kilocode_change - provider-reported context size from the last finished turn, source of truth for the output cap
+  // kilocode_change start - authoritative LCM request evidence and exact post-transform validation callback
+  lcmProviderProtocol?: {
+    readonly preparedProviderPayload: LcmPreparedProviderPayload
+    readonly recordFinalProviderValidation: (input: {
+      providerValidatorHash: string
+      providerFamily: LcmRenderedSpanProviderFamily
+      providerTransformOverheadTokenCount: number
+    }) => Promise<void>
+  }
+  // kilocode_change end
 }
 
 export type StreamRequest = StreamInput & {
@@ -139,7 +153,10 @@ const live: Layer.Layer<
               ...base.messages,
             ]
           : base.messages
-      const preflight = input.preflight === true && KiloSessionOverflow.enabled({ cfg, model: input.model })
+      const preflight =
+        input.preflight === true &&
+        !input.lcmProviderProtocol && // kilocode_change - LCM owns threshold admission for authoritative requests
+        KiloSessionOverflow.enabled({ cfg, model: input.model })
       const cap = KiloLLM.needsEstimate({ model: input.model, configured: base.params.maxOutputTokens })
       const usage = cap || preflight ? KiloSessionOverflow.measure({ messages: estimated, tools }) : undefined
       const maxOutputTokens = KiloLLM.capOutputTokens({
@@ -300,7 +317,12 @@ const live: Layer.Layer<
 
       // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
       // either returns a ready LLMEvent stream or a concrete fallback reason.
-      if (flags.experimentalNativeLlm) {
+      if (flags.experimentalNativeLlm && input.lcmProviderProtocol) {
+        l.info("native runtime unavailable; falling back to ai-sdk", {
+          reason: "LCM provider validation requires AI SDK transform",
+        })
+      }
+      if (flags.experimentalNativeLlm && !input.lcmProviderProtocol) {
         const native = LLMNativeRuntime.stream({
           model: input.model,
           provider: item,
@@ -352,6 +374,7 @@ const live: Layer.Layer<
       })
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
+      const requestProviderOptions = ProviderTransform.providerOptions(input.model, prepared.params.options)
       const result = streamText({
         onError(error) {
           bridge.fork(
@@ -386,7 +409,7 @@ const live: Layer.Layer<
         temperature: prepared.params.temperature,
         topP: prepared.params.topP,
         topK: prepared.params.topK,
-        providerOptions: ProviderTransform.providerOptions(input.model, prepared.params.options),
+        providerOptions: requestProviderOptions,
         activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
         tools: prepared.tools,
         toolChoice: input.toolChoice,
@@ -405,12 +428,27 @@ const live: Layer.Layer<
               specificationVersion: "v3" as const,
               async transformParams(args) {
                 if (args.type === "stream") {
-                  // @ts-expect-error
-                  args.params.prompt = ProviderTransform.message(
-                    args.params.prompt,
+                  const transformed = ProviderTransform.message(
+                    args.params.prompt as ModelMessage[],
                     input.model,
                     prepared.messageTransformOptions,
                   )
+                  if (input.lcmProviderProtocol) {
+                    const validation = validateLcmFinalProviderPayload({
+                      preparedPayload: input.lcmProviderProtocol.preparedProviderPayload,
+                      transformedMessages: transformed,
+                      model: input.model,
+                      providerOptions: requestProviderOptions,
+                      modelOptions: prepared.messageTransformOptions,
+                    })
+                    if (!validation.ok) throw new LcmSafeErrorFailure(validation.safeError)
+                    await input.lcmProviderProtocol.recordFinalProviderValidation({
+                      providerValidatorHash: validation.finalProviderValidatorHash,
+                      providerFamily: validation.providerFamily,
+                      providerTransformOverheadTokenCount: validation.providerTransformOverheadTokenCount,
+                    })
+                  }
+                  args.params.prompt = transformed as typeof args.params.prompt
                 }
                 return args.params
               },

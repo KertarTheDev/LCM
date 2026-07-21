@@ -8,7 +8,7 @@ import { evaluate } from "@/permission/evaluate"
 import { Config } from "@/config/config"
 import { Identifier } from "../id/id"
 import { ToolID } from "./schema"
-import { TRUNCATION_DIR } from "./truncation-dir"
+import { TRUNCATION_DIR, truncationOutputMetadata, type TruncationOutputMetadata } from "./truncation-dir" // kilocode_change
 
 const RETENTION = Duration.days(7)
 
@@ -17,7 +17,11 @@ export const MAX_BYTES = 50 * 1024
 export const DIR = TRUNCATION_DIR
 export const GLOB = path.join(TRUNCATION_DIR, "*")
 
-export type Result = { content: string; truncated: false } | { content: string; truncated: true; outputPath: string }
+// kilocode_change start - make validated sidecar evidence available to finalized ToolPart metadata
+export type Result =
+  | { content: string; truncated: false }
+  | ({ content: string; truncated: true } & TruncationOutputMetadata)
+// kilocode_change end
 
 export interface Options {
   maxLines?: number
@@ -136,7 +140,7 @@ export const layer = Layer.effect(
             ? `${preview}\n\n...${removed} ${unit} truncated...\n\n${hint}`
             : `...${removed} ${unit} truncated...\n\n${hint}\n\n${preview}`,
         truncated: true,
-        outputPath: file,
+        ...truncationOutputMetadata({ outputPath: file, text }), // kilocode_change
       } as const
     })
 

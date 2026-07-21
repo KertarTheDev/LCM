@@ -1,4 +1,4 @@
-// kilocode_change - extracted from the LCM context service
+// kilocode_change - new file; extracted from the LCM context service
 import { readAndValidateLcmArtifact } from "./artifacts"
 import { namespacedHash, stableHash } from "./hash"
 import { createOperationID } from "./id"

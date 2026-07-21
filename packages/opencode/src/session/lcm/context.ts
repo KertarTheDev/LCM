@@ -1,4 +1,4 @@
-// kilocode_change - extracted from the LCM context service
+// kilocode_change - new file; extracted from the LCM context service
 import type { PGlite } from "@electric-sql/pglite"
 import { Context, Effect, Layer } from "effect"
 import { LcmDb } from "./db"

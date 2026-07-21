@@ -1542,7 +1542,10 @@ function extractiveExpandQueryFallback(input: {
   const maxAnswerBytes = Math.max(240, Math.min(input.maxAnswerTokens * 4, 4000))
   const perExcerptBytes = Math.max(120, Math.floor((maxAnswerBytes - cited.length * 32) / cited.length))
   const lines = cited.map((excerpt) => {
-    const text = truncateUtf8(excerpt.text, Math.max(80, perExcerptBytes - Buffer.byteLength(excerpt.handle, "utf8") - 8))
+    const text = truncateUtf8(
+      excerpt.text,
+      Math.max(80, perExcerptBytes - Buffer.byteLength(excerpt.handle, "utf8") - 8),
+    )
     return `- ${text} (${excerpt.handle})`
   })
   const answer = lines.join("\n")

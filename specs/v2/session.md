@@ -144,7 +144,7 @@ Status: `complete` is usable in the native V2 path, `partial` covers only part o
 | Per-turn request assembly | Plugin message, system, parameter, and header transforms | missing | Design V2 plugin hooks and lifecycle semantics. |
 | Per-turn request assembly | Model variants and request settings | partial | Apply effective agent options and future plugin-mutated request settings. |
 | Per-turn request assembly | Structured-output policy | missing | Add prompt format, generated tool, tool choice, and model-visible policy together. |
-| Per-turn request assembly | Automatic/context-pressure compaction | partial | V2 replays completed compactions and replaces epochs but cannot initiate compaction. |
+| Per-turn request assembly | Automatic/context-pressure compaction | complete | The upstream context engine initiates proactive request-budget compaction and one bounded pre-output overflow recovery. |
 | Prompt/reference expansion | Durable typed prompt attachments | complete | None. |
 | Prompt/reference expansion | Native template and `@` mention expansion | missing | Parse and resolve native V2 prompt input before durable admission. |
 | Prompt/reference expansion | File, directory, media, and MCP-resource materialization | partial | Materialize and normalize sources instead of lowering unresolved attachment metadata. |
