@@ -21,9 +21,10 @@ function command(command: string, args: string[] = [], input?: string) {
 }
 
 function writeOsc52(text: string) {
-  if (!process.stdout.isTTY) return
+  if (!process.stdout.isTTY) return false // kilocode_change - distinguish a real fallback from a silent no-op
   const sequence = `\x1b]52;c;${Buffer.from(text).toString("base64")}\x07`
   process.stdout.write(process.env.TMUX || process.env.STY ? `\x1bPtmux;\x1b${sequence}\x1b\\` : sequence)
+  return true // kilocode_change
 }
 
 export async function read() {
@@ -93,6 +94,25 @@ export function copyCommand(
   }
 }
 
+export async function completeClipboardWrite(input: {
+  // kilocode_change start - observable fallback and actionable failure
+  osc52: boolean
+  native: () => Promise<void>
+  platform: NodeJS.Platform
+}) {
+  try {
+    await input.native()
+    return { method: "native" as const, osc52: input.osc52 }
+  } catch (error) {
+    if (input.osc52) return { method: "osc52" as const, osc52: true }
+    const hint =
+      input.platform === "linux"
+        ? " Install wl-clipboard (Wayland), xclip, or xsel, or enable OSC 52 in the terminal."
+        : " Enable OSC 52 in the terminal or configure a system clipboard provider."
+    throw new Error(`Could not copy to the system clipboard.${hint}`, { cause: error })
+  }
+} // kilocode_change end
+
 let copyMethod: Promise<(text: string) => Promise<void>> | undefined
 
 function getCopyMethod() {
@@ -102,23 +122,23 @@ function getCopyMethod() {
     if (native?.[0] === "osascript") {
       return async (text: string) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
-        await command("osascript", ["-e", `set the clipboard to "${escaped}"`]).catch(() => undefined)
+        await command("osascript", ["-e", `set the clipboard to "${escaped}"`]) // kilocode_change - surface failure
       }
     }
     if (native) {
       return async (text: string) => {
-        await command(native[0], native.slice(1), text).catch(() => undefined)
+        await command(native[0], native.slice(1), text) // kilocode_change - surface failure
       }
     }
     return async (text: string) => {
       const { default: clipboardy } = await import("clipboardy")
-      await clipboardy.write(text).catch(() => undefined)
+      await clipboardy.write(text) // kilocode_change - surface failure
     }
   })())
 }
 
 export async function write(text: string) {
-  writeOsc52(text)
+  const osc52 = writeOsc52(text) // kilocode_change
   const method = await getCopyMethod()
-  await method(text)
+  await completeClipboardWrite({ osc52, native: () => method(text), platform: process.platform }) // kilocode_change
 }

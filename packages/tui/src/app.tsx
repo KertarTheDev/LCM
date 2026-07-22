@@ -390,6 +390,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
   const clipboard = useClipboard()
 
+  // kilocode_change start - keep renderer capture synchronized with the effective platform-aware setting
+  createEffect(() => {
+    renderer.useMouse = !Flag.KILO_DISABLE_MOUSE && tuiConfig.mouse
+  })
+  // kilocode_change end
+
   const api = createTuiApi(
     createTuiApiAdapters({
       version: InstallationVersion,
@@ -1109,7 +1115,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         evt.stopPropagation()
       }}
       onMouseUp={
-        !Flag.KILO_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? () => Selection.copy(renderer, toast, clipboard) : undefined
+        !Flag.KILO_EXPERIMENTAL_DISABLE_COPY_ON_SELECT // kilocode_change - non-left clicks keep native terminal semantics
+          ? (event) => event.button === MouseButton.LEFT && Selection.copy(renderer, toast, clipboard)
+          : undefined
       }
     >
       <Show when={Flag.KILO_SHOW_TTFD}>

@@ -288,7 +288,7 @@ export type QuestionReply = Parameters<KiloClient["question"]["reply"]>[0]
 
 export type QuestionReject = Parameters<KiloClient["question"]["reject"]>[0]
 
-export type RunTuiConfig = Pick<TuiConfig.Resolved, "keybinds" | "leader_timeout" | "diff_style">
+export type RunTuiConfig = Pick<TuiConfig.Resolved, "keybinds" | "leader_timeout" | "diff_style" | "mouse"> // kilocode_change - carry effective mouse ownership into the renderer worker
 
 // Lifecycle phase of a scrollback entry. "start" opens the entry, "progress"
 // appends content (coalesced in the footer queue), "final" closes it.

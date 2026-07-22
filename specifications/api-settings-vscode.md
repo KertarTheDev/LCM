@@ -95,6 +95,8 @@ In the interactive TUI, `/lcm` opens the LCM conversation-context dialog and `/l
 
 When a local session is selected it calls the generated session-scoped SDK methods; otherwise it calls the generated sessionless settings methods. Directory/workspace selectors are transport context only. Runtime safe errors are validated before forwarding, and bridge-generated fallbacks use the canonical safe-error message for their template key.
 
+The extension forwards content-safe `lcm.*` envelopes only for the active or otherwise tracked session as `lcmEvent`. The main chat header hydrates with `requestLcmStatus`, retains a per-session cache, accepts snapshots monotonically by `updatedAt`, and refreshes after reconnect, relevant LCM events, and transition to idle. The compact header shows active tokens against the hard limit. Its expanded form shows `Hard H% · Raw R% · Backlog B%`, where hard is `activeTokens / hardLimit` and both raw and backlog use `softThreshold`; output reserve is already reflected by the runtime budget and is not subtracted again in the UI.
+
 The extension host does not open, migrate, inspect, repair, or delete the LCM PGlite database. Every DB support or prompt-export action remains runtime-owned behind the generated SDK. Request IDs prevent stale settings/timeline responses from a previous session from replacing current state.
 
 ## VSCode Settings UI
@@ -128,3 +130,5 @@ Upstream project-memory events and settings remain present. LCM settings and eve
 ## Packaging Verification
 
 For release-facing changes run the generated-contract checks, extension/webview typechecks, VSCode compile, and snapshot build. The packaged runtime, not the extension host, must pass the LCM DB smoke. External installed-editor evidence remains required for stable release approval.
+
+Terminal mouse capture is platform-sensitive product behavior. An omitted `mouse` setting resolves to `false` on Linux and `true` elsewhere; an explicit boolean wins, while `KILO_DISABLE_MOUSE` always disables capture. Both full-screen `kilo` and split-footer `kilo run --interactive` consume the same resolved value, and full-screen mode applies changes live. With capture disabled, the terminal owns native selection, paste, and context menus. Capture remains opt-in on Linux for in-app mouse controls; focused prompt right-click pastes through the Kilo clipboard path and automatic copy runs only for left-button selection release. The Kilo Console displays the server-resolved effective value rather than inferring an OS from the browser.

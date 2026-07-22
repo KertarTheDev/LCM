@@ -4,6 +4,7 @@ import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import {
   AttentionSoundName,
+  defaultMouseCapture,
   Info,
   LeaderTimeoutDefault,
   PluginSpec,
@@ -41,7 +42,13 @@ test("validates config constraints", () => {
   expect(decodeInfo({ attention: { sounds: { unknown: "sound.wav" } } })).toEqual({ attention: { sounds: {} } })
 })
 
-test("resolves host-neutral defaults", () => {
+test("defaults mouse capture off on Linux and on elsewhere", () => {
+  expect(defaultMouseCapture("linux")).toBe(false)
+  expect(defaultMouseCapture("darwin")).toBe(true)
+  expect(defaultMouseCapture("win32")).toBe(true)
+})
+
+test("resolves host defaults", () => {
   const config = resolve({}, { terminalSuspend: true })
 
   expect(config.attention).toEqual({
@@ -53,7 +60,7 @@ test("resolves host-neutral defaults", () => {
     sounds: {},
   })
   expect(config.leader_timeout).toBe(LeaderTimeoutDefault)
-  expect(config.mouse).toBe(true)
+  expect(config.mouse).toBe(defaultMouseCapture())
   expect(config.keybinds.has("terminal.suspend")).toBe(true)
   expect(config.keybinds.has("session.list")).toBe(true)
 })
@@ -78,6 +85,11 @@ test("resolves overrides without mutating input", () => {
   expect(config).toMatchObject({ theme: "custom", mouse: false, leader_timeout: 750, attention: input.attention })
   expect(config.keybinds.get("session.list")).toHaveLength(1)
   expect(input.keybinds).toEqual({ session_list: "ctrl+l" })
+})
+
+test("explicit mouse capture overrides the platform default", () => {
+  expect(resolve({ mouse: true }, { terminalSuspend: true }).mouse).toBe(true)
+  expect(resolve({ mouse: false }, { terminalSuspend: true }).mouse).toBe(false)
 })
 
 test("disables suspend and assigns ctrl+z to undo when unsupported", () => {
@@ -110,7 +122,7 @@ test("provides resolved config through Solid context", async () => {
   ))
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain(`custom true ${LeaderTimeoutDefault}`)
+    expect(app.captureCharFrame()).toContain(`custom ${defaultMouseCapture()} ${LeaderTimeoutDefault}`)
   } finally {
     app.renderer.destroy()
   }

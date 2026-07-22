@@ -7,7 +7,7 @@
  */
 import { createContext, useContext, type ParentProps } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { LeaderTimeoutDefault, TuiConfig, TuiConfigProvider, useTuiConfig } from "@tui/config"
+import { defaultMouseCapture, LeaderTimeoutDefault, TuiConfig, TuiConfigProvider, useTuiConfig } from "@tui/config"
 import { TuiKeybind } from "@tui/config/keybind"
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { KiloTitleIcon } from "@/kilocode/cli/cmd/tui/title-icon"
@@ -38,7 +38,7 @@ export namespace KiloTuiConfig {
           bindingDefaults: TuiKeybind.bindingDefaults(),
         }),
         leader_timeout: next.leader_timeout ?? LeaderTimeoutDefault,
-        mouse: next.mouse ?? true,
+        mouse: next.mouse ?? defaultMouseCapture(),
       }
       if (JSON.stringify(config.keybinds.bindings) === JSON.stringify(store.keybinds.bindings)) {
         config.keybinds = store.keybinds

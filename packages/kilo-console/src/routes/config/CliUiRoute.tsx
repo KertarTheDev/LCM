@@ -113,7 +113,7 @@ export function CliUiRoute() {
 
             <Toggle
               label="Mouse capture"
-              description="Allow the TUI to receive mouse input. Defaults to on."
+              description="Allow the TUI to receive mouse input. Defaults off on Linux so native selection, paste, and context menus keep working."
               checked={state.mouse()}
               disabled={Boolean(state.ctx.saving())}
               onChange={() => state.setMouse(!state.mouse())}

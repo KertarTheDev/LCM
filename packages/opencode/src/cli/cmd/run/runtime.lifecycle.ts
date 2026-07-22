@@ -12,6 +12,7 @@ import path from "path"
 import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@opencode-ai/core/flag/flag" // kilocode_change
 import { openEditor } from "@opencode-ai/tui/editor"
 import { registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
 import { Session as SessionApi } from "@/session/session"
@@ -185,7 +186,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       stdin: source.stdin,
       targetFps: 30,
       maxFps: 60,
-      useMouse: true, // kilocode_change - interactive terminal close and scroll controls
+      useMouse: !Flag.KILO_DISABLE_MOUSE && input.tuiConfig.mouse, // kilocode_change - honor native Linux gestures unless capture is explicit
       autoFocus: false,
       openConsoleOnError: false,
       exitOnCtrlC: false,
