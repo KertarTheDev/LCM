@@ -26,6 +26,8 @@ For the v7.4.13 integration represented by this branch:
 
 The focused `typecheck:lcm` project owns the LCM tree. It does not replace the package gate after shared prompt/server/CLI integration changes, but a repeatedly resource-killed local broad check is not a reason to add publishable bypasses: record the local limitation and require the corresponding production CI build to pass.
 
+Changes to LCM Effect services or family-resolution layers must run the narrow owning suite and the complete `lcm:activation` matrix. The narrow suite proves the intended path; `lcm:activation` also exercises passive/default and isolated layer compositions that can expose a missing service dependency.
+
 ## Compatibility/Cutover Gate
 
 `bun run --cwd packages/opencode lcm:cutover-quarantine` proves:
@@ -70,6 +72,8 @@ The core context-engine seam is covered by:
 - `lcm:scheduler`
 - `lcm:status-events`
 - focused `test/lcm/db-worker.test.ts`, `id-allocation.test.ts`, and `hash.test.ts`
+
+LCM tests that use both the Core database service and retained V1 database access must share one named database through `KILO_TEST_SHARED_DB_PATH`. The package LCM test runner establishes this invariant. Running those paths against separate `:memory:` connections is not equivalent and can produce misleading missing-session or family-resolution failures.
 
 ## Retrieval, Files, And Maps
 
@@ -129,10 +133,10 @@ Each provider run must also prove that the same root/child sessions resolve to o
 - stable approval: `bun run --cwd packages/opencode lcm:release-long-context:strict`
 - packaged runtime: `bun run --cwd packages/opencode lcm:platform-runtime-smoke -- --runtime-path <packaged-kilo> --snapshot-path <candidate.vsix> --out-dir <evidence-dir>`
 
-Release evidence must start from a clean committed worktree and bind the source commit, release target, resolved tag commit, VSIX SHA-256, bundled runtime identity, and asset manifest. Development snapshot names are derived from committed `HEAD` even when the worktree contains uncommitted bytes, so a dirty snapshot name is not exact-SHA evidence. Commands that change working directory with `--cwd` must receive workspace-absolute artifact paths.
+Release evidence must start from a clean committed worktree and bind the source commit, release target, resolved tag commit, VSIX SHA-256, bundled runtime identity, and asset manifest. Development snapshot names are derived from committed `HEAD` even when the worktree contains uncommitted bytes, so a dirty snapshot name is not exact-SHA evidence. Commands that change working directory with `--cwd` must receive workspace-absolute artifact paths. A Linux snapshot that falls back to a source wrapper because Zig or another packaged-CLI prerequisite is unavailable is development evidence only, not packaged-runtime evidence.
 
 The compiled CLI and extracted-VSIX smoke must execute the registered `debug lcm-db-smoke` command and prove both `pglite-regex.worker.ts` and `retrieval-regex.worker.ts` through their compiled path defines. Source tests, typecheck, or bundle creation alone do not prove those assets are present.
 
-The completed `v7.4.13-lcm.1` prerelease targeted `cbd5d6dbb2bfca3c887fd5847744638b1ffdb59a`. Workflow run `29844020302` passed the release-critical gates, built 12 CLI archives and 8 VSIX assets, and passed the packaged Linux x64 runtime smoke. This is prerelease automation evidence, not stable approval.
+The completed `v7.4.13-lcm.2` prerelease targeted `03af6c8fbb6d42699fee337b83023ca46b3973bf`. Workflow run `29916707618` passed the release-critical gates, built 12 CLI archives and 8 nonempty VSIX assets, and passed the packaged Linux x64 runtime smoke. The superseded faulty `.1` release and matching tag were removed only after `.2` passed exact release/tag/asset verification. This is prerelease automation evidence, not stable approval.
 
 Stable release approval additionally requires the strict long-context gate and exact-candidate installed-editor validation on the supported VSCodium/Nobara and VSCode/macOS targets.

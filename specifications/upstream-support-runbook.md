@@ -1,6 +1,6 @@
 # LCM Upstream Support Runbook
 
-Status date: 2026-07-21.
+Status date: 2026-07-22.
 
 This runbook records local operational guidance for maintaining and supporting LCM after upstream integration. It does not replace external installed-editor release evidence.
 
@@ -70,6 +70,8 @@ For packaged-runtime evidence use `lcm:platform-runtime-smoke` with the `extensi
 
 The packaged command must execute `debug lcm-db-smoke` through that extracted binary. Its regex check proves both the PGlite cancellation worker and the isolated retrieval-regex worker resolved through their compiled paths. A compile-only result or source-tree smoke does not prove the VSIX contains those entrypoints.
 
+The prerelease workflow must invoke `bun script/build.ts` from `packages/kilo-vscode`. The script calls package-local commands such as `check-types`; invoking its absolute path while leaving the working directory at the repository root is not equivalent and fails after the runtime gates have already consumed CI time. Linux snapshot hosts also need Zig for packaged CLI sandbox helpers. A source-wrapper fallback must remain labeled as development-only evidence.
+
 ## Operator Diagnostics
 
 Use metrics/status events first for threshold and tuning triage. `lcm.metrics.updated` is content-safe and reports active tokens, hard limit, soft threshold, provider context/input/output limits, output reserve, system/tool overhead tokens, fresh-tail budget/counts, unconsumed post-current raw counts, protected-tail raw tokens/items, soft backlog tokens/items, raw lane tokens, lane counts, lane-latch diagnostics, budget status, storage warning state, last maintenance status, and queued deferred soft-maintenance debt.
@@ -117,3 +119,5 @@ Before stable release, collect installed-editor evidence that includes:
 - normal Kilo workflow smoke
 
 For any published candidate, also record the committed workflow head SHA, release ID/tag, resolved tag SHA, draft/prerelease flags, and exact nonempty asset manifest. The current prerelease profile is 12 CLI archives plus 8 platform VSIX files. A successful workflow conclusion without those postconditions is not sufficient release evidence.
+
+When replacing a faulty published candidate, validate the replacement's exact SHA, tag, release flags, packaged smoke, and complete asset manifest before removing the previous candidate. Cleanup must use the captured previous release ID, prove that its release tag and target SHA still match, prove that the tag resolves to the same SHA immediately before deletion, and verify that both objects are absent afterward. Any identity mismatch indicates concurrent state and must leave the mismatched object untouched.
