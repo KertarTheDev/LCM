@@ -1,6 +1,6 @@
 # LCM CI And Drift Gates
 
-Status date: 2026-07-21.
+Status date: 2026-07-22.
 
 This document defines the upstream ownership checks for LCM-sensitive changes.
 
@@ -49,6 +49,8 @@ The trigger paths include upstream context-engine/epoch code, `packages/kilo-mem
 
 `.github/workflows/lcm-macos-platform-smoke.yml` remains the manual macOS packaged-runtime smoke workflow for Darwin VSIX/runtime evidence.
 
+On `kilocode-lcm-prerelease`, `node --test script/lcm-prerelease-release.test.mjs` is the release-workflow sentinel. It must cover release-ID-bound create/upload/validate/publish/cleanup behavior, the exact 20-asset manifest, archive-only CLI construction, and the LCM VSIX step's package working directory.
+
 ## Drift Checklist
 
 The following upstream changes require an LCM review before merge:
@@ -80,5 +82,6 @@ When one of the drift surfaces changes, maintainers should add or update focused
 - one physical LCM overflow retry followed by fail-closed exhaustion
 - compiled PGlite and retrieval regex worker availability through extracted-VSIX smoke
 - exact release ID, target SHA, resolved tag SHA, prerelease flags, and 12-CLI/8-VSIX asset manifest
+- prerelease VSIX construction through `bun script/build.ts` with `packages/kilo-vscode` as the step working directory
 
 The current specs must be updated in the same change when behavior intentionally changes.
