@@ -1595,6 +1595,12 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
             return true
           const sessionId = this.resolveEventSessionId(event)
 
+          if (event.type.startsWith("lcm.")) {
+            return Boolean(
+              sessionId && (sessionId === this.currentSession?.id || this.trackedSessionIds.has(sessionId)),
+            )
+          }
+
           // message.part.* events are always session-scoped; drop if session unknown.
           if (!sessionId) return !isSessionScopedPartEvent(event.type)
 

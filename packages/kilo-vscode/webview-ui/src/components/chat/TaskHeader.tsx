@@ -30,6 +30,12 @@ import { DeferredPopover } from "../shared/DeferredPopover"
 import { target as todoTarget } from "../../context/todo-revert"
 import type { Part, TodoItem, ExtensionMessage } from "../../types/messages"
 import type { MemoryActivity } from "../../utils/memory-activity"
+import type { LcmMetricsSnapshot } from "@kilocode/sdk/v2/client"
+import { isNewerLcmMetrics, lcmPressureDisplay } from "./lcm-status"
+
+function lcmStatusRequestID() {
+  return `lcm-header-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
 
 interface TaskHeaderProps {
   readonly?: boolean
@@ -163,11 +169,75 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
 
   const vscode = useVSCode()
   const [expanded, setExpanded] = createSignal(true)
+  const [lcmMetrics, setLcmMetrics] = createSignal<LcmMetricsSnapshot>()
+  const [lcmMaintenanceLabel, setLcmMaintenanceLabel] = createSignal<string>()
+  const lcmMetricsBySession = new Map<string, LcmMetricsSnapshot>()
+  let lcmRequest: { id: string; sessionID: string } | undefined
+
+  const acceptLcmMetrics = (sessionID: string, next: LcmMetricsSnapshot) => {
+    if (sessionID !== session.currentSessionID()) return
+    const current = lcmMetricsBySession.get(sessionID)
+    if (!isNewerLcmMetrics(current, next)) return
+    lcmMetricsBySession.set(sessionID, next)
+    setLcmMetrics(next)
+  }
+
+  const refreshLcmStatus = () => {
+    const sessionID = session.currentSessionID()
+    if (!sessionID) return
+    const id = lcmStatusRequestID()
+    lcmRequest = { id, sessionID }
+    vscode.postMessage({ type: "requestLcmStatus", requestID: id, sessionID })
+  }
+
+  createEffect(
+    on(
+      () => session.currentSessionID(),
+      (sessionID) => {
+        setLcmMetrics(sessionID ? lcmMetricsBySession.get(sessionID) : undefined)
+        setLcmMaintenanceLabel(undefined)
+        if (sessionID) refreshLcmStatus()
+      },
+    ),
+  )
+
+  const lcmRatios = createMemo(() => {
+    const value = lcmMetrics()
+    if (!value) return undefined
+    return lcmPressureDisplay(value, language.locale())
+  })
 
   // Read initial value from VS Code settings
   onMount(() => vscode.postMessage({ type: "requestTimelineSetting" }))
   const handler = (e: MessageEvent<ExtensionMessage>) => {
     if (e.data.type === "timelineSettingLoaded") setExpanded(e.data.visible)
+    if (e.data.type === "connectionState" && e.data.state === "connected") refreshLcmStatus()
+    if (
+      e.data.type === "sessionStatus" &&
+      e.data.sessionID === session.currentSessionID() &&
+      e.data.status === "idle"
+    ) {
+      refreshLcmStatus()
+    }
+    if (e.data.type === "requestLcmStatus.result" && lcmRequest?.id === e.data.requestID) {
+      const request = lcmRequest
+      lcmRequest = undefined
+      if (e.data.ok) acceptLcmMetrics(request.sessionID, e.data.body as LcmMetricsSnapshot)
+    }
+    if (e.data.type === "lcmEvent" && e.data.sessionID && e.data.sessionID === session.currentSessionID()) {
+      const event = e.data.event
+      if (event.type === "lcm.metrics.updated") {
+        acceptLcmMetrics(e.data.sessionID, event.payload)
+        setLcmMaintenanceLabel(undefined)
+      } else if (event.type === "lcm.maintenance.started") {
+        setLcmMaintenanceLabel(event.payload.safeLabel)
+      } else if (event.type === "lcm.maintenance.ended" || event.type === "lcm.maintenance.failed") {
+        setLcmMaintenanceLabel(event.payload.safeLabel)
+        refreshLcmStatus()
+      } else if (event.type === "lcm.context.updated") {
+        refreshLcmStatus()
+      }
+    }
   }
   window.addEventListener("message", handler)
   onCleanup(() => window.removeEventListener("message", handler))
@@ -308,6 +378,16 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
                 placement="bottom"
               >
                 <span>{ctx().pct ?? ctx().tokens}</span>
+              </Tooltip>
+            )}
+          </Show>
+          <Show when={lcmRatios()}>
+            {(value) => (
+              <Tooltip
+                value={`${value().active.toLocaleString(language.locale())} active tokens of ${value().hard.toLocaleString(language.locale())} hard limit${lcmMaintenanceLabel() ? ` · ${lcmMaintenanceLabel()}` : ""}`}
+                placement="bottom"
+              >
+                <span data-slot="task-header-lcm-status">{expanded() ? value().expanded : value().collapsed}</span>
               </Tooltip>
             )}
           </Show>
