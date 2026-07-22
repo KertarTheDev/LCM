@@ -26,7 +26,7 @@ The V1 `session/prompt.ts` adapter is the largest upstream conflict surface unti
 
 ## Completed Prerelease Evidence
 
-GitHub workflow run `29844020302` published `v7.4.13-lcm.1` from `cbd5d6dbb2bfca3c887fd5847744638b1ffdb59a`. The run completed the release-critical LCM gates, built 12 CLI archives and 8 VSIX assets, and passed packaged Linux x64 LCM DB smoke. This closes the earlier compiler/candidate-build automation gap for that prerelease, but it is not stable-release approval.
+GitHub workflow run `29916707618` published `v7.4.13-lcm.2` from `03af6c8fbb6d42699fee337b83023ca46b3973bf`. The run completed the release-critical LCM gates, built 12 CLI archives and 8 nonempty VSIX assets, and passed packaged Linux x64 LCM DB smoke. Earlier replacement runs exposed an undeclared Core database service in alternate activation layers and a VSIX build invoked outside its package working directory; both were corrected before the successful run. The faulty `.1` release and matching tag were removed only after `.2` passed exact release/tag/asset verification. This closes the compiler/candidate-build automation gap for that prerelease, but it is not stable-release approval.
 
 ## Evidence Gaps
 
