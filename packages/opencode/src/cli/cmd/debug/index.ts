@@ -17,6 +17,7 @@ import { StartupCommand } from "./startup"
 import { V2Command } from "./v2"
 // kilocode_change start
 import { LcmDbDiagnoseCommand, LcmDbRebuildCommand, LcmDbRecoverLockCommand, LcmDbSmokeCommand } from "./lcm-db"
+import { LcmSessionContinuationSmokeCommand } from "./lcm-continuation"
 // kilocode_change end
 
 export const DebugCommand = cmd({
@@ -40,6 +41,7 @@ export const DebugCommand = cmd({
       .command(LcmDbDiagnoseCommand)
       .command(LcmDbRecoverLockCommand)
       .command(LcmDbRebuildCommand)
+      .command(LcmSessionContinuationSmokeCommand)
       // kilocode_change end
       .command(PathsCommand)
       .command(WaitCommand)

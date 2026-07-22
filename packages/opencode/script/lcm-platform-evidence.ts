@@ -4,7 +4,7 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import type { LcmDbSmokeRuntimeMode } from "../src/session/lcm/types"
 
-export const LCM_PLATFORM_EVIDENCE_SCHEMA_VERSION = "lcm-platform-packaged-runtime-smoke-v1"
+export const LCM_PLATFORM_EVIDENCE_SCHEMA_VERSION = "lcm-platform-packaged-runtime-smoke-v2"
 export const REQUIRED_PLATFORM_EVIDENCE_TARGETS = ["windows", "darwin-arm64", "darwin-x64"] as const
 
 export type LcmPlatformEvidenceTarget =
@@ -37,6 +37,12 @@ export interface LcmPlatformPackagedRuntimeSmokeEvidence {
     readonly status: "passed" | "failed"
     readonly stderrTail?: string
     readonly report: unknown
+  }
+  readonly continuationSmoke: {
+    readonly commands: readonly [string, string, string]
+    readonly codes: readonly [number, number, number]
+    readonly status: "passed" | "failed"
+    readonly reports: readonly [unknown, unknown, unknown]
   }
 }
 
@@ -156,6 +162,68 @@ function validateEvidencePayload(input: {
     if (runtimeSmoke.status !== "passed") errors.push(`${file}: runtimeSmoke.status must be passed`)
     if (reportStatus(runtimeSmoke.report) !== "passed") {
       errors.push(`${file}: runtimeSmoke.report.status must be passed`)
+    }
+  }
+
+  const continuationSmoke = payload.continuationSmoke
+  if (!isRecord(continuationSmoke)) {
+    errors.push(`${file}: continuationSmoke is required`)
+  } else {
+    const commands = continuationSmoke.commands
+    const codes = continuationSmoke.codes
+    const reports = continuationSmoke.reports
+    if (!Array.isArray(commands) || commands.length !== 3) {
+      errors.push(`${file}: continuationSmoke.commands must contain seed and two continuation commands`)
+    } else if (
+      !commands.every((command) => isNonEmptyString(command) && command.includes("lcm-session-continuation-smoke"))
+    ) {
+      errors.push(`${file}: continuationSmoke.commands must run debug lcm-session-continuation-smoke`)
+    }
+    if (!Array.isArray(codes) || codes.length !== 3 || codes.some((code) => code !== 0)) {
+      errors.push(`${file}: continuationSmoke.codes must contain three zero exit codes`)
+    }
+    if (continuationSmoke.status !== "passed") errors.push(`${file}: continuationSmoke.status must be passed`)
+    if (!Array.isArray(reports) || reports.length !== 3) {
+      errors.push(`${file}: continuationSmoke.reports must contain three reports`)
+    } else {
+      const [seed, first, second] = reports.map((report) => (isRecord(report) ? report : undefined))
+      if (
+        seed?.status !== "passed" ||
+        seed.phase !== "seed" ||
+        !isNonEmptyString(seed.sessionID) ||
+        seed.coreMessages !== 2 ||
+        seed.coreParts !== 2 ||
+        seed.familyCreated !== false
+      ) {
+        errors.push(`${file}: continuation seed report must pass with no family and 2 messages and 2 parts`)
+      }
+      if (
+        first?.status !== "passed" ||
+        first.phase !== "continue" ||
+        first.sessionID !== seed?.sessionID ||
+        !isNonEmptyString(first.conversationID) ||
+        first.lifecycleState !== "passive_synced" ||
+        first.coreMessages !== 3 ||
+        first.lcmMessages !== 3 ||
+        first.coreParts !== 3 ||
+        first.lcmParts !== 3
+      ) {
+        errors.push(`${file}: first continuation report must pass with passive 3/3 coverage`)
+      }
+      if (
+        second?.status !== "passed" ||
+        second.phase !== "continue" ||
+        second.sessionID !== seed?.sessionID ||
+        !isNonEmptyString(second.conversationID) ||
+        second.lifecycleState !== "passive_synced" ||
+        second.coreMessages !== 4 ||
+        second.lcmMessages !== 4 ||
+        second.coreParts !== 4 ||
+        second.lcmParts !== 4 ||
+        second.conversationID !== first?.conversationID
+      ) {
+        errors.push(`${file}: second continuation report must pass with durable passive 4/4 coverage`)
+      }
     }
   }
 

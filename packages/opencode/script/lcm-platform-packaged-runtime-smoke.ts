@@ -41,6 +41,12 @@ function isRuntimeMode(value: string): value is LcmDbSmokeRuntimeMode {
   return value === "source" || value === "compiled-bin" || value === "serve" || value === "vscode-bundled"
 }
 
+function reportStatusOf(report: unknown) {
+  return typeof report === "object" && report !== null && "status" in report
+    ? (report as { status?: unknown }).status
+    : undefined
+}
+
 function parseTargetArg(value: string | undefined): LcmPlatformEvidenceTarget {
   const inferred = inferTarget()
   if (!value) return inferred
@@ -75,6 +81,22 @@ async function gitHead() {
   })
   const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
   return code === 0 ? stdout.trim() : undefined
+}
+
+async function runRuntime(command: string[], env: Record<string, string | undefined>) {
+  const proc = Bun.spawn(command, { stdout: "pipe", stderr: "pipe", env })
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  let report: unknown = stdout.trim()
+  try {
+    report = JSON.parse(stdout)
+  } catch {
+    // Preserve content-safe command output for diagnosis when JSON parsing fails.
+  }
+  return { command, code, stderr, report }
 }
 
 async function main() {
@@ -115,33 +137,45 @@ async function main() {
   const xdgRoot = path.join(outDir, "xdg", target)
   await ensureDir(xdgRoot)
 
-  const cmd = [runtimePath, "debug", "lcm-db-smoke", "--data-dir", dataDir, "--runtime-mode", runtimeMode, "--json"]
-  const proc = Bun.spawn(cmd, {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: {
-      ...process.env,
-      XDG_DATA_HOME: path.join(xdgRoot, "data"),
-      XDG_CACHE_HOME: path.join(xdgRoot, "cache"),
-      XDG_CONFIG_HOME: path.join(xdgRoot, "config"),
-      XDG_STATE_HOME: path.join(xdgRoot, "state"),
-    },
-  })
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ])
-  let report: unknown = stdout.trim()
-  try {
-    report = JSON.parse(stdout)
-  } catch {
-    // Keep stdout as the captured payload so a failure can still be diagnosed without raw DB content.
+  const env = {
+    ...process.env,
+    XDG_DATA_HOME: path.join(xdgRoot, "data"),
+    XDG_CACHE_HOME: path.join(xdgRoot, "cache"),
+    XDG_CONFIG_HOME: path.join(xdgRoot, "config"),
+    XDG_STATE_HOME: path.join(xdgRoot, "state"),
   }
+  const cmd = [runtimePath, "debug", "lcm-db-smoke", "--data-dir", dataDir, "--runtime-mode", runtimeMode, "--json"]
+  const runtime = await runRuntime(cmd, env)
+  const report = runtime.report
   const reportStatus =
     typeof report === "object" && report !== null && "status" in report
       ? (report as { readonly status?: unknown }).status
       : undefined
+
+  const seed = await runRuntime([runtimePath, "debug", "lcm-session-continuation-smoke", "seed", "--json"], env)
+  const seedSessionID =
+    typeof seed.report === "object" && seed.report !== null && "sessionID" in seed.report
+      ? (seed.report as { sessionID?: unknown }).sessionID
+      : undefined
+  const continuationCommands =
+    typeof seedSessionID === "string"
+      ? ([
+          seed.command,
+          [runtimePath, "debug", "lcm-session-continuation-smoke", "continue", "--session-id", seedSessionID, "--json"],
+          [runtimePath, "debug", "lcm-session-continuation-smoke", "continue", "--session-id", seedSessionID, "--json"],
+        ] as const)
+      : ([seed.command, [], []] as const)
+  const first =
+    continuationCommands[1].length > 0
+      ? await runRuntime([...continuationCommands[1]], env)
+      : { command: [], code: 1, stderr: "seed did not return a session id", report: undefined }
+  const second =
+    continuationCommands[2].length > 0
+      ? await runRuntime([...continuationCommands[2]], env)
+      : { command: [], code: 1, stderr: "seed did not return a session id", report: undefined }
+  const continuationPassed = [seed, first, second].every(
+    (item) => item.code === 0 && reportStatusOf(item.report) === "passed",
+  )
 
   const evidence: LcmPlatformPackagedRuntimeSmokeEvidence = {
     schemaVersion: LCM_PLATFORM_EVIDENCE_SCHEMA_VERSION,
@@ -163,12 +197,18 @@ async function main() {
     },
     runtimeSmoke: {
       command: cmd.join(" "),
-      code,
+      code: runtime.code,
       runtimeMode,
       dataDir,
-      status: code === 0 && reportStatus === "passed" ? "passed" : "failed",
-      stderrTail: stderr.slice(-2_000),
+      status: runtime.code === 0 && reportStatus === "passed" ? "passed" : "failed",
+      stderrTail: runtime.stderr.slice(-2_000),
       report,
+    },
+    continuationSmoke: {
+      commands: [seed.command.join(" "), first.command.join(" "), second.command.join(" ")],
+      codes: [seed.code, first.code, second.code],
+      status: continuationPassed ? "passed" : "failed",
+      reports: [seed.report, first.report, second.report],
     },
   }
 
@@ -176,7 +216,7 @@ async function main() {
   await Bun.write(outPath, JSON.stringify(evidence, null, 2) + "\n")
   console.log(`platform packaged-runtime evidence: ${outPath}`)
   console.log(`result: ${evidence.runtimeSmoke.status}`)
-  if (evidence.runtimeSmoke.status !== "passed") process.exit(1)
+  if (evidence.runtimeSmoke.status !== "passed" || evidence.continuationSmoke.status !== "passed") process.exit(1)
 }
 
 await main()

@@ -55,6 +55,47 @@ function evidence(
       stderrTail: "",
       report: { status: "passed", runtimeMode: "vscode-bundled", checks: [] },
     },
+    continuationSmoke: {
+      commands: [
+        `/artifacts/${target}/kilo debug lcm-session-continuation-smoke seed --json`,
+        `/artifacts/${target}/kilo debug lcm-session-continuation-smoke continue --session-id ses_smoke --json`,
+        `/artifacts/${target}/kilo debug lcm-session-continuation-smoke continue --session-id ses_smoke --json`,
+      ],
+      codes: [0, 0, 0],
+      status: "passed",
+      reports: [
+        {
+          status: "passed",
+          phase: "seed",
+          sessionID: "ses_smoke",
+          coreMessages: 2,
+          coreParts: 2,
+          familyCreated: false,
+        },
+        {
+          status: "passed",
+          phase: "continue",
+          sessionID: "ses_smoke",
+          conversationID: "conv_smoke",
+          lifecycleState: "passive_synced",
+          coreMessages: 3,
+          coreParts: 3,
+          lcmMessages: 3,
+          lcmParts: 3,
+        },
+        {
+          status: "passed",
+          phase: "continue",
+          sessionID: "ses_smoke",
+          conversationID: "conv_smoke",
+          lifecycleState: "passive_synced",
+          coreMessages: 4,
+          coreParts: 4,
+          lcmMessages: 4,
+          lcmParts: 4,
+        },
+      ],
+    },
   }
 }
 
@@ -81,6 +122,44 @@ describe("platform packaged-runtime release evidence", () => {
     expect(result.status).toBe("failed")
     expect(result.actual).toContain("schemaVersion")
     expect(result.missingTargets).toEqual([...REQUIRED_PLATFORM_EVIDENCE_TARGETS])
+  })
+
+  test("rejects v1 evidence without packaged continuation coverage", async () => {
+    const dir = await tempDir()
+    for (const target of REQUIRED_PLATFORM_EVIDENCE_TARGETS) {
+      const payload = evidence(target) as unknown as Record<string, unknown>
+      payload.schemaVersion = "lcm-platform-packaged-runtime-smoke-v1"
+      delete payload.continuationSmoke
+      await writeEvidence(dir, target, payload)
+    }
+
+    const result = await validatePlatformPackagedRuntimeEvidence({
+      evidenceDir: dir,
+      expectedSnapshotSha256: "candidate-sha",
+    })
+
+    expect(result.status).toBe("failed")
+    expect(result.actual).toContain("continuationSmoke is required")
+  })
+
+  test("rejects a second restart that opens a different LCM conversation", async () => {
+    const dir = await tempDir()
+    for (const target of REQUIRED_PLATFORM_EVIDENCE_TARGETS) {
+      const payload = evidence(target)
+      if (target === "windows") {
+        const second = payload.continuationSmoke.reports[2] as { conversationID: string }
+        second.conversationID = "conv_reopened"
+      }
+      await writeEvidence(dir, target, payload)
+    }
+
+    const result = await validatePlatformPackagedRuntimeEvidence({
+      evidenceDir: dir,
+      expectedSnapshotSha256: "candidate-sha",
+    })
+
+    expect(result.status).toBe("failed")
+    expect(result.actual).toContain("durable passive 4/4 coverage")
   })
 
   test("requires all platform targets to pass the candidate VSIX smoke", async () => {

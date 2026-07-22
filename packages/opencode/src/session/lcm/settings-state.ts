@@ -1,9 +1,10 @@
 // kilocode_change - new file
 import type { Config } from "@/config/config"
-import { eq } from "drizzle-orm"
-import { Database } from "@/storage/db"
+import { Effect } from "effect"
+import { sql } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import * as LcmConfig from "./config"
+import { useCoreDatabase } from "./core-database"
 import { createOperationID } from "./id"
 import {
   createLcmSafeError,
@@ -44,52 +45,57 @@ function lcmSettingsInvalidRequest(diagnosticCode: string): LcmSafeError {
 }
 
 function loadKiloSessionRow(sessionID: string) {
-  const row = Database.use((db) =>
+  return useCoreDatabase((db) =>
     db
-      .select()
-      .from(SessionTable)
-      .where(eq(SessionTable.id, sessionID as KiloSessionRow["id"]))
-      .get(),
+      .get<KiloSessionRow>(sql`SELECT * FROM session WHERE id = ${sessionID}`)
+      .pipe(Effect.mapError(() => lcmSettingsUnavailable("lcm_settings_session_lookup_failed"))),
+  ).pipe(
+    Effect.flatMap((row) =>
+      row
+        ? Effect.succeed(row)
+        : Effect.fail(
+            createLcmSafeError({
+              code: "not_found",
+              templateKey: "lcm.auth.denied",
+              safeParams: {},
+              retryable: false,
+              diagnosticCode: "lcm_settings_session_not_found",
+            }),
+          ),
+    ),
   )
-  if (!row) {
-    throw createLcmSafeError({
-      code: "not_found",
-      templateKey: "lcm.auth.denied",
-      safeParams: {},
-      retryable: false,
-      diagnosticCode: "lcm_settings_session_not_found",
-    })
-  }
-  return row
 }
 
 export function resolveLcmSettingsScope(input: {
   readonly sessionID?: string
   readonly projectID?: string
   readonly workspaceID?: string
-}): LcmSettingsResolvedScope {
-  if (input.sessionID) {
-    const session = loadKiloSessionRow(input.sessionID)
-    if (input.projectID !== undefined && input.projectID !== session.project_id) {
-      throw lcmSettingsInvalidRequest("lcm_settings_project_scope_mismatch")
-    }
-    if (Object.hasOwn(input, "workspaceID") && input.workspaceID !== (session.workspace_id ?? undefined)) {
-      throw lcmSettingsInvalidRequest("lcm_settings_workspace_scope_mismatch")
-    }
-    return {
-      kind: session.workspace_id ? "workspace" : "project",
-      projectID: session.project_id,
-      ...(session.workspace_id ? { workspaceID: session.workspace_id } : {}),
-      sessionID: input.sessionID,
-    }
+}) {
+  const sessionID = input.sessionID
+  if (sessionID) {
+    return Effect.gen(function* () {
+      const session = yield* loadKiloSessionRow(sessionID)
+      if (input.projectID !== undefined && input.projectID !== session.project_id) {
+        return yield* Effect.fail(lcmSettingsInvalidRequest("lcm_settings_project_scope_mismatch"))
+      }
+      if (Object.hasOwn(input, "workspaceID") && input.workspaceID !== (session.workspace_id ?? undefined)) {
+        return yield* Effect.fail(lcmSettingsInvalidRequest("lcm_settings_workspace_scope_mismatch"))
+      }
+      return {
+        kind: session.workspace_id ? ("workspace" as const) : ("project" as const),
+        projectID: session.project_id,
+        ...(session.workspace_id ? { workspaceID: session.workspace_id } : {}),
+        sessionID,
+      } satisfies LcmSettingsResolvedScope
+    })
   }
 
-  if (!input.projectID) throw lcmSettingsInvalidRequest("lcm_settings_project_required")
-  return {
-    kind: input.workspaceID ? "workspace" : "project",
+  if (!input.projectID) return Effect.fail(lcmSettingsInvalidRequest("lcm_settings_project_required"))
+  return Effect.succeed({
+    kind: input.workspaceID ? ("workspace" as const) : ("project" as const),
     projectID: input.projectID,
     ...(input.workspaceID ? { workspaceID: input.workspaceID } : {}),
-  }
+  } satisfies LcmSettingsResolvedScope)
 }
 
 export function validateLcmSettingsUpdate(input: LcmUpdateSettingsInput) {
