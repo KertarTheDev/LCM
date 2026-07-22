@@ -91,7 +91,7 @@ export function useTuiUiSettings() {
   const [speed, setSpeed] = createSignal("3")
   const [accel, setAccel] = createSignal(false)
   const [diff, setDiff] = createSignal<Diff>("auto")
-  const [mouse, setMouse] = createSignal(true)
+  const [mouse, setMouse] = createSignal(false)
   const [dirty, setDirty] = createSignal(false)
 
   const options = createMemo(() => {
@@ -120,7 +120,7 @@ export function useTuiUiSettings() {
     setSpeed(String(tui?.scroll_speed ?? 3))
     setAccel(bool(tui?.scroll_acceleration?.enabled, false))
     setDiff(pick(tui?.diff_style))
-    setMouse(bool(tui?.mouse, true))
+    setMouse(bool(tui?.mouse, false))
   })
 
   function edit() {

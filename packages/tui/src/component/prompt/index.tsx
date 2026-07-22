@@ -3,6 +3,7 @@ import {
   RGBA,
   TextareaRenderable,
   MouseEvent,
+  MouseButton, // kilocode_change - captured right-click paste
   PasteEvent,
   decodePasteBytes,
   type KeyEvent,
@@ -1609,7 +1610,15 @@ export function Prompt(props: PromptProps) {
                   input.cursorColor = theme.text
                 }, 0)
               }}
-              onMouseDown={(r: MouseEvent) => r.target?.focus()}
+              /* kilocode_change start - preserve paste while the application explicitly owns mouse input */
+              onMouseDown={(event: MouseEvent) => {
+                event.target?.focus()
+                if (event.button !== MouseButton.RIGHT || !tuiConfig.mouse) return
+                event.preventDefault()
+                event.stopPropagation()
+                keymap.dispatchCommand("prompt.paste")
+              }}
+              /* kilocode_change end */
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={props.disabled ? theme.backgroundElement : theme.text}
               syntaxStyle={syntax()}

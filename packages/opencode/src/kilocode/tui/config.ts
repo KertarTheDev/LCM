@@ -26,13 +26,13 @@ export namespace KilocodeTuiConfig {
 
   export async function get(input: { directory: string }) {
     const cfg = await Effect.runPromise(
-      TuiConfig.Service.use((svc) => svc.info()).pipe(
+      TuiConfig.Service.use((svc) => Effect.all({ info: svc.info(), resolved: svc.get() })).pipe(
         Effect.provide(
           TuiConfig.defaultLayer.pipe(Layer.provide(Layer.succeed(CurrentWorkingDirectory, input.directory))),
         ),
       ),
     )
-    return writable(cfg)
+    return writable({ ...cfg.info, mouse: cfg.resolved.mouse })
   }
 
   export async function update(input: { directory: string; worktree?: string; scope: Scope; patch: Patch }) {

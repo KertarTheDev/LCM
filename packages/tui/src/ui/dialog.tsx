@@ -207,7 +207,11 @@ export function DialogProvider(props: ParentProps) {
           evt.preventDefault()
           evt.stopPropagation()
         }}
-        onMouseUp={!Flag.KILO_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
+        onMouseUp={
+          !Flag.KILO_EXPERIMENTAL_DISABLE_COPY_ON_SELECT // kilocode_change - do not copy on right click
+            ? (event: { button: number }) => event.button === MouseButton.LEFT && copySelection()
+            : undefined
+        }
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>

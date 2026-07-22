@@ -112,6 +112,8 @@ Primary files:
 
 - `packages/kilo-vscode/src/kilo-provider/lcm-settings.ts`: thin generated-SDK bridge for LCM settings, status/activity, support actions, and content-safe errors.
 - `packages/kilo-vscode/webview-ui/src/components/settings/LcmContextSettings.tsx`: strategy, storage threshold, hard/raw/backlog metrics, paid-token activity, DB support previews, and prompt export for conversation context.
+- `packages/kilo-vscode/webview-ui/src/components/chat/TaskHeader.tsx` and `lcm-status.ts`: active-session LCM event/status hydration plus monotonic hard/raw/backlog pressure beside the main token count.
+- `packages/tui/src/config/index.tsx`, `app.tsx`, and the direct-run lifecycle: shared platform-aware mouse ownership, live full-screen capture updates, Linux-native gesture defaults, and explicit capture behavior.
 - `packages/kilo-vscode/webview-ui/src/components/chat/TaskTimeline.tsx`: timestamp-merges content-safe LCM maintenance, retrieval, exploration, and map token activity into the normal Kilo timeline.
 - `packages/kilo-vscode/src/services/cli-backend/debug-log.ts`: restores the `kilo-code.new.debugBackendLogs` preference and gates routine bundled-runtime/SSE traces while preserving warnings and errors.
 - `packages/kilo-vscode/webview-ui/src/components/settings/ContextTab.tsx`: places LCM conversation context next to, but separate from, upstream project memory and removes misleading legacy-compaction configuration controls.

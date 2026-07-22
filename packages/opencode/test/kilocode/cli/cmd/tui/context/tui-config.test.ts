@@ -33,7 +33,7 @@ function resolve(input: TuiConfig.Info): TuiConfig.Resolved {
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
     leader_timeout: input.leader_timeout ?? 1_000,
-    mouse: input.mouse ?? true,
+    mouse: input.mouse ?? TuiConfig.defaultMouseCapture(),
   }
 }
 
@@ -87,6 +87,16 @@ describe("KiloTuiConfig.makeStore", () => {
     store.set(cfg({}))
 
     expect(store.config.title_icon).toBe("none")
+  })
+
+  test("set() hot-reloads explicit mouse capture and restores the platform default", () => {
+    const store = KiloTuiConfig.makeStore(resolve(cfg({ mouse: true })))
+
+    store.set(cfg({ mouse: false }))
+    expect(store.config.mouse).toBe(false)
+
+    store.set(cfg({}))
+    expect(store.config.mouse).toBe(TuiConfig.defaultMouseCapture())
   })
 
   test("set() does not re-notify a tracked read when its value is unchanged", () => {

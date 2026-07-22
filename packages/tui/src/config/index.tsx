@@ -64,7 +64,10 @@ export const Info = Schema.Struct({
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
-  mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  mouse: Schema.optional(Schema.Boolean).annotate({
+    // kilocode_change - Linux defaults to native terminal selection
+    description: "Enable or disable mouse capture (default: off on Linux, on elsewhere)",
+  }),
   vim: Schema.optional(Schema.Boolean), // kilocode_change - retain Kilo prompt editing mode
 })
 export type Info = Schema.Schema.Type<typeof Info>
@@ -87,6 +90,11 @@ export const ResolveOptions = Schema.Struct({
   terminalSuspend: Schema.Boolean,
 })
 export type ResolveOptions = Schema.Schema.Type<typeof ResolveOptions>
+
+export function defaultMouseCapture(platform: NodeJS.Platform = process.platform) {
+  // kilocode_change
+  return platform !== "linux"
+}
 
 export function resolve(input: Info, options: ResolveOptions): Resolved {
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
@@ -115,7 +123,7 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
-    mouse: input.mouse ?? true,
+    mouse: input.mouse ?? defaultMouseCapture(), // kilocode_change
   }
 }
 
