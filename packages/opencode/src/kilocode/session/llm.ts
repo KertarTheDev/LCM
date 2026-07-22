@@ -37,6 +37,11 @@ export namespace KiloLLM {
     return input.configured !== undefined && input.configured > 0 && input.model.limit.context > 0
   }
 
+  export function applyLcmOutputReserve(input: { available: number | undefined; reserve?: number }) {
+    if (input.reserve === undefined) return input.available
+    return Math.min(input.available ?? input.reserve, input.reserve)
+  }
+
   /**
    * Caps `maxOutputTokens` to fit within the model's context window after
    * accounting for the context the outgoing request will consume.
@@ -72,9 +77,9 @@ export namespace KiloLLM {
       KiloSessionOverflow.measure({ messages: input.messages, tools: input.tools }).normalized
     const tokens = Math.max(input.reported ?? 0, estimated)
     const available = context - tokens - SAFETY
-    // If available is ≤0 the input alone exceeds context — return the original
-    // value so the provider returns a natural overflow error which triggers
-    // compaction (compactionAttempts guard stops the loop eventually).
+    // If available is ≤0 the input alone exceeds context — preserve the normal
+    // provider overflow signal. LCM-owned requests are capped again by their
+    // admitted reserve and recover through LCM preflight, never legacy compaction.
     if (available <= 0) return input.configured
     if (available >= input.configured) return input.configured
     return Math.max(MIN_OUTPUT, available)

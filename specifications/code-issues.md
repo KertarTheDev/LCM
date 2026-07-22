@@ -1,6 +1,6 @@
 # LCM Current-Code Issues
 
-Status date: 2026-07-21.
+Status date: 2026-07-22.
 
 This file records current engineering or evidence gaps for the v7.4.13 integration.
 
@@ -10,8 +10,11 @@ This file records current engineering or evidence gaps for the v7.4.13 integrati
 - Upstream project memory is retained separately from LCM conversation context. `/memory` remains project memory; `/lcm` owns conversation-context settings.
 - Upstream recall retains prior-session ownership. Current-session recall is rejected in favor of trusted-lineage LCM retrieval.
 - Final persisted SWE-pruned ToolParts are canonical LCM source. A validated truncation sidecar is recovery/provenance evidence and cannot silently replace the persisted result.
-- Upstream compaction remains installed for non-LCM paths and public compatibility surfaces. Active LCM failures and overflow never fall back to it.
+- Upstream V1 compaction remains only as explicitly named compatibility/test construction. Product default layers and graph nodes are fail-closed LCM guards; summarize, remote compact, old markers, LCM failures, and overflow cannot select it.
 - Public LCM settings remain limited to strategy and storage warning threshold.
+- Product family resolution now reads authoritative Core Kilo session/project lineage and reports stage-specific lookup/boundary/root diagnostics instead of collapsing old-session failures into `lcm_family_resolution_failed`.
+- The final provider request now enforces the output reserve admitted by LCM, closing the path where a long session could grow from roughly 75K input toward a 131K context ceiling through a recomputed output allowance.
+- CLI, TUI, and VSCode now expose hard/raw/backlog plus bounded paid-token LCM activity; VSCode restores prompt export and debug backend logging and merges paid LCM requests into the task timeline.
 
 ## Engineering Concern
 
@@ -28,6 +31,7 @@ GitHub workflow run `29844020302` published `v7.4.13-lcm.1` from `cbd5d6dbb2bfca
 ## Evidence Gaps
 
 - Collect installed-editor evidence from the exact candidate VSIX on the supported Nobara/VSCodium and macOS/VSCode targets.
+- Collect the required old-session/output-reserve/CLI-VSCode observability captures and complete all nine LCM tools with both local Qwen and authenticated z.ai as specified in `verification.md`.
 - Strict long-context release approval requires packaged-runtime DB smoke and external/manual evidence; source-tree checks alone are insufficient.
 
 Do not treat archived milestone findings as current defects unless they reproduce against `kilocode-lcm-v7.4.13`.

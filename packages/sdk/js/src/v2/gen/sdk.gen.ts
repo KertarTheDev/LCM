@@ -373,6 +373,8 @@ import type {
   SessionGetResponses,
   SessionInitErrors,
   SessionInitResponses,
+  SessionLcmActivityErrors,
+  SessionLcmActivityResponses,
   SessionLcmCapabilitiesErrors,
   SessionLcmCapabilitiesResponses,
   SessionLcmDbDiagnoseErrors,
@@ -389,6 +391,8 @@ import type {
   SessionLcmSettingsGetResponses,
   SessionLcmSettingsUpdateErrors,
   SessionLcmSettingsUpdateResponses,
+  SessionLcmStatusErrors,
+  SessionLcmStatusResponses,
   SessionListErrors,
   SessionListResponses,
   SessionMessageErrors,
@@ -4522,6 +4526,72 @@ export class Lcm2 extends HeyApiClient {
       ThrowOnError
     >({
       url: "/session/{sessionID}/lcm/capabilities",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get LCM status
+   *
+   * Get current hard-limit, raw-lane, backlog, storage, and cost metrics for a session.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionLcmStatusResponses, SessionLcmStatusErrors, ThrowOnError>({
+      url: "/session/{sessionID}/lcm/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get LCM activity
+   *
+   * List paid-token LCM maintenance, retrieval, exploration, and map requests for a session.
+   */
+  public activity<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionLcmActivityResponses, SessionLcmActivityErrors, ThrowOnError>({
+      url: "/session/{sessionID}/lcm/activity",
       ...options,
       ...params,
     })

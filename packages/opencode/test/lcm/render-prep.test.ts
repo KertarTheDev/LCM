@@ -17,6 +17,7 @@ import {
   createClosureRenderPreparationArtifact,
   makeFixtureClock,
   markLcmRenderOnlyPart,
+  prepareKiloMessageVisibility,
   prepareKiloModelInput,
   type LcmMessageVisibilityInput,
 } from "../../src/session/lcm/render-prep"
@@ -133,6 +134,33 @@ function visibility(input: Partial<LcmMessageVisibilityInput> = {}): LcmMessageV
     ...input,
   }
 }
+
+test("old legacy compaction controls do not become LCM prompt control messages", () => {
+  const legacyID = MessageID.make("msg_render_legacy_compaction")
+  const messages: MessageV2.WithParts[] = [
+    {
+      info: {
+        ...baseMessages()[0]!.info,
+        id: legacyID,
+      },
+      parts: [
+        {
+          id: PartID.make("prt_render_legacy_compaction"),
+          sessionID,
+          messageID: legacyID,
+          type: "compaction",
+          auto: true,
+        },
+      ],
+    },
+    ...baseMessages(),
+  ]
+
+  const prepared = prepareKiloMessageVisibility({ sessionID, messages })
+
+  expect(prepared.messages.map((message) => message.info.id)).toEqual([userID])
+  expect(prepared.visibility.hiddenMessageIDs).toContain(legacyID)
+})
 
 function tool(description = sentinels.tool): AITool {
   return {

@@ -706,7 +706,13 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = Layer.suspend(() =>
+// kilocode_change start - make LCM ownership fail closed at every production compaction construction path
+/**
+ * Explicit upstream V1 adapter retained for historical compatibility tests and
+ * non-LCM embedding. Product runtimes must use `defaultLayer`, which is the
+ * fail-closed LCM V1 guard below.
+ */
+export const upstreamV1DefaultLayer = Layer.suspend(() =>
   layer.pipe(
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Session.defaultLayer),
@@ -720,7 +726,33 @@ export const defaultLayer = Layer.suspend(() =>
   ),
 )
 
-export const node = LayerNode.make(layer, [
+export class LcmV1LegacyCompactionForbiddenError extends Error {
+  constructor(readonly operation: keyof Interface) {
+    super(`Legacy V1 compaction operation '${operation}' is forbidden for LCM-owned sessions`)
+    this.name = "LcmV1LegacyCompactionForbiddenError"
+  }
+}
+
+function forbidden(operation: keyof Interface) {
+  return Effect.die(new LcmV1LegacyCompactionForbiddenError(operation))
+}
+
+/** Product LCM V1 ownership is construction-time state, never inferred from DB health. */
+export const lcmV1Layer = Layer.succeed(
+  Service,
+  Service.of({
+    isOverflow: () => forbidden("isOverflow"),
+    prune: () => forbidden("prune"),
+    process: () => forbidden("process"),
+    create: () => forbidden("create"),
+  }),
+)
+
+export const defaultLayer = lcmV1Layer
+// kilocode_change end
+
+// kilocode_change start - keep the legacy graph explicit while the product graph remains fail closed
+export const upstreamV1Node = LayerNode.make(layer, [
   Config.node,
   Session.node,
   Agent.node,
@@ -729,7 +761,10 @@ export const node = LayerNode.make(layer, [
   Provider.node,
   EventV2Bridge.node,
   RuntimeFlags.node,
-  Database.node, // kilocode_change
+  Database.node,
 ])
+
+export const node = LayerNode.make(lcmV1Layer, [])
+// kilocode_change end
 
 export * as SessionCompaction from "./compaction"

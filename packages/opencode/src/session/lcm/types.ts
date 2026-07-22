@@ -1078,6 +1078,26 @@ export interface LcmUsageRecord {
   createdAt: ISO8601
 }
 
+export interface LcmActivityItem extends LcmUsageRecord {
+  totalTokens: number
+}
+
+export interface LcmActivityPage {
+  conversationID: ConversationID
+  items: LcmActivityItem[]
+  summary: {
+    requestCount: number
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens: number
+    cacheWriteTokens: number
+    totalTokens: number
+    costAmount?: number
+    costCurrency?: string
+    costStatus: "provider_reported" | "mixed" | "unknown" | "not_applicable"
+  }
+}
+
 export interface LcmMetricsSnapshot {
   conversationID: ConversationID
   lifecycleState: LcmLifecycleState

@@ -25,4 +25,18 @@ describe("LCM context settings UI", () => {
     expect(source).not.toContain("lcm.enabled")
     expect(source).not.toContain("prewarm")
   })
+
+  it("shows session pressure, paid activity, support actions, and prompt export", async () => {
+    const source = await Bun.file(path.join(root, "webview-ui/src/components/settings/LcmContextSettings.tsx")).text()
+
+    expect(source).toContain("Hard / raw / backlog")
+    expect(source).toContain("LCM token activity")
+    expect(source).toContain("Diagnose")
+    expect(source).toContain("Preview lock recovery")
+    expect(source).toContain("Preview rebuild")
+    expect(source).toContain("Cancel maintenance")
+    expect(source).toContain("Export compaction prompts")
+    expect(source).toContain("setPending(activeRequests.size > 0)")
+    expect(source).toContain("activeRequests.clear()")
+  })
 })

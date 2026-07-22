@@ -275,7 +275,7 @@ const LcmFileStatusEventPayloadSchema = Schema.Struct({
   safeReason: Schema.optional(LcmFileStatusReasonSchema),
   safeError: Schema.optional(LcmSafeErrorSchema),
 })
-const LcmMetricsSnapshotSchema = Schema.Struct({
+export const LcmMetricsSnapshotSchema = Schema.Struct({
   conversationID: Schema.String,
   lifecycleState: LcmLifecycleStateSchema,
   strategy: LcmStrategySchema,
@@ -336,7 +336,7 @@ const LcmMetricsSnapshotSchema = Schema.Struct({
     }),
   ),
   updatedAt: Schema.String,
-})
+}).annotate({ identifier: "LcmMetricsSnapshot" })
 const LcmDbStatusEventEnvelope = lcmEventEnvelopeSchema("lcm.db.status", LcmDbStatusEventPayloadSchema)
 const LcmContextUpdatedEventEnvelope = lcmEventEnvelopeSchema(
   "lcm.context.updated",

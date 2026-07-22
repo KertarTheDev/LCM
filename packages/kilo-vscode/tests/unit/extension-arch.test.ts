@@ -14,6 +14,7 @@ import path from "node:path"
 const ROOT = path.resolve(import.meta.dir, "../..")
 const PKG_JSON_FILE = path.join(ROOT, "package.json")
 const SRC_DIR = path.join(ROOT, "src")
+const CLI_BACKEND_DIR = path.join(SRC_DIR, "services/cli-backend")
 const EXTENSION_FILE = path.join(ROOT, "src/extension.ts")
 const KILO_PROVIDER_FILE = path.join(ROOT, "src/KiloProvider.ts")
 const VSCODE_HOST_FILE = path.join(ROOT, "src/agent-manager/vscode-host.ts")
@@ -125,6 +126,21 @@ describe("Extension — package.json command sync", () => {
       mac: "cmd+shift+r",
       when: "activeWebviewPanelId == 'kilo-code.new.AgentManagerPanel'",
     })
+  })
+})
+
+describe("Extension — backend logging hygiene", () => {
+  it("keeps routine CLI backend logs behind debugLog", () => {
+    const offenders: string[] = []
+    for (const entry of fs.readdirSync(CLI_BACKEND_DIR, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".ts") || entry.name === "debug-log.ts") continue
+      const full = path.join(CLI_BACKEND_DIR, entry.name)
+      if (fs.readFileSync(full, "utf-8").includes("console.log(")) offenders.push(entry.name)
+    }
+
+    expect(offenders, "Use debugLog() for routine CLI backend logs; keep console.warn/error for real issues.").toEqual(
+      [],
+    )
   })
 })
 

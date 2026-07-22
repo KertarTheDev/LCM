@@ -1,5 +1,15 @@
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@kilocode/sdk/v2/client"
-import type { LcmSafeError, LcmSettingsState } from "@kilocode/sdk/v2/client"
+import type {
+  LcmActivityPage,
+  LcmDbDiagnoseReport,
+  LcmDbRecoverLockReport,
+  LcmDbRebuildReport,
+  LcmMaintenanceResult,
+  LcmMetricsSnapshot,
+  LcmPromptExportReport,
+  LcmSafeError,
+  LcmSettingsState,
+} from "@kilocode/sdk/v2/client"
 import type { DiffSourceCapabilities, DiffSourceDescriptor } from "../../../../src/diff/sources/types"
 import type { PartBatch, PartRemove, PartUpdate } from "../../../../src/shared/stream-messages"
 import type { SessionMode } from "../../context/worktree-mode"
@@ -108,6 +118,41 @@ export type LcmSettingsResultMessage =
     }
   | {
       type: "requestLcmSettings.result" | "updateLcmSettings.result"
+      requestID: string
+      ok: false
+      error: LcmSafeError
+    }
+
+export type LcmSupportResultMessage =
+  | {
+      type:
+        | "requestLcmStatus.result"
+        | "requestLcmActivity.result"
+        | "cancelLcmMaintenance.result"
+        | "diagnoseLcmDb.result"
+        | "recoverLcmDbLock.result"
+        | "rebuildLcmDb.result"
+        | "exportLcmPrompts.result"
+      requestID: string
+      ok: true
+      body:
+        | LcmMetricsSnapshot
+        | LcmActivityPage
+        | LcmMaintenanceResult
+        | LcmDbDiagnoseReport
+        | LcmDbRecoverLockReport
+        | LcmDbRebuildReport
+        | LcmPromptExportReport
+    }
+  | {
+      type:
+        | "requestLcmStatus.result"
+        | "requestLcmActivity.result"
+        | "cancelLcmMaintenance.result"
+        | "diagnoseLcmDb.result"
+        | "recoverLcmDbLock.result"
+        | "rebuildLcmDb.result"
+        | "exportLcmPrompts.result"
       requestID: string
       ok: false
       error: LcmSafeError
@@ -1280,3 +1325,4 @@ export type ExtensionMessage =
   | MemoryEventMessage
   | MemoryOperationResultMessage
   | LcmSettingsResultMessage
+  | LcmSupportResultMessage

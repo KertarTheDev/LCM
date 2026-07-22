@@ -14,7 +14,7 @@ Generated OpenAPI/SDK artifacts dominate raw line counts, so ownership boundarie
 | `packages/core/src/session/context-engine.ts` | Upstream seam | Retains the default V2 epoch/compaction engine and permits an authoritative adapter |
 | `packages/opencode/src/session/prompt.ts` | Upstream adapter | Retains V1 prompt behavior and delegates active conversations to LCM |
 | `packages/opencode/src/session/llm.ts` | Upstream adapter | Final provider-payload validation and snapshot accounting |
-| `packages/opencode/src/effect/app-runtime.ts` | Upstream adapter | Installs one shared LCM runtime while retaining non-LCM compaction support |
+| `packages/opencode/src/effect/app-runtime.ts` | Upstream adapter | Installs one shared LCM runtime and the fail-closed product compaction guard |
 | `packages/opencode/src/server/**` | Mixed | Isolated LCM groups plus narrow public-API adapters |
 | `packages/kilo-vscode/src/kilo-provider/lcm-settings.ts` | Kilo/LCM bridge | Transport-only settings bridge; no DB ownership |
 | `packages/kilo-vscode/webview-ui/src/components/settings/LcmContextSettings.tsx` | Kilo/LCM UI | Conversation-context settings alongside upstream project memory |
@@ -29,6 +29,7 @@ The directory contains the transplanted LCM-owned modules, migration SQL, and ge
 Key files:
 
 - `runtime.ts`: process-facing `LcmRuntime` Effect service facade and core preflight/orchestration flow.
+- `activity.ts`: content-safe per-request maintenance/retrieval/exploration/map usage projection used by CLI and UI observability.
 - `runtime-interface.ts`, `runtime-support.ts`, `runtime-provider.ts`, and `runtime-maintenance.ts`: service contract, shared state/support actions, provider-backed generation/capacity/map-model selection, and maintenance/deferred-job orchestration extracted behind the preserved runtime facade.
 - `events.ts`: content-safe LCM event envelope schemas and bus definitions, including public `lcm.maintenance.*` progress events for background/blocking memory maintenance.
 - `settings-state.ts`: config-backed LCM settings scope resolution, update validation, Config patch/state projection, and settings-unavailable safe errors.
@@ -57,15 +58,16 @@ Key files:
 Important changed files outside `src/session/lcm/`:
 
 - `packages/core/src/session/context-engine.ts`, `context-epoch.ts`, and related runner/LLM transport files: target-release context-engine dispatch seam. It proves that LCM can be selected without replacing the upstream engine; upstream V2 epoch/automatic-compaction behavior remains the default, while the current Kilo product still reaches the retained V1 prompt adapter below.
-- `packages/opencode/src/session/prompt.ts`: switches active sessions from legacy compacted history to LCM preflight and provider-safe assembly; validates prompt-time render preparation as content-safe LCM errors for active sessions; gates LCM tools by capability; finalizes provider request snapshots; syncs finalized messages after prompt/tool turns with warning/retry handling; rejects provider compact results without automatic legacy compaction.
-- `packages/opencode/src/effect/app-runtime.ts`: installs one shared LCM runtime and retains upstream `SessionCompaction` only for non-LCM prompt paths. Active LCM paths never call it as a fallback.
-- `packages/opencode/src/session/llm.ts`: validates final provider-transformed payloads before stream execution, records final provider validator hashes, and reports provider-transform overhead observations.
+- `packages/opencode/src/session/prompt.ts`: treats product V1 sessions as construction-time LCM-owned, loads the full durable stream, rejects non-runnable lifecycle states before provider work, delegates preflight/provider-safe assembly, gates LCM tools by capability, finalizes provider request snapshots, and never selects legacy compacted history as a recovery mode.
+- `packages/opencode/src/session/compaction.ts` and `effect/app-runtime.ts`: product `defaultLayer` and `node` construction use a fail-closed LCM guard. The old implementation is reachable only through explicitly named `upstreamV1DefaultLayer`, `upstreamV1Node`, or the direct test layer.
+- `packages/opencode/src/session/llm.ts`: validates final provider-transformed payloads, records final provider validator hashes/overhead observations, and caps the actual provider `maxOutputTokens` to the reserve admitted by LCM.
+- `packages/opencode/src/kilo-sessions/remote-command.ts`: routes the compatibility `/compact` command to finalized-source sync plus explicit blocking LCM maintenance without creating a legacy compaction turn or restarting the prompt loop.
 - `packages/opencode/src/session/message-v2.ts`: maps LCM safe errors into assistant message errors.
 - `packages/opencode/src/tool/recall.ts`: retains upstream prior-session recall but rejects current-session recall, which is owned by lineage-scoped LCM retrieval.
 - `packages/opencode/src/tool/tool.ts`, `shell.ts`, `truncate.ts`, and `truncation-dir.ts`: carry validated truncation metadata through upstream tool execution. Final persisted SWE-pruned ToolParts remain canonical LCM source; sidecars are recovery evidence only.
 - `packages/opencode/src/session/llm.ts`, `session.ts`, `processor.ts`, `status.ts`, `system.ts`: smaller integration points for provider execution, session behavior, and status surfaces.
-- `packages/opencode/src/server/routes/instance/httpapi/groups/lcm-contract.ts`, `groups/lcm.ts`, `handlers/lcm.ts`, `groups/session.ts`, and `handlers/session.ts`: isolated LCM schemas, settings, capabilities, runtime-owned maintenance, and summarize compatibility behavior without constructing legacy compaction turns.
-- `packages/opencode/src/cli/cmd/lcm.ts`: `kilo lcm settings show/set`. In the TUI, `/lcm` and `/lcm-settings` open conversation-context settings; upstream `/memory` continues to own project memory.
+- `packages/opencode/src/server/routes/instance/httpapi/groups/lcm-contract.ts`, `groups/lcm.ts`, `handlers/lcm.ts`, `groups/session.ts`, and `handlers/session.ts`: isolated LCM schemas, settings, capabilities, hard/raw/backlog status, paid-token activity, runtime-owned maintenance, and summarize compatibility behavior without constructing legacy compaction turns.
+- `packages/opencode/src/cli/cmd/lcm.ts`: `kilo lcm settings show/set`, `kilo lcm status --session`, and `kilo lcm activity --session`. In the TUI, `/lcm` and `/lcm-settings` expose settings, session metrics/activity, and runtime-owned support actions; upstream `/memory` continues to own project memory.
 
 ## Model-Visible Tools
 
@@ -108,8 +110,10 @@ Package scripts in `packages/opencode/package.json` expose these suites with `lc
 
 Primary files:
 
-- `packages/kilo-vscode/src/kilo-provider/lcm-settings.ts`: thin generated-SDK bridge for LCM settings and content-safe errors.
-- `packages/kilo-vscode/webview-ui/src/components/settings/LcmContextSettings.tsx`: strategy, storage threshold, and runtime status for conversation context.
+- `packages/kilo-vscode/src/kilo-provider/lcm-settings.ts`: thin generated-SDK bridge for LCM settings, status/activity, support actions, and content-safe errors.
+- `packages/kilo-vscode/webview-ui/src/components/settings/LcmContextSettings.tsx`: strategy, storage threshold, hard/raw/backlog metrics, paid-token activity, DB support previews, and prompt export for conversation context.
+- `packages/kilo-vscode/webview-ui/src/components/chat/TaskTimeline.tsx`: timestamp-merges content-safe LCM maintenance, retrieval, exploration, and map token activity into the normal Kilo timeline.
+- `packages/kilo-vscode/src/services/cli-backend/debug-log.ts`: restores the `kilo-code.new.debugBackendLogs` preference and gates routine bundled-runtime/SSE traces while preserving warnings and errors.
 - `packages/kilo-vscode/webview-ui/src/components/settings/ContextTab.tsx`: places LCM conversation context next to, but separate from, upstream project memory and removes misleading legacy-compaction configuration controls.
 - `packages/kilo-vscode/src/KiloProvider.ts` and webview message unions: narrow transport integration. The extension host does not open, migrate, or inspect the family DB.
 

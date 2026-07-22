@@ -199,6 +199,22 @@ export interface UpdateLcmSettingsMessage {
   storageWarningThresholdBytes?: number
 }
 
+export interface LcmSupportRequestMessage {
+  type:
+    | "requestLcmStatus"
+    | "requestLcmActivity"
+    | "cancelLcmMaintenance"
+    | "diagnoseLcmDb"
+    | "recoverLcmDbLock"
+    | "rebuildLcmDb"
+    | "exportLcmPrompts"
+  requestID: string
+  sessionID?: string
+  limit?: number
+  dryRun?: boolean
+  force?: boolean
+}
+
 export interface OpenSettingsPanelRequest {
   type: "openSettingsPanel"
   tab?: string
@@ -1429,6 +1445,7 @@ export type WebviewMessage =
   | MemoryPromptMessage
   | RequestLcmSettingsMessage
   | UpdateLcmSettingsMessage
+  | LcmSupportRequestMessage
   | CreateSectionRequest
   | RenameSectionRequest
   | DeleteSectionRequest

@@ -17,6 +17,8 @@ The current taxonomy is exported as `MESSAGE_V2_SYNC_TAXONOMY`:
 
 Assistant messages are ingested only when sealed. Tool parts are ingested only when terminal. Unsealed source increments skipped counters and can produce a `missing_source` safe error in the sync result.
 
+Old `compaction` parts remain immutable compatibility source when present, but `render-prep.ts` removes them from the prompt control projection and drops messages whose only visible control content was such a marker. This does not delete or rewrite the stored transcript. It prevents old-session markers from scheduling legacy compaction while LCM still ingests and reconstructs the finalized conversation around them.
+
 Superseded assistant residue is treated differently from missing committed source. If an unsealed assistant row contains only non-terminal streamed/tool state and a later durable user message exists, sync skips that residue without returning a safe error. If a sealed assistant row contains terminal content plus leftover non-terminal parts and a later durable user message exists, sync ingests the terminal parts and ignores only the superseded residue. This keeps canceled or crashed assistant turns from blocking the next user prompt while preserving finalized user input and terminal assistant content.
 
 ## Idempotence And Drift Detection
@@ -105,6 +107,8 @@ Context rows cache token count, cache key, and cache version. Snapshot rows reco
 
 Runtime prompt preflight normalizes provider/model context metadata before computing thresholds. Invalid context or output limits use conservative provider-specific fallback windows, optional input/output limits are clamped to the resolved context window, and generic providers use a smaller conservative fallback. When the provider does not supply an explicit output reserve, LCM derives one from the resolved context window: at least 4096 tokens, 12% of context where larger, capped at 20,000 tokens, the provider output limit, and 25% of context. Threshold snapshots and metrics preserve `budgetStatus = "provider_limit_fallback"` when fallback or clamped model limits shaped the budget so UI clients can warn users while continuing to protect the prompt from provider overflow.
 
+The admitted `outputReserve` is not diagnostic-only. `session/prompt.ts` carries it with the prepared provider protocol and `session/llm.ts` caps the final provider `maxOutputTokens` to the smaller of the normal provider allowance and that reserve. This closes the gap where a 131K provider window could admit an LCM-safe input and then recompute an output allowance large enough to consume the remaining context. Cache-token and transform-overhead validation still run at the final provider boundary.
+
 Soft raw backlog selection is consumption-aware and token-aware. The runtime always protects the target current-user row. Newer raw rows remain protected until a later provider request snapshot that included that row reaches `resolved`; canceled and expired snapshots do not mark rows as consumed. After mandatory protection is removed, the runtime protects a runtime-owned fresh tail from the newest remaining raw rows, rounded to whole message rows. The internal default fresh-tail budget is 20,000 tokens and is not a public setting. The newest fresh-tail candidate is protected even if it alone exceeds the budget; older candidates are added only while the cumulative fresh-tail token count stays within the runtime budget. The selected backlog and the actual leaf-summary source use the same policy, so snapshots cannot report zero backlog simply because a multi-step turn was treated as one fresh tail. Snapshot metrics also record the largest eligible raw source token count so diagnostics can distinguish many small leaves from one unusually large leaf without exposing source text.
 
 ## Summaries
@@ -164,6 +168,8 @@ When the prompt/run abort signal is canceled, hard-limit maintenance stops at th
 If hard pressure remains unresolved after configured rounds, it returns `hard_limit_unresolved` with before-token and hard-limit evidence where available.
 
 Provider-side context overflow after a successful LCM preflight is treated as missed budget pressure, not as permission to use legacy compaction. The prompt path cancels the failed provider request snapshot, removes the transient assistant attempt, reruns LCM preflight once with a stricter provider input reserve, and retries the provider request. If that one physical retry is exhausted, or if any compact result reaches the prompt loop outside the active LCM retry branch, the turn fails closed with `hard_limit_unresolved` and `action = "start_new_thread"` without creating a `compaction` user part.
+
+A provider response that reaches its output-token limit is distinct from input/context overflow. It does not run hard-limit maintenance after the response, because hard maintenance changes the next request's input tree rather than extending an already exhausted output allowance. The final output-reserve cap prevents an accidentally oversized provider default; if the model legitimately exhausts the admitted reserve, the normal incomplete-output warning remains visible and the user can continue in a later turn.
 
 ## Provider-Safe Assembly
 

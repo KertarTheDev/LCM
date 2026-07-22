@@ -7,6 +7,7 @@ import {
   type LcmSafeMessageTemplateKey,
 } from "@/session/lcm/types"
 import { Schema } from "effect"
+import { LcmMetricsSnapshotSchema } from "@/session/lcm/events"
 
 const LcmSafeParamValue = Schema.Union([Schema.String, Schema.Number, Schema.Boolean])
 
@@ -131,6 +132,92 @@ export const LcmCapabilitiesSchema = Schema.Struct({
   dbStatus: Schema.optional(LcmDbStatusSchema),
   safeError: Schema.optional(LcmSafeErrorSchema),
 }).annotate({ identifier: "LcmCapabilities" })
+
+export { LcmMetricsSnapshotSchema }
+
+export const LcmActivityItemSchema = Schema.Struct({
+  usageRecordID: Schema.String,
+  sessionID: SessionID,
+  conversationID: Schema.String,
+  jobID: Schema.optional(Schema.String),
+  purpose: Schema.Literals([
+    "leaf_summary",
+    "condensation",
+    "hard_limit_maintenance",
+    "retrieval_expand_query",
+    "file_exploration",
+    "llm_map",
+  ]),
+  mode: Schema.Literals(["background", "blocking", "explicit_retrieval", "explicit_exploration", "map_item"]),
+  providerID: Schema.optional(Schema.String),
+  modelID: Schema.optional(Schema.String),
+  inputTokens: Schema.optional(Schema.Number),
+  outputTokens: Schema.optional(Schema.Number),
+  cacheReadTokens: Schema.optional(Schema.Number),
+  cacheWriteTokens: Schema.optional(Schema.Number),
+  totalTokens: Schema.Number,
+  summaryTargetTokens: Schema.optional(Schema.Number),
+  summaryGenerationMaxOutputTokens: Schema.optional(Schema.Number),
+  maintenanceInputBudget: Schema.optional(Schema.Number),
+  summarySourceTokens: Schema.optional(Schema.Number),
+  candidateSummaryTokens: Schema.optional(Schema.Number),
+  acceptedSummaryTokens: Schema.optional(Schema.Number),
+  summaryObjectiveStatus: Schema.optional(
+    Schema.Literals([
+      "provider_accepted",
+      "rejected_empty",
+      "rejected_not_smaller",
+      "rejected_too_large",
+      "rejected_tiny",
+      "rejected_source_echo",
+      "rejected_prompt_wrapper",
+      "rejected_refusal",
+      "rejected_anchorless",
+      "retry_pending",
+      "fallback_accepted",
+    ]),
+  ),
+  summaryFallbackMode: Schema.optional(Schema.Literals(["none", "truncated_prefix", "extractive_key_points"])),
+  summaryReasoningPolicy: Schema.optional(
+    Schema.Literals(["provider_default", "no_reasoning", "minimal_reasoning", "bounded_reasoning", "not_supported"]),
+  ),
+  summaryRetryAttempt: Schema.optional(Schema.Number),
+  maintenanceStatus: Schema.optional(
+    Schema.Literals([
+      "scheduled",
+      "completed",
+      "no_op",
+      "deferred",
+      "skipped",
+      "failed",
+      "canceled",
+      "recovery_required",
+    ]),
+  ),
+  maintenanceSafeCode: Schema.optional(Schema.Literals(LCM_SAFE_ERROR_CODES)),
+  maintenanceDiagnosticCode: Schema.optional(Schema.String),
+  maintenanceSafeMessage: Schema.optional(Schema.String),
+  costAmount: Schema.optional(Schema.Number),
+  costCurrency: Schema.optional(Schema.String),
+  costStatus: Schema.Literals(["provider_reported", "unknown", "not_applicable"]),
+  createdAt: Schema.String,
+}).annotate({ identifier: "LcmActivityItem" })
+
+export const LcmActivityPageSchema = Schema.Struct({
+  conversationID: Schema.String,
+  items: Schema.Array(LcmActivityItemSchema),
+  summary: Schema.Struct({
+    requestCount: Schema.Number,
+    inputTokens: Schema.Number,
+    outputTokens: Schema.Number,
+    cacheReadTokens: Schema.Number,
+    cacheWriteTokens: Schema.Number,
+    totalTokens: Schema.Number,
+    costAmount: Schema.optional(Schema.Number),
+    costCurrency: Schema.optional(Schema.String),
+    costStatus: Schema.Literals(["provider_reported", "mixed", "unknown", "not_applicable"]),
+  }),
+}).annotate({ identifier: "LcmActivityPage" })
 
 export const LcmSettingsStateSchema = Schema.Struct({
   strategy: Schema.Literals(["upward", "dolt"]),

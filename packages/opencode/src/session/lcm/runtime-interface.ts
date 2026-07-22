@@ -8,6 +8,7 @@ import type {
   AgenticMapInput,
   ConversationID,
   LcmAdmittedPathBackedFile,
+  LcmActivityPage,
   LcmCapabilities,
   LcmCancelDeferredMaintenanceInput,
   LcmConversationCapabilityClass,
@@ -25,6 +26,7 @@ import type {
   LcmGrepInput,
   LcmGrepResult,
   LcmMaintenanceResult,
+  LcmMetricsSnapshot,
   LcmManualMaintenanceInput,
   LcmMapCancelInput,
   LcmMapResult,
@@ -49,6 +51,8 @@ import type {
 // should depend on the narrow method types they need rather than the composed layer.
 export interface Interface {
   readonly getCapabilities: (input: { sessionID: string }) => Effect.Effect<LcmCapabilities>
+  readonly getStatus: (input: { sessionID: string }) => Effect.Effect<LcmMetricsSnapshot, LcmSafeError>
+  readonly getActivity: (input: { sessionID: string; limit?: number }) => Effect.Effect<LcmActivityPage, LcmSafeError>
   readonly getOrCreateConversation: (input: {
     sessionID: string
     parentSessionID?: string

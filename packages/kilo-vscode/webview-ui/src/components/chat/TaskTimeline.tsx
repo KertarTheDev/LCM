@@ -7,7 +7,10 @@
 import { Component, For, Show, createMemo, createEffect, createSignal, on, onCleanup } from "solid-js"
 import { Portal } from "solid-js/web"
 import type { AssistantMessage as SDKAssistantMessage, Part as SDKPart } from "@kilocode/sdk/v2"
+import type { LcmActivityItem, LcmActivityPage } from "@kilocode/sdk/v2/client"
 import { useSession } from "../../context/session"
+import { useVSCode } from "../../context/vscode"
+import type { LcmSupportResultMessage } from "../../types/messages/extension-messages"
 import { visibleParts } from "../../context/session-queue"
 import { color, label } from "../../utils/timeline/colors"
 import { geometry, hit, navigate } from "../../utils/timeline/geometry"
@@ -17,13 +20,51 @@ import { isRenderable } from "../../utils/transcript-parts"
 import type { Part, Message } from "../../types/messages"
 
 export interface TimelineBar {
+  key: string
   bg: string
   tip: string
   width: number
   height: number
   idx: number
-  msgId: string
-  partId: string
+  msgId?: string
+  partId?: string
+  time: number
+}
+
+function lcmColor(purpose: LcmActivityItem["purpose"]) {
+  if (purpose === "retrieval_expand_query") return "var(--vscode-charts-purple)"
+  if (purpose === "file_exploration") return "var(--vscode-charts-blue)"
+  if (purpose === "llm_map") return "var(--vscode-charts-orange)"
+  return "var(--vscode-charts-yellow)"
+}
+
+function lcmNumber(value: number | string) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0
+}
+
+export function lcmBars(activity: LcmActivityPage | undefined): TimelineBar[] {
+  if (!activity) return []
+  return [...activity.items].reverse().map((item, index) => {
+    const totalTokens = lcmNumber(item.totalTokens)
+    return {
+      key: item.usageRecordID,
+      bg: lcmColor(item.purpose),
+      tip: [
+        `LCM ${item.purpose.replaceAll("_", " ")}`,
+        `${totalTokens.toLocaleString()} tokens`,
+        item.providerID && item.modelID ? `${item.providerID}/${item.modelID}` : undefined,
+        item.costAmount !== undefined
+          ? `${item.costAmount}${item.costCurrency ? ` ${item.costCurrency}` : ""}`
+          : `cost ${item.costStatus.replaceAll("_", " ")}`,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      width: Math.min(18, 4 + Math.log2(Math.max(1, totalTokens / 256))),
+      height: item.maintenanceStatus ? 14 : 11,
+      idx: index,
+      time: Date.parse(item.createdAt),
+    }
+  })
 }
 
 function collect(messages: Message[], parts: Record<string, Part[]>): TimelineBar[] {
@@ -41,6 +82,7 @@ function collect(messages: Message[], parts: Record<string, Part[]>): TimelineBa
 
   const sz = sizes(result.map((item) => item.part))
   return result.map((item, i) => ({
+    key: `${item.msg.id}:${item.part.id}`,
     bg: color(item.part),
     tip: label(item.part, item.msg),
     width: sz[i]!.width,
@@ -48,11 +90,23 @@ function collect(messages: Message[], parts: Record<string, Part[]>): TimelineBa
     idx: i,
     msgId: item.msg.id,
     partId: item.part.id,
+    time: item.msg.time?.created ?? Date.parse(item.msg.createdAt),
   }))
+}
+
+export function mergeTimelineBars(transcript: TimelineBar[], memory: TimelineBar[]) {
+  return [...transcript, ...memory]
+    .sort((left, right) => left.time - right.time || left.idx - right.idx)
+    .map((bar, idx) => ({ ...bar, idx }))
+}
+
+function sameBar(left: TimelineBar | undefined, right: TimelineBar | undefined) {
+  return left?.key === right?.key
 }
 
 export const TaskTimeline: Component = () => {
   const session = useSession()
+  const vscode = useVSCode()
   let ref: HTMLDivElement | undefined
   let dragging = false
   let dragMoved = false
@@ -61,6 +115,37 @@ export const TaskTimeline: Component = () => {
   const [hover, setHover] = createSignal(-1)
   const [active, setActive] = createSignal(-1)
   const [tip, setTip] = createSignal<{ text: string; x: number; y: number }>()
+  const [lcmActivity, setLcmActivity] = createSignal<LcmActivityPage>()
+  let activityRequestID: string | undefined
+  let activitySessionID: string | undefined
+
+  const receiveLcmActivity = (message: unknown) => {
+    const result = message as LcmSupportResultMessage
+    if (result.type !== "requestLcmActivity.result" || result.requestID !== activityRequestID || !result.ok) return
+    setLcmActivity(result.body as LcmActivityPage)
+  }
+  const unsubscribeLcm = vscode.onMessage(receiveLcmActivity)
+  onCleanup(unsubscribeLcm)
+  createEffect(() => {
+    const sessionID = session.currentSessionID()
+    session.status()
+    if (sessionID !== activitySessionID) {
+      activitySessionID = sessionID
+      setLcmActivity(undefined)
+    }
+    if (!sessionID) {
+      activityRequestID = undefined
+      setLcmActivity(undefined)
+      return
+    }
+    activityRequestID = `lcm-timeline-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    vscode.postMessage({
+      type: "requestLcmActivity",
+      requestID: activityRequestID,
+      sessionID,
+      limit: 100,
+    })
+  })
 
   const messages = () => session.visibleMessages()
   const allParts = () => {
@@ -82,7 +167,7 @@ export const TaskTimeline: Component = () => {
     return result
   }
 
-  const bars = createMemo(() => collect(messages(), allParts()))
+  const bars = createMemo(() => mergeTimelineBars(collect(messages(), allParts()), lcmBars(lcmActivity())))
   const layout = createMemo(() => geometry(bars(), MAX_HEIGHT))
   const busy = () => session.status() === "busy"
   const selected = () => {
@@ -134,7 +219,7 @@ export const TaskTimeline: Component = () => {
       bars,
       (next, previous) => {
         const idx = hover()
-        if (idx < 0 || same(previous?.[idx], next[idx])) return
+        if (idx < 0 || sameBar(previous?.[idx], next[idx])) return
         hideTip()
       },
       { defer: true },
@@ -146,7 +231,7 @@ export const TaskTimeline: Component = () => {
   createEffect<TimelineHighlight | undefined>((previous) => {
     const idx = hover()
     const bar = idx >= 0 ? bars()[idx] : undefined
-    const next = bar ? { msgId: bar.msgId, partId: bar.partId } : undefined
+    const next = bar?.msgId && bar.partId ? { msgId: bar.msgId, partId: bar.partId } : undefined
     if (same(previous, next)) return previous
     dispatchTimelineHighlight(next)
     return next
@@ -189,7 +274,9 @@ export const TaskTimeline: Component = () => {
     const bar = bars()[idx]
     if (!bar) return
     setActive(idx)
-    window.dispatchEvent(new CustomEvent("scrollToMessage", { detail: { id: bar.msgId, partId: bar.partId } }))
+    if (bar.msgId && bar.partId) {
+      window.dispatchEvent(new CustomEvent("scrollToMessage", { detail: { id: bar.msgId, partId: bar.partId } }))
+    }
     showTip(idx)
   }
 

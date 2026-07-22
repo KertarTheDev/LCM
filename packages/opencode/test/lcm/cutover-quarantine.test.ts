@@ -79,14 +79,14 @@ describe("milestone 27 cutover quarantine", () => {
     expect(lcmContract).toContain("LcmMaintenanceEventPayload")
   })
 
-  test("retains upstream compaction only as the non-LCM prompt adapter", async () => {
+  test("keeps upstream compaction source unreachable from product prompt ownership", async () => {
     const prompt = await packageFile("src/session/prompt.ts")
     expect(prompt).toContain("SessionCompaction")
-    expect(prompt).toContain('task?.type === "compaction" && !useLcmManagedHistory')
-    expect(prompt).toContain("!useLcmManagedHistory &&")
-    expect(prompt).toContain("if (!usedLcmManagedHistory)")
-    expect(prompt).toContain('lcmCapabilities.lifecycleState === "passive_synced"')
-    expect(prompt).toContain("useLcmManagedHistory")
+    expect(prompt).toContain("const useLcmManagedHistory = true as const")
+    expect(prompt).not.toContain('task?.type === "compaction" && !useLcmManagedHistory')
+    expect(prompt).not.toContain("!useLcmManagedHistory &&")
+    expect(prompt).not.toContain("usedLcmManagedHistory")
+    expect(prompt).toContain('lcmCapabilities.lifecycleState !== "passive_synced"')
     expect(prompt).toContain("MessageV2.filterCompactedEffect(sessionID)")
     expect(prompt).toContain('if (result === "compact")')
     expect(prompt).toContain("resolveLcmProviderOverflowResult")
@@ -98,6 +98,12 @@ describe("milestone 27 cutover quarantine", () => {
     expect(appRuntime).toContain("SessionCompaction.defaultLayer")
     expect(appRuntime).toContain("LcmAppLayer")
     expect(appRuntime).toContain("SessionPrompt.layer")
+
+    const compaction = await packageFile("src/session/compaction.ts")
+    expect(compaction).toContain("export const defaultLayer = lcmV1Layer")
+    expect(compaction).toContain("export const node = LayerNode.make(lcmV1Layer, [])")
+    expect(compaction).toContain("export const upstreamV1DefaultLayer")
+    expect(compaction).toContain("export const upstreamV1Node")
 
     const lcmIndex = await packageFile("src/session/lcm/index.ts")
     expect(lcmIndex).not.toContain("compact-compat")

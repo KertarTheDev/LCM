@@ -1290,10 +1290,34 @@ interface LcmUsageRecord {
   summaryFallbackMode?: LcmSummaryFallbackMode
   summaryReasoningPolicy?: LcmSummaryReasoningPolicy
   summaryRetryAttempt?: number
+  maintenanceStatus?: Exclude<LcmMaintenanceResult["status"], "healthy">
+  maintenanceSafeCode?: LcmSafeError["code"]
+  maintenanceDiagnosticCode?: string
+  maintenanceSafeMessage?: string
   costAmount?: number
   costCurrency?: string
   costStatus: "provider_reported" | "unknown" | "not_applicable"
   createdAt: ISO8601
+}
+
+interface LcmActivityItem extends LcmUsageRecord {
+  totalTokens: number
+}
+
+interface LcmActivityPage {
+  conversationID: ConversationID
+  items: LcmActivityItem[]
+  summary: {
+    requestCount: number
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens: number
+    cacheWriteTokens: number
+    totalTokens: number
+    costAmount?: number
+    costCurrency?: string
+    costStatus: "provider_reported" | "mixed" | "unknown" | "not_applicable"
+  }
 }
 
 interface LcmMetricsSnapshot {
@@ -1480,6 +1504,8 @@ interface LcmFileStatusEventPayload {
 ```
 
 All usage, metrics, event, and forwarded client payloads are non-model surfaces. Sentinel leak tests must prove they omit raw message text, raw summary text, tool output, inline payload content or bytes, raw file content, raw model prompts, and helper stdout/stderr.
+
+`LcmActivityPage` is a newest-first, bounded projection of the existing `lcm_usage_records` rows for the trusted session conversation; it does not create a second accounting store. It includes maintenance attempt evidence as well as provider-backed retrieval, exploration, and LLM-map requests. `requestCount` counts provider-request evidence even if a provider omitted token usage. AI SDK `inputTokens` already includes cached input, so `totalTokens = inputTokens + outputTokens`; cache read/write fields are a billing breakdown and are not added twice. If input usage is unavailable, cache read/write may form the input fallback. Aggregate money is returned only when provider-reported rows have one currency; mixed currencies never produce a fabricated sum. Agentic-map child assistant usage remains normal child-session usage and is not duplicated as an LCM usage row.
 
 Provider-backed `lcm_expand_query` usage records use `purpose = "retrieval_expand_query"` and `mode = "explicit_retrieval"`. Provider-backed `llm_map` usage records use `purpose = "llm_map"` and `mode = "map_item"`. `agentic_map` child assistant calls are linked into map/session/family cost totals through child-session usage and parent/child conversation metadata; they must not be duplicated as additional LCM usage records. Usage rows for retrieval and map work must not include query text, retrieved content, map item input/output, schemas, prompts, or helper output.
 
@@ -1831,6 +1857,8 @@ Primary `/lcm/settings` reads and writes must not open a family PGlite DB and mu
 Runtime route and generated SDK surfaces must preserve these DTOs exactly:
 
 - `GET /session/:sessionID/lcm/capabilities` returns `LcmCapabilities`.
+- `GET /session/:sessionID/lcm/status` returns `LcmMetricsSnapshot`.
+- `GET /session/:sessionID/lcm/activity?limit=<1..>` returns `LcmActivityPage`; the runtime clamps the applied limit to `1..500`.
 - `GET /lcm/settings` returns `LcmSettingsState`.
 - `PATCH /lcm/settings` accepts `LcmUpdateSettingsInput` and returns `LcmSettingsState`.
 - `GET /session/:sessionID/lcm/settings` returns `LcmSettingsState`.
@@ -1842,6 +1870,7 @@ Runtime route and generated SDK surfaces must preserve these DTOs exactly:
 - `POST /session/:sessionID/lcm/prompts/export` returns `LcmPromptExportReport`.
 
 The generated SDK must expose the primary sessionless settings methods as `client.lcm.settings.get/update`; compatibility session settings methods may remain but must not be the only generated settings surface. The generated session maintenance cancel method is `client.session.lcm.maintenance.cancel(...)` and uses the path `sessionID`; clients must not supply a conversation ID for this operation.
+The generated session status and activity methods are `client.session.lcm.status(...)` and `client.session.lcm.activity(...)`. Both derive conversation/family identity from the path session and trusted routing context; clients cannot provide a family root or conversation ID.
 The generated session DB diagnose method is `client.session.lcm.db.diagnose(...)`; clients must not supply a family data directory or conversation ID for this operation.
 The generated session DB recover-lock method is `client.session.lcm.db.recoverLock(...)`; clients may pass only `dryRun` and `force` in the body and must not supply a family data directory or conversation ID. Omitted bodies are equivalent to `{ dryRun: true, force: false }`.
 The generated session DB rebuild method is `client.session.lcm.db.rebuild(...)`; clients may pass only `dryRun` in the body and must not supply a family data directory or conversation ID. Omitted bodies are equivalent to `{ dryRun: true }`.
@@ -1858,7 +1887,9 @@ Runtime route failures that are request-level failures return `LcmRouteErrorResp
 | `db_unavailable`, `db_migration_failed`, `db_corrupt`, `settings_unavailable`, `provider_unavailable`, `hard_limit_unresolved` | `503` |
 | `timeout`, `canceled` | `504` |
 
-The VSCode settings webview uses `LcmWebviewRequestEnvelope` and `LcmWebviewResponseEnvelope` with message types `requestLcmSettings`, `updateLcmSettings`, `cancelLcmMaintenance`, `diagnoseLcmDb`, `recoverLcmDbLock`, `rebuildLcmDb`, and `exportLcmPrompts`, forwarded through the extension to the generated runtime SDK. Response envelopes preserve the original `requestID`; failures use `ok = false` with `LcmSafeError`. The settings page must use session-scoped settings routes when a current or inherited local session is available and sessionless settings routes when no session is open. Reused Settings panels and webview reloads must preserve the latest inherited local session context before sending Memory settings/actions. Prompt export requires a current trusted session; the Memory UI keeps `Export prompts` visible but disabled for session-backed states until `dbStatus.status = "ready"`, and omits it for purely sessionless state. The VSCode extension host remains a client and must not open any family LCM DB.
+The VSCode settings webview uses `LcmWebviewRequestEnvelope` and `LcmWebviewResponseEnvelope` with message types `requestLcmSettings`, `updateLcmSettings`, `requestLcmStatus`, `requestLcmActivity`, `cancelLcmMaintenance`, `diagnoseLcmDb`, `recoverLcmDbLock`, `rebuildLcmDb`, and `exportLcmPrompts`, forwarded through the extension to the generated runtime SDK. Response envelopes preserve the original `requestID`; the settings and timeline clients ignore stale or unrelated response IDs, and failures use `ok = false` with `LcmSafeError`. The settings page must use session-scoped settings routes when a current or inherited local session is available and sessionless settings routes when no session is open. Reused Settings panels and webview reloads must follow the latest local session context before sending Memory settings/actions. Prompt export requires a current trusted session; the Memory UI keeps `Export compaction prompts` visible but disabled for session-backed states until `dbStatus.status = "ready"`, reports the returned folder/file count/warning, and omits the action for purely sessionless state. The VSCode extension host remains a client and must not open any family LCM DB.
+
+The Kilo task timeline may timestamp-merge `LcmActivityItem` bars with transcript bars. Those bars show purpose, token count, provider/model, cost status or amount, and maintenance status only. They do not scroll to or highlight a transcript part because usage rows are independent request evidence, and they never expose prompts, query text, excerpts, map items, source handles, or provider response content.
 
 Prompt and command dispatch failures continue to use the normal extension-to-webview `sendMessageFailed` message so the composer draft and file attachments are restored through the existing prompt input recovery path. The v7.4.13 extension host does not prewarm or own LCM storage; readiness, retry, and owner-lock handling remain runtime responsibilities behind the generated SDK. If prompt or command dispatch fails with a structured runtime `LcmSafeError`, the payload may include optional `safeError?: LcmSafeError` preserving the runtime code, retryability, action, safe message, and diagnostic code. The webview must prefer `safeError.safeMessage` for user-facing memory recovery copy and must not expose raw DB paths or memory content.
 

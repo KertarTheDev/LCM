@@ -179,6 +179,8 @@ Allowed modes:
 
 `lifecycle.ts` rejects usage records containing forbidden content-bearing keys such as prompts, raw content, tool output, stdout, stderr, query, answer, or inline payloads.
 
+`activity.ts` reads these existing rows as the bounded newest-first `LcmActivityPage`; no new activity table or prerelease migration is required. Maintenance status-only rows remain visible evidence but are not counted as paid requests unless provider/model, token, or provider-reported cost evidence proves a request. AI SDK input totals already include cached input, so activity totals do not add cache-read/write breakdown fields twice. Money aggregates are emitted only for one recorded currency.
+
 ## Deferred Jobs
 
 `lcm_deferred_jobs` stores runtime-owned retry state for soft maintenance that could not run immediately because another maintenance job, local provider capacity, or another transient retryable failure deferred it. The row is keyed per conversation/job kind, stores only content-safe metadata and render provenance, and is resumed through the normal `queueSoftMaintenanceAfterTurn(...)` path after runtime restart.

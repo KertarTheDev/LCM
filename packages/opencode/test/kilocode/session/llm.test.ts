@@ -36,6 +36,18 @@ describe("kilocode.session.llm.timeout", () => {
   })
 })
 
+describe("kilocode.session.llm.applyLcmOutputReserve", () => {
+  test("caps the provider allowance to the reserve admitted by LCM", () => {
+    expect(KiloLLM.applyLcmOutputReserve({ available: 54_000, reserve: 15_728 })).toBe(15_728)
+    expect(KiloLLM.applyLcmOutputReserve({ available: 8000, reserve: 15_728 })).toBe(8000)
+    expect(KiloLLM.applyLcmOutputReserve({ available: undefined, reserve: 4096 })).toBe(4096)
+  })
+
+  test("leaves non-LCM provider allowances unchanged", () => {
+    expect(KiloLLM.applyLcmOutputReserve({ available: 32_000 })).toBe(32_000)
+  })
+})
+
 describe("kilocode.session.llm.text", () => {
   test("joins text delta events", async () => {
     const out = await Effect.runPromise(

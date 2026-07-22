@@ -51,7 +51,16 @@ describe("TaskTimeline delegated tooltip contract", () => {
   })
 
   it("preserves a hovered part across streaming updates", () => {
-    expect(src).toMatch(/if \(idx < 0 \|\| same\(previous\?\.\[idx\], next\[idx\]\)\) return/)
+    expect(src).toMatch(/if \(idx < 0 \|\| sameBar\(previous\?\.\[idx\], next\[idx\]\)\) return/)
     expect(src).toMatch(/if \(same\(previous, next\)\) return previous/)
+  })
+
+  it("merges paid LCM requests into the timeline in timestamp order", () => {
+    expect(src).toMatch(/requestLcmActivity/)
+    expect(src).toMatch(/result\.requestID !== activityRequestID/)
+    expect(src).toMatch(/sessionID !== activitySessionID/)
+    expect(src).toMatch(/setLcmActivity\(undefined\)/)
+    expect(src).toMatch(/mergeTimelineBars\(collect\(messages\(\), allParts\(\)\), lcmBars\(lcmActivity\(\)\)\)/)
+    expect(src).toMatch(/\.sort\(\(left, right\) => left\.time - right\.time/)
   })
 })

@@ -152,8 +152,7 @@ describe("RemoteCommand", () => {
       agent: { default: async () => "test" },
       provider: { default: async () => ({ providerID: "test", modelID: "test" }) },
       revert: { cleanup: async () => {} },
-      compaction: { create: async () => {} },
-      prompt: { loop: async () => {} },
+      memory: { maintain: async () => {} },
     })
     expect((await remote.list()).commands.some((item) => item.name === "exit")).toBe(false)
 
@@ -260,8 +259,7 @@ describe("RemoteCommand", () => {
       agent: { default: async () => "unexpected-agent" },
       provider: { default: async () => ({ providerID: "unexpected", modelID: "unexpected" }) },
       revert: { cleanup: async () => {} },
-      compaction: { create: async () => {} },
-      prompt: { loop: async () => {} },
+      memory: { maintain: async () => {} },
     })
 
     await remote.execute({
@@ -305,12 +303,11 @@ describe("RemoteCommand", () => {
       agent: { default: async () => "unexpected-agent" },
       provider: { default: async () => ({ providerID: "unexpected", modelID: "unexpected" }) },
       revert: { cleanup: async () => {} },
-      compaction: {
-        create: async () => {
-          throw new Error("unexpected built-in compaction")
+      memory: {
+        maintain: async () => {
+          throw new Error("unexpected built-in memory maintenance")
         },
       },
-      prompt: { loop: async () => {} },
     })
 
     await remote.execute({
@@ -360,14 +357,9 @@ describe("RemoteCommand", () => {
           steps.push("cleanup")
         },
       },
-      compaction: {
-        create: async () => {
-          steps.push("create")
-        },
-      },
-      prompt: {
-        loop: async () => {
-          steps.push("loop")
+      memory: {
+        maintain: async () => {
+          steps.push("maintain")
         },
       },
     })
@@ -430,14 +422,9 @@ describe("RemoteCommand", () => {
           steps.push("cleanup")
         },
       },
-      compaction: {
-        create: async () => {
-          steps.push("create")
-        },
-      },
-      prompt: {
-        loop: async () => {
-          steps.push("loop")
+      memory: {
+        maintain: async () => {
+          steps.push("maintain")
         },
       },
     })
@@ -458,10 +445,10 @@ describe("RemoteCommand", () => {
       catalog,
     })
 
-    expect(steps).toEqual(["get", "cleanup", "messages", "create", "loop"])
+    expect(steps).toEqual(["get", "cleanup", "messages", "maintain"])
   })
 
-  test("executes compact through cleanup, compaction, and prompt loop", async () => {
+  test("executes compact through cleanup and LCM memory maintenance", async () => {
     const steps: unknown[] = []
     const session = {
       id: SessionID.make("ses_remote"),
@@ -490,14 +477,9 @@ describe("RemoteCommand", () => {
           steps.push(["cleanup", info.id])
         },
       },
-      compaction: {
-        create: async (input) => {
-          steps.push(["create", input])
-        },
-      },
-      prompt: {
-        loop: async (sessionID) => {
-          steps.push(["loop", sessionID])
+      memory: {
+        maintain: async (input) => {
+          steps.push(["maintain", input])
         },
       },
     })
@@ -516,15 +498,13 @@ describe("RemoteCommand", () => {
       ["cleanup", SessionID.make("ses_remote")],
       "messages",
       [
-        "create",
+        "maintain",
         {
           sessionID: SessionID.make("ses_remote"),
           agent: "session-agent",
           model: { providerID: "request-provider", modelID: "request-model" },
-          auto: false,
         },
       ],
-      ["loop", SessionID.make("ses_remote")],
     ])
   })
 
@@ -588,12 +568,11 @@ describe("RemoteCommand", () => {
       agent: { default: async () => "default-agent" },
       provider: { default: async () => ({ providerID: "default-provider", modelID: "default-model" }) },
       revert: { cleanup: async () => {} },
-      compaction: {
-        create: async (input) => {
-          steps.push(["create", input])
+      memory: {
+        maintain: async (input) => {
+          steps.push(["maintain", input])
         },
       },
-      prompt: { loop: async () => {} },
     })
 
     await remote.execute({
@@ -608,12 +587,11 @@ describe("RemoteCommand", () => {
       "get",
       "messages",
       [
-        "create",
+        "maintain",
         {
           sessionID: SessionID.make("ses_remote"),
           agent: "user-agent",
           model: { providerID: "user-provider", modelID: "user-model" },
-          auto: false,
         },
       ],
     ])
@@ -642,8 +620,7 @@ describe("RemoteCommand", () => {
       agent: { default: async () => "default-agent" },
       provider: { default: async () => ({ providerID: "default-provider", modelID: "default-model" }) },
       revert: { cleanup: async () => {} },
-      compaction: { create: async () => {} },
-      prompt: { loop: async () => {} },
+      memory: { maintain: async () => {} },
     })
 
     const catalog: RemoteCommand.Response = {
@@ -690,8 +667,7 @@ describe("RemoteCommand", () => {
       agent: { default: async () => "default-agent" },
       provider: { default: async () => ({ providerID: "default-provider", modelID: "default-model" }) },
       revert: { cleanup: async () => {} },
-      compaction: { create: async () => {} },
-      prompt: { loop: async () => {} },
+      memory: { maintain: async () => {} },
     })
 
     const catalog: RemoteCommand.Response = {
@@ -731,8 +707,7 @@ describe("RemoteCommand", () => {
       agent: { default: async () => "default-agent" },
       provider: { default: async () => ({ providerID: "default-provider", modelID: "default-model" }) },
       revert: { cleanup: async () => {} },
-      compaction: { create: async () => {} },
-      prompt: { loop: async () => {} },
+      memory: { maintain: async () => {} },
     })
 
     // Catalog seeded with just the built-in compact (no registered "compact"

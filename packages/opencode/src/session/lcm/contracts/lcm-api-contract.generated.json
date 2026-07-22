@@ -54,6 +54,34 @@
         "methods": {},
         "source": "interface ContextItemBase {\n contextItemID: ContextItemID\n conversationID: ConversationID\n itemOrder: number\n itemType: ContextItemType\n tokenCount?: number\n cacheKey?: string\n cacheVersion?: number\n createdAt: ISO8601\n updatedAt: ISO8601\n}"
       },
+      "LcmActivityItem": {
+        "fields": {
+          "totalTokens": {
+            "optional": false,
+            "type": "number"
+          }
+        },
+        "methods": {},
+        "source": "interface LcmActivityItem extends LcmUsageRecord {\n totalTokens: number\n}"
+      },
+      "LcmActivityPage": {
+        "fields": {
+          "conversationID": {
+            "optional": false,
+            "type": "ConversationID"
+          },
+          "items": {
+            "optional": false,
+            "type": "LcmActivityItem[]"
+          },
+          "summary": {
+            "optional": false,
+            "type": "{\n requestCount: number\n inputTokens: number\n outputTokens: number\n cacheReadTokens: number\n cacheWriteTokens: number\n totalTokens: number\n costAmount?: number\n costCurrency?: string\n costStatus: \"provider_reported\" | \"mixed\" | \"unknown\" | \"not_applicable\"\n }"
+          }
+        },
+        "methods": {},
+        "source": "interface LcmActivityPage {\n conversationID: ConversationID\n items: LcmActivityItem[]\n summary: {\n requestCount: number\n inputTokens: number\n outputTokens: number\n cacheReadTokens: number\n cacheWriteTokens: number\n totalTokens: number\n costAmount?: number\n costCurrency?: string\n costStatus: \"provider_reported\" | \"mixed\" | \"unknown\" | \"not_applicable\"\n }\n}"
+      },
       "LcmAssemblyBlockedResult": {
         "fields": {
           "contextItems": {
@@ -3497,9 +3525,25 @@
             "optional": true,
             "type": "OperationID"
           },
+          "maintenanceDiagnosticCode": {
+            "optional": true,
+            "type": "string"
+          },
           "maintenanceInputBudget": {
             "optional": true,
             "type": "number"
+          },
+          "maintenanceSafeCode": {
+            "optional": true,
+            "type": "LcmSafeError[\"code\"]"
+          },
+          "maintenanceSafeMessage": {
+            "optional": true,
+            "type": "string"
+          },
+          "maintenanceStatus": {
+            "optional": true,
+            "type": "Exclude<LcmMaintenanceResult[\"status\"], \"healthy\">"
           },
           "mode": {
             "optional": false,
@@ -3559,7 +3603,7 @@
           }
         },
         "methods": {},
-        "source": "interface LcmUsageRecord {\n usageRecordID: string\n sessionID: SessionID\n conversationID: ConversationID\n jobID?: OperationID\n purpose: LcmUsagePurpose\n mode: LcmUsageMode\n providerID?: string\n modelID?: string\n inputTokens?: number\n outputTokens?: number\n cacheReadTokens?: number\n cacheWriteTokens?: number\n summaryTargetTokens?: number\n summaryGenerationMaxOutputTokens?: number\n maintenanceInputBudget?: number\n summarySourceTokens?: number\n candidateSummaryTokens?: number\n acceptedSummaryTokens?: number\n summaryObjectiveStatus?: LcmSummaryObjectiveStatus\n summaryFallbackMode?: LcmSummaryFallbackMode\n summaryReasoningPolicy?: LcmSummaryReasoningPolicy\n summaryRetryAttempt?: number\n costAmount?: number\n costCurrency?: string\n costStatus: \"provider_reported\" | \"unknown\" | \"not_applicable\"\n createdAt: ISO8601\n}"
+        "source": "interface LcmUsageRecord {\n usageRecordID: string\n sessionID: SessionID\n conversationID: ConversationID\n jobID?: OperationID\n purpose: LcmUsagePurpose\n mode: LcmUsageMode\n providerID?: string\n modelID?: string\n inputTokens?: number\n outputTokens?: number\n cacheReadTokens?: number\n cacheWriteTokens?: number\n summaryTargetTokens?: number\n summaryGenerationMaxOutputTokens?: number\n maintenanceInputBudget?: number\n summarySourceTokens?: number\n candidateSummaryTokens?: number\n acceptedSummaryTokens?: number\n summaryObjectiveStatus?: LcmSummaryObjectiveStatus\n summaryFallbackMode?: LcmSummaryFallbackMode\n summaryReasoningPolicy?: LcmSummaryReasoningPolicy\n summaryRetryAttempt?: number\n maintenanceStatus?: Exclude<LcmMaintenanceResult[\"status\"], \"healthy\">\n maintenanceSafeCode?: LcmSafeError[\"code\"]\n maintenanceDiagnosticCode?: string\n maintenanceSafeMessage?: string\n costAmount?: number\n costCurrency?: string\n costStatus: \"provider_reported\" | \"unknown\" | \"not_applicable\"\n createdAt: ISO8601\n}"
       },
       "LcmWebviewRequestEnvelope": {
         "fields": {
@@ -4283,6 +4327,11 @@
       "response": "LcmSettingsState"
     },
     {
+      "method": "GET",
+      "path": "/session/:sessionID/lcm/status",
+      "response": "LcmMetricsSnapshot"
+    },
+    {
       "method": "PATCH",
       "path": "/lcm/settings",
       "request": "LcmUpdateSettingsInput",
@@ -4455,7 +4504,7 @@
     }
   },
   "source": {
-    "sha256": "c83b54a0a0498ac7212b99be957cfbd9454afc5ae9000bfe515d539d326b9741"
+    "sha256": "b161f2fcde24d57ec9c356831a93f3837eb4af8aacb0b4213876670a8bba4473"
   },
   "surfaceClassifications": {
     "LcmAssemblyBlockedResult": {
