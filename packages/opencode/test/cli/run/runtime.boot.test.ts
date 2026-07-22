@@ -60,7 +60,7 @@ function config(input?: {
   leader?: string
   leaderTimeout?: number
   diff_style?: "auto" | "stacked"
-  mouse?: boolean
+  mouse?: boolean // kilocode_change
   bindings?: Partial<{
     commandList: string[]
     variantCycle: string[]
@@ -75,7 +75,7 @@ function config(input?: {
   const bind = input?.bindings
   return createTuiResolvedConfig({
     diff_style: input?.diff_style,
-    mouse: input?.mouse,
+    mouse: input?.mouse, // kilocode_change
     leader_timeout: input?.leaderTimeout,
     keybinds: {
       ...(input?.leader && { leader: input.leader }),
@@ -100,7 +100,7 @@ describe("run runtime boot", () => {
     spyOn(TuiConfig, "get").mockResolvedValue(
       config({
         leader: "ctrl+g",
-        mouse: true,
+        mouse: true, // kilocode_change
         bindings: {
           commandList: ["ctrl+p"],
           variantCycle: ["ctrl+t", "alt+t"],
@@ -118,7 +118,7 @@ describe("run runtime boot", () => {
 
     expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+g")
     expect(result.leader_timeout).toBe(2000)
-    expect(result.mouse).toBe(true)
+    expect(result.mouse).toBe(true) // kilocode_change
     expect(result.keybinds.get("command.palette.show")?.[0]?.key).toBe("ctrl+p")
     expect(result.keybinds.get("variant.cycle").map((item) => item.key)).toEqual(["ctrl+t", "alt+t"])
     expect(result.keybinds.get("session.interrupt")?.[0]?.key).toBe("ctrl+c")
@@ -137,7 +137,7 @@ describe("run runtime boot", () => {
     expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+x")
     expect(result.leader_timeout).toBe(2000)
     expect(result.diff_style).toBe("auto")
-    expect(result.mouse).toBe(process.platform !== "linux")
+    expect(result.mouse).toBe(process.platform !== "linux") // kilocode_change
     expect(result.keybinds.get("command.palette.show")?.[0]?.key).toBe("ctrl+p")
     expect(result.keybinds.get("variant.cycle")?.[0]?.key).toBe("ctrl+t")
     expect(result.keybinds.get("session.interrupt")?.[0]?.key).toBe("escape")
