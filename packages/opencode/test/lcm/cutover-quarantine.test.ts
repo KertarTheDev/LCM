@@ -138,6 +138,34 @@ describe("milestone 27 cutover quarantine", () => {
     expect(transport).not.toContain("requestLcmLegacyConversionReport")
   })
 
+  test("keeps every LCM source path on the ambient Core database service", async () => {
+    const files = await readSourceTree("packages/opencode/src/session/lcm")
+    const offenders = files.filter(({ text }) => /(?:@\/storage\/db|storage\/db)/.test(text)).map(({ file }) => file)
+
+    expect(offenders).toEqual([])
+    expect(files.find(({ file }) => file === "core-database.ts")?.text).toContain("CoreDatabase.Service")
+  })
+
+  test("persists a safe assistant failure when prompt-time LCM activation cannot open", async () => {
+    const prompt = await packageFile("src/session/prompt.ts")
+    const assistantPersisted = prompt.indexOf("yield* sessions.updateMessage(msg)")
+    const activation = prompt.indexOf("const activation = yield* lcmRuntime.getOrCreateConversation")
+    const failure = prompt.indexOf(
+      "completeLcmPromptFailure({ sessionID, message: handle.message, safeError: activation.safeError })",
+      activation,
+    )
+    const render = prompt.indexOf("const renderPreparation", activation)
+
+    expect(assistantPersisted).toBeGreaterThan(0)
+    expect(activation).toBeGreaterThan(assistantPersisted)
+    expect(failure).toBeGreaterThan(activation)
+    expect(render).toBeGreaterThan(failure)
+    expect(prompt.slice(activation, render)).toContain("Effect.catchDefect")
+    expect(prompt.slice(activation, render)).toContain('code: "db_unavailable"')
+    expect(prompt.slice(activation, render)).toContain('return "break" as const')
+    expect(prompt).toContain("MessageV2.fromLcmSafeError(input.safeError)")
+  })
+
   test("records milestone 27 ownership for the release scenario skeleton", async () => {
     const readme = await workspaceFile("specifications/fixtures/release-scenario/README.md")
     expect(readme).toContain("Owner: milestone 27")

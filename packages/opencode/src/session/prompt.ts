@@ -98,6 +98,7 @@ import {
   type LcmSafeError,
   type LcmThresholdDecision,
 } from "./lcm/types"
+import { parseLcmSafeError } from "./lcm/safe-error-schema"
 // kilocode_change end
 
 // @ts-ignore
@@ -1592,20 +1593,6 @@ export const layer = Layer.effect(
         yield* Effect.logInfo("loop", { "session.id": sessionID, step })
 
         // kilocode_change start - product V1 is construction-time LCM owned and fails closed
-        yield* lcmRuntime.getOrCreateConversation({ sessionID })
-        const lcmCapabilities = yield* lcmRuntime.getCapabilities({ sessionID })
-        if (lcmCapabilities.lifecycleState !== "lcm_active" && lcmCapabilities.lifecycleState !== "passive_synced") {
-          return yield* Effect.fail(
-            lcmCapabilities.safeError ??
-              createLcmSafeError({
-                code: "recovery_required",
-                templateKey: "lcm.recovery.required",
-                safeParams: { action: "diagnose" },
-                retryable: false,
-                diagnosticCode: `lcm_prompt_lifecycle_${lcmCapabilities.lifecycleState}`,
-              }),
-          )
-        }
         const useLcmManagedHistory = true as const
         let msgs = (yield* MessageV2.stream(sessionID).pipe(
           Effect.provideService(Database.Service, database),
@@ -1749,6 +1736,61 @@ export const layer = Layer.effect(
         const outcome: "break" | "continue" = yield* Effect.gen(function* () {
           // kilocode_change start - authoritative LCM adapter; upstream prompt behavior continues below for non-LCM runs
           if (useLcmManagedHistory) {
+            const activation = yield* lcmRuntime.getOrCreateConversation({ sessionID }).pipe(
+              Effect.flatMap(() => lcmRuntime.getCapabilities({ sessionID })),
+              Effect.map((capabilities) => ({ ok: true as const, capabilities })),
+              Effect.catch((error) =>
+                Effect.succeed({
+                  ok: false as const,
+                  safeError:
+                    parseLcmSafeError(error) ??
+                    createLcmSafeError({
+                      code: "db_unavailable",
+                      templateKey: "lcm.db.unavailable",
+                      safeParams: { retryable: true, action: "retry" },
+                      retryable: true,
+                      diagnosticCode: "lcm_prompt_activation_failed",
+                    }),
+                }),
+              ),
+              Effect.catchDefect((error) =>
+                Effect.succeed({
+                  ok: false as const,
+                  safeError:
+                    parseLcmSafeError(error) ??
+                    createLcmSafeError({
+                      code: "db_unavailable",
+                      templateKey: "lcm.db.unavailable",
+                      safeParams: { retryable: true, action: "retry" },
+                      retryable: true,
+                      diagnosticCode: "lcm_prompt_activation_defect",
+                    }),
+                }),
+              ),
+            )
+            if (!activation.ok) {
+              yield* completeLcmPromptFailure({ sessionID, message: handle.message, safeError: activation.safeError })
+              closeReasons.set(sessionID, "error")
+              return "break" as const
+            }
+            const lcmCapabilities = activation.capabilities
+            if (
+              lcmCapabilities.lifecycleState !== "lcm_active" &&
+              lcmCapabilities.lifecycleState !== "passive_synced"
+            ) {
+              const safeError =
+                lcmCapabilities.safeError ??
+                createLcmSafeError({
+                  code: "recovery_required",
+                  templateKey: "lcm.recovery.required",
+                  safeParams: { action: "diagnose" },
+                  retryable: false,
+                  diagnosticCode: `lcm_prompt_lifecycle_${lcmCapabilities.lifecycleState}`,
+                })
+              yield* completeLcmPromptFailure({ sessionID, message: handle.message, safeError })
+              closeReasons.set(sessionID, "error")
+              return "break" as const
+            }
             const renderClockMs = Date.now()
             const renderPreparation: LcmRawLeafRenderPreparationInput = {
               sessionID,

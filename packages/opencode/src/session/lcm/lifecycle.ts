@@ -4,10 +4,10 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { PGlite } from "@electric-sql/pglite"
 import { Effect } from "effect"
-import { eq } from "drizzle-orm"
-import { Database } from "@/storage/db"
+import { sql } from "drizzle-orm"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { MessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { useCoreDatabase } from "./core-database"
 import { createDbUnavailableError, safeErrorForDbStatus } from "./db-errors"
 import { LcmDb } from "./db"
 import { resolveLcmDbLayout } from "./db-layout"
@@ -221,26 +221,26 @@ function queryOne<T>(rows: T[]) {
 }
 
 function sessionMessageCount(sessionID: string) {
-  return Database.use((db) =>
-    db
-      .select()
-      .from(MessageTable)
-      .where(eq(MessageTable.session_id, sessionID as KiloSessionRow["id"]))
-      .all(),
-  ).length
+  return useCoreDatabase((db) =>
+    db.get<CountRow>(sql`SELECT count(*) AS count FROM message WHERE session_id = ${sessionID}`).pipe(
+      Effect.map((row) => countValue(row)),
+      Effect.mapError(() => createDbUnavailableError({ diagnosticCode: "lcm_lifecycle_message_count_failed" })),
+    ),
+  )
 }
 
-function initialLifecycleState(sessionID: string): LcmLifecycleState {
-  return sessionMessageCount(sessionID) <= 1 ? "lcm_active" : "passive_synced"
+function initialLifecycleState(sessionID: string) {
+  return sessionMessageCount(sessionID).pipe(
+    Effect.map((count): LcmLifecycleState => (count <= 1 ? "lcm_active" : "passive_synced")),
+  )
 }
 
 async function continueLegacyReadOnlyConversation(input: {
   readonly db: PGlite
   readonly row: ConversationRow
-  readonly sessionID: string
+  readonly lifecycleState: LcmLifecycleState
 }) {
   if (input.row.lifecycle_state !== "legacy_read_only") return input.row
-  const lifecycleState = initialLifecycleState(input.sessionID)
   const updatedAtMs = nowMs()
   await input.db.query(
     `
@@ -249,9 +249,9 @@ async function continueLegacyReadOnlyConversation(input: {
           updated_at_ms = $3
       WHERE conversation_id = $1
     `,
-    [input.row.conversation_id, lifecycleState, updatedAtMs],
+    [input.row.conversation_id, input.lifecycleState, updatedAtMs],
   )
-  input.row.lifecycle_state = lifecycleState
+  input.row.lifecycle_state = input.lifecycleState
   input.row.updated_at_ms = updatedAtMs
   return input.row
 }
@@ -540,28 +540,20 @@ export const ensureLcmDbReady = Effect.fn("LcmLifecycle.ensureLcmDbReady")(funct
 })
 
 function loadKiloSession(sessionID: string) {
-  return Effect.sync(() =>
-    Database.use((db) =>
-      db
-        .select()
-        .from(SessionTable)
-        .where(eq(SessionTable.id, sessionID as KiloSessionRow["id"]))
-        .get(),
-    ),
+  return useCoreDatabase((db) =>
+    db
+      .get<KiloSessionRow>(sql`SELECT * FROM session WHERE id = ${sessionID}`)
+      .pipe(Effect.mapError(() => createDbUnavailableError({ diagnosticCode: "lcm_kilo_session_lookup_failed" }))),
   ).pipe(
     Effect.flatMap((row) => (row ? Effect.succeed(row) : Effect.fail(createNotFound("lcm_kilo_session_not_found")))),
   )
 }
 
 function loadKiloProject(projectID: string) {
-  return Effect.sync(() =>
-    Database.use((db) =>
-      db
-        .select()
-        .from(ProjectTable)
-        .where(eq(ProjectTable.id, projectID as KiloProjectRow["id"]))
-        .get(),
-    ),
+  return useCoreDatabase((db) =>
+    db
+      .get<KiloProjectRow>(sql`SELECT * FROM project WHERE id = ${projectID}`)
+      .pipe(Effect.mapError(() => createDbUnavailableError({ diagnosticCode: "lcm_kilo_project_lookup_failed" }))),
   )
 }
 
@@ -801,6 +793,21 @@ export const getCapabilities: (input: {
       })
     }
 
+    const lifecycleState = yield* initialLifecycleState(input.sessionID).pipe(
+      Effect.match({
+        onFailure: (safeError) => ({ ok: false as const, safeError }),
+        onSuccess: (state) => ({ ok: true as const, state }),
+      }),
+    )
+    if (!lifecycleState.ok) {
+      return conversationCapabilities({
+        sessionID: input.sessionID,
+        strategy: input.strategy,
+        status,
+        safeError: lifecycleState.safeError,
+      })
+    }
+
     return yield* familyDb
       .executeForeground(
         operationRequest({
@@ -817,7 +824,7 @@ export const getCapabilities: (input: {
             try {
               requireBoundaryMetadata(row)
               requireCapabilityMetadata(row)
-              await continueLegacyReadOnlyConversation({ db, row, sessionID: input.sessionID })
+              await continueLegacyReadOnlyConversation({ db, row, lifecycleState: lifecycleState.state })
               const mapCapability =
                 row.capability_class === "map_child" ? await proveMapChildCapability({ db, row }) : undefined
               return conversationCapabilities({
@@ -862,6 +869,7 @@ export const getCapabilities: (input: {
 async function insertConversation(input: {
   readonly db: PGlite
   readonly session: KiloSessionRow
+  readonly initialLifecycleState: LcmLifecycleState
   readonly boundary: LcmBoundaryMetadataV1
   readonly parent?: ConversationRow
   readonly capabilityClass?: LcmConversationCapabilityClass
@@ -889,7 +897,7 @@ async function insertConversation(input: {
     const continued = await continueLegacyReadOnlyConversation({
       db: input.db,
       row: existing,
-      sessionID: input.session.id,
+      lifecycleState: input.initialLifecycleState,
     })
     return continued.conversation_id
   }
@@ -916,7 +924,6 @@ async function insertConversation(input: {
     return Boolean(rows[0]?.exists)
   })
   const now = nowMs()
-  const lifecycleState = initialLifecycleState(input.session.id)
   const orchestrationMetadata =
     input.orchestrationMetadata ??
     defaultOrchestrationMetadata({
@@ -979,7 +986,7 @@ async function insertConversation(input: {
       JSON.stringify(input.boundary),
       capabilityClass,
       JSON.stringify(orchestrationMetadata),
-      lifecycleState,
+      input.initialLifecycleState,
       getLcmProductionSchemaVersion(),
       now,
     ],
@@ -1002,6 +1009,7 @@ function getOrCreateConversationInternal(input: {
     const lcmDb = LcmDb.scoped(lcmDbRoot, ready.target)
     const session = yield* loadKiloSession(input.sessionID)
     const project = yield* loadKiloProject(session.project_id)
+    const lifecycleState = yield* initialLifecycleState(input.sessionID)
     const trustedParentSessionID = input.parentSessionID ?? session.parent_id ?? undefined
 
     if (input.parentSessionID && session.parent_id && input.parentSessionID !== session.parent_id) {
@@ -1058,6 +1066,7 @@ function getOrCreateConversationInternal(input: {
               ...session,
               parent_id: (trustedParentSessionID ?? null) as KiloSessionRow["parent_id"],
             },
+            initialLifecycleState: lifecycleState,
             boundary,
             parent: parentConversation,
             capabilityClass: input.capabilityClass,
@@ -1335,13 +1344,14 @@ export const getConversationScope = Effect.fn("LcmLifecycle.getConversationScope
   const ready = yield* ensureLcmDbReady(input)
   const lcmDbRoot = yield* LcmDb.Service
   const lcmDb = LcmDb.scoped(lcmDbRoot, ready.target)
+  const lifecycleState = yield* initialLifecycleState(input.sessionID)
   return yield* lcmDb.executeForeground(
     operationRequest({
       purpose: "debug_support",
       run: async (db) => {
         const row = await findConversationBySession(db, input.sessionID)
         if (!row) throw createNotFound("lcm_scope_conversation_not_found")
-        await continueLegacyReadOnlyConversation({ db, row, sessionID: input.sessionID })
+        await continueLegacyReadOnlyConversation({ db, row, lifecycleState })
         const boundary = requireBoundaryMetadata(row)
         requireCapabilityMetadata(row)
         if (!isCompleteBoundaryMetadataV1(boundary)) throw createInvalidRequest("lcm_scope_boundary_incomplete")

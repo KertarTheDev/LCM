@@ -4,8 +4,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { PGlite } from "@electric-sql/pglite"
 import { Effect, Schema } from "effect"
-import { eq, inArray } from "drizzle-orm"
-import { Database } from "@/storage/db"
+import { sql } from "drizzle-orm"
 import { MessageTable, PartTable } from "@opencode-ai/core/session/sql"
 import { MessageV2 } from "../message-v2"
 import { TRUNCATION_DIR, TRUNCATION_OUTPUT_METADATA_VERSION } from "@/tool/truncation-dir"
@@ -19,6 +18,7 @@ import {
 import { RUNTIME_DEFAULTS } from "./config"
 import { LcmDb } from "./db"
 import { resolveLcmDbLayout } from "./db-layout"
+import { useCoreDatabase } from "./core-database"
 import { createDbRequestCanceledError, isLcmSafeError } from "./db-errors"
 import { allocateStableLcmID, createOperationID } from "./id"
 import { appendRawMessageContextItems } from "./context"
@@ -1009,93 +1009,99 @@ function loadKiloMessages(input: {
   abortSignal?: AbortSignal
   operationID?: OperationID
 }) {
-  return Effect.try({
-    try: () =>
-      Database.use((db) => {
-        throwIfSyncAborted({
-          abortSignal: input.abortSignal,
-          operationID: input.operationID,
-          diagnosticCode: "lcm_sync_canceled_before_source_load",
-        })
-        const messageRows = db
-          .select()
-          .from(MessageTable)
-          .where(eq(MessageTable.session_id, input.sessionID as KiloMessageRow["session_id"]))
-          .orderBy(MessageTable.time_created, MessageTable.id)
-          .all()
-
-        const upToIndex =
-          input.upToMessageID === undefined
-            ? messageRows.length - 1
-            : messageRows.findIndex((row) => row.id === input.upToMessageID)
-        if (input.upToMessageID !== undefined && upToIndex === -1) {
-          throw invalidRequest("lcm_sync_upto_message_not_found")
-        }
-        const selectedRows = upToIndex < 0 ? [] : messageRows.slice(0, upToIndex + 1)
-        const ids = selectedRows.map((row) => row.id)
-        const partRows =
-          ids.length === 0
-            ? []
-            : db
-                .select()
-                .from(PartTable)
-                .where(inArray(PartTable.message_id, ids as KiloPartRow["message_id"][]))
-                .orderBy(PartTable.message_id, PartTable.id)
-                .all()
-
-        const partsByMessage = new Map<string, KiloPartRow[]>()
-        for (const row of partRows) {
+  return useCoreDatabase((db) =>
+    Effect.gen(function* () {
+      yield* Effect.try({
+        try: () =>
           throwIfSyncAborted({
             abortSignal: input.abortSignal,
             operationID: input.operationID,
-            diagnosticCode: "lcm_sync_canceled_while_grouping_parts",
-          })
-          const list = partsByMessage.get(row.message_id)
-          if (list) list.push(row)
-          else partsByMessage.set(row.message_id, [row])
-        }
+            diagnosticCode: "lcm_sync_canceled_before_source_load",
+          }),
+        catch: coerceSyncError,
+      })
+      const messageRows = yield* db
+        .all<KiloMessageRow>(sql`SELECT * FROM message WHERE session_id = ${input.sessionID} ORDER BY time_created, id`)
+        .pipe(Effect.mapError(coerceSyncError))
 
-        return selectedRows.map((row, index): LoadedKiloMessage => {
-          throwIfSyncAborted({
-            abortSignal: input.abortSignal,
-            operationID: input.operationID,
-            diagnosticCode: "lcm_sync_canceled_while_loading_source_messages",
-          })
-          const info = decodeOrThrow<MessageV2.Info>(
-            MessageV2.Info,
-            {
-              ...(jsonValue(row.data) as object),
-              id: row.id,
-              sessionID: row.session_id,
-            },
-            "lcm_sync_invalid_message_v2_info",
-          )
+      const upToIndex =
+        input.upToMessageID === undefined
+          ? messageRows.length - 1
+          : messageRows.findIndex((row) => row.id === input.upToMessageID)
+      if (input.upToMessageID !== undefined && upToIndex === -1) {
+        return yield* Effect.fail(invalidRequest("lcm_sync_upto_message_not_found"))
+      }
+      const selectedRows = upToIndex < 0 ? [] : messageRows.slice(0, upToIndex + 1)
+      const ids = selectedRows.map((row) => row.id)
+      const partRows =
+        ids.length === 0
+          ? []
+          : yield* db
+              .all<KiloPartRow>(
+                sql`SELECT * FROM part WHERE message_id IN (${sql.join(
+                  ids.map((id) => sql`${id}`),
+                  sql`, `,
+                )}) ORDER BY message_id, id`,
+              )
+              .pipe(Effect.mapError(coerceSyncError))
 
-          return {
-            row,
-            info,
-            messageOrder: index + 1,
-            parts: (partsByMessage.get(row.id) ?? []).map((partRow, partIndex) => {
-              return {
-                row: partRow,
-                part: decodeOrThrow<MessageV2.Part>(
-                  MessageV2.Part,
-                  {
-                    ...(jsonValue(partRow.data) as object),
-                    id: partRow.id,
-                    sessionID: partRow.session_id,
-                    messageID: partRow.message_id,
-                  },
-                  "lcm_sync_invalid_message_v2_part",
-                ),
-                partOrder: partIndex + 1,
-              }
-            }),
+      return yield* Effect.try({
+        try: () => {
+          const partsByMessage = new Map<string, KiloPartRow[]>()
+          for (const row of partRows) {
+            throwIfSyncAborted({
+              abortSignal: input.abortSignal,
+              operationID: input.operationID,
+              diagnosticCode: "lcm_sync_canceled_while_grouping_parts",
+            })
+            const list = partsByMessage.get(row.message_id)
+            if (list) list.push(row)
+            else partsByMessage.set(row.message_id, [row])
           }
-        })
-      }),
-    catch: coerceSyncError,
-  })
+
+          return selectedRows.map((row, index): LoadedKiloMessage => {
+            throwIfSyncAborted({
+              abortSignal: input.abortSignal,
+              operationID: input.operationID,
+              diagnosticCode: "lcm_sync_canceled_while_loading_source_messages",
+            })
+            const info = decodeOrThrow<MessageV2.Info>(
+              MessageV2.Info,
+              {
+                ...(jsonValue(row.data) as object),
+                id: row.id,
+                sessionID: row.session_id,
+              },
+              "lcm_sync_invalid_message_v2_info",
+            )
+
+            return {
+              row,
+              info,
+              messageOrder: index + 1,
+              parts: (partsByMessage.get(row.id) ?? []).map((partRow, partIndex) => {
+                return {
+                  row: partRow,
+                  part: decodeOrThrow<MessageV2.Part>(
+                    MessageV2.Part,
+                    {
+                      ...(jsonValue(partRow.data) as object),
+                      id: partRow.id,
+                      sessionID: partRow.session_id,
+                      messageID: partRow.message_id,
+                    },
+                    "lcm_sync_invalid_message_v2_part",
+                  ),
+                  partOrder: partIndex + 1,
+                }
+              }),
+            }
+          })
+        },
+        catch: coerceSyncError,
+      })
+    }),
+  )
 }
 
 async function allocateMessageRowID(db: Queryable) {

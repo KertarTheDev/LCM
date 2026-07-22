@@ -547,10 +547,11 @@ export const layer = Layer.effect(
       projectID?: string
       workspaceID?: string
     }) {
-      const scope = yield* Effect.try({
-        try: () => resolveLcmSettingsScope(input),
-        catch: (error) => (isLcmSafeError(error) ? error : invalidRequest("lcm_settings_scope_resolution_failed")),
-      })
+      const scope = yield* resolveLcmSettingsScope(input).pipe(
+        Effect.mapError((error) =>
+          isLcmSafeError(error) ? error : invalidRequest("lcm_settings_scope_resolution_failed"),
+        ),
+      )
       const state = yield* readSettings({
         scope,
       })
@@ -943,10 +944,11 @@ export const layer = Layer.effect(
       projectID?: string
       workspaceID?: string
     }) {
-      const scope = yield* Effect.try({
-        try: () => resolveLcmSettingsScope(input),
-        catch: (error) => (isLcmSafeError(error) ? error : invalidRequest("lcm_settings_scope_resolution_failed")),
-      })
+      const scope = yield* resolveLcmSettingsScope(input).pipe(
+        Effect.mapError((error) =>
+          isLcmSafeError(error) ? error : invalidRequest("lcm_settings_scope_resolution_failed"),
+        ),
+      )
       return yield* readSettingsWithRuntimeState(scope)
     })
 
@@ -955,10 +957,11 @@ export const layer = Layer.effect(
         try: () => validateLcmSettingsUpdate(input),
         catch: (error) => (isLcmSafeError(error) ? error : invalidRequest("lcm_settings_validation_failed")),
       })
-      const scope = yield* Effect.try({
-        try: () => resolveLcmSettingsScope(input),
-        catch: (error) => (isLcmSafeError(error) ? error : invalidRequest("lcm_settings_scope_resolution_failed")),
-      })
+      const scope = yield* resolveLcmSettingsScope(input).pipe(
+        Effect.mapError((error) =>
+          isLcmSafeError(error) ? error : invalidRequest("lcm_settings_scope_resolution_failed"),
+        ),
+      )
 
       if (input.strategy === undefined && input.storageWarningThresholdBytes === undefined) {
         return yield* readSettingsWithRuntimeState(scope)
