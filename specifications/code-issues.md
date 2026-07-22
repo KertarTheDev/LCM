@@ -12,7 +12,7 @@ This file records current engineering or evidence gaps for the v7.4.13 integrati
 - Final persisted SWE-pruned ToolParts are canonical LCM source. A validated truncation sidecar is recovery/provenance evidence and cannot silently replace the persisted result.
 - Upstream V1 compaction remains only as explicitly named compatibility/test construction. Product default layers and graph nodes are fail-closed LCM guards; summarize, remote compact, old markers, LCM failures, and overflow cannot select it.
 - Public LCM settings remain limited to strategy and storage warning threshold.
-- Product family resolution now reads authoritative Core Kilo session/project lineage and reports stage-specific lookup/boundary/root diagnostics instead of collapsing old-session failures into `lcm_family_resolution_failed`.
+- Product family resolution now reads authoritative Core Kilo session/project lineage and reports stage-specific lookup/boundary/root diagnostics instead of collapsing old-session failures into `lcm_family_resolution_failed`. The resolver consumes the ambient app/default-layer Core service when present and scopes a Core default layer only for isolated embedders, avoiding both an undeclared Effect requirement and a second module-owned database runtime.
 - The final provider request now enforces the output reserve admitted by LCM, closing the path where a long session could grow from roughly 75K input toward a 131K context ceiling through a recomputed output allowance.
 - CLI, TUI, and VSCode now expose hard/raw/backlog plus bounded paid-token LCM activity; VSCode restores prompt export and debug backend logging and merges paid LCM requests into the task timeline.
 
