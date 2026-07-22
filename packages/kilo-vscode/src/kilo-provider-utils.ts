@@ -457,6 +457,11 @@ export type WebviewMessage =
       reason?: string
       version: number
     }
+  | {
+      type: "lcmEvent"
+      sessionID?: string
+      event: Extract<Event, { type: `lcm.${string}` }>["properties"]
+    }
   | null
 
 type PartEvent =
@@ -496,6 +501,7 @@ function mapPartEvent(event: PartEvent, sessionID: string | undefined): WebviewM
 function statusExtra(info: Extract<Event, { type: "session.status" }>["properties"]["status"]) {
   if (info.type === "retry") return { attempt: info.attempt, message: info.message, next: info.next }
   if (info.type === "offline") return { message: info.message }
+  if (info.type === "busy" && info.message) return { message: info.message }
   return {}
 }
 
@@ -537,6 +543,18 @@ export function mapSSEEventToWebviewMessage(event: StreamEvent, sessionID: strin
   }
   if (event.type === "message.part.delta") return mapPartEvent(event, sessionID)
   switch (event.type) {
+    case "lcm.db.status":
+    case "lcm.context.updated":
+    case "lcm.metrics.updated":
+    case "lcm.file.status":
+    case "lcm.maintenance.started":
+    case "lcm.maintenance.ended":
+    case "lcm.maintenance.failed":
+      return {
+        type: "lcmEvent" as const,
+        sessionID: event.properties.sessionID ?? sessionID,
+        event: event.properties,
+      }
     case "session.status": {
       const info = event.properties.status
       const status = info.type

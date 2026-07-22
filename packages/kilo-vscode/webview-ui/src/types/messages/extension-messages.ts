@@ -1,4 +1,4 @@
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@kilocode/sdk/v2/client"
+import type { Event, ProviderAuthAuthorization, ProviderAuthMethod } from "@kilocode/sdk/v2/client"
 import type {
   LcmActivityPage,
   LcmDbDiagnoseReport,
@@ -157,6 +157,14 @@ export type LcmSupportResultMessage =
       ok: false
       error: LcmSafeError
     }
+
+export type LcmEventEnvelope = Extract<Event, { type: `lcm.${string}` }>["properties"]
+
+export interface LcmEventMessage {
+  type: "lcmEvent"
+  sessionID?: string
+  event: LcmEventEnvelope
+}
 
 export interface SendMessageFailedMessage {
   type: "sendMessageFailed"
@@ -1324,5 +1332,6 @@ export type ExtensionMessage =
   | MemoryLoadedMessage
   | MemoryEventMessage
   | MemoryOperationResultMessage
+  | LcmEventMessage
   | LcmSettingsResultMessage
   | LcmSupportResultMessage
