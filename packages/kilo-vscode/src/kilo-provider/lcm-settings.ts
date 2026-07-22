@@ -2,6 +2,13 @@ import type { KiloClient, LcmSafeError, Session } from "@kilocode/sdk/v2/client"
 
 export type LcmSettingsWebviewRequest =
   | { type: "requestLcmSettings"; requestID: string; sessionID?: string }
+  | { type: "requestLcmStatus"; requestID: string; sessionID?: string }
+  | { type: "requestLcmActivity"; requestID: string; sessionID?: string; limit?: number }
+  | { type: "cancelLcmMaintenance"; requestID: string; sessionID?: string }
+  | { type: "diagnoseLcmDb"; requestID: string; sessionID?: string }
+  | { type: "recoverLcmDbLock"; requestID: string; sessionID?: string; dryRun?: boolean; force?: boolean }
+  | { type: "rebuildLcmDb"; requestID: string; sessionID?: string; dryRun?: boolean }
+  | { type: "exportLcmPrompts"; requestID: string; sessionID?: string }
   | {
       type: "updateLcmSettings"
       requestID: string
@@ -9,6 +16,9 @@ export type LcmSettingsWebviewRequest =
       strategy?: "upward" | "dolt"
       storageWarningThresholdBytes?: number
     }
+
+type LcmSupportWebviewRequest = Exclude<LcmSettingsWebviewRequest, { type: "requestLcmSettings" | "updateLcmSettings" }>
+type LcmTransportResult = { data?: unknown; error?: unknown }
 
 type Context = {
   client?: KiloClient
@@ -20,7 +30,17 @@ type Context = {
 }
 
 export function isLcmSettingsWebviewRequest(message: { type?: unknown }): message is LcmSettingsWebviewRequest {
-  return message.type === "requestLcmSettings" || message.type === "updateLcmSettings"
+  return (
+    message.type === "requestLcmSettings" ||
+    message.type === "updateLcmSettings" ||
+    message.type === "requestLcmStatus" ||
+    message.type === "requestLcmActivity" ||
+    message.type === "cancelLcmMaintenance" ||
+    message.type === "diagnoseLcmDb" ||
+    message.type === "recoverLcmDbLock" ||
+    message.type === "rebuildLcmDb" ||
+    message.type === "exportLcmPrompts"
+  )
 }
 
 function safeError(value: unknown): LcmSafeError | undefined {
@@ -51,6 +71,66 @@ function fallbackError(diagnosticCode: string): LcmSafeError {
   }
 }
 
+function isLcmSupportWebviewRequest(message: LcmSettingsWebviewRequest): message is LcmSupportWebviewRequest {
+  return message.type !== "requestLcmSettings" && message.type !== "updateLcmSettings"
+}
+
+async function requestLcmSupport(input: {
+  message: LcmSupportWebviewRequest
+  client: KiloClient
+  sessionID: string
+  transport: { directory: string; workspace?: string }
+}): Promise<LcmTransportResult> {
+  const { message, client, sessionID, transport } = input
+  switch (message.type) {
+    case "requestLcmStatus":
+      return client.session.lcm.status({ sessionID, ...transport })
+    case "requestLcmActivity":
+      return client.session.lcm.activity({ sessionID, ...transport, limit: String(message.limit ?? 100) })
+    case "cancelLcmMaintenance":
+      return client.session.lcm.maintenance.cancel({
+        sessionID,
+        ...transport,
+        lcmCancelMaintenanceInput: { reason: "user" },
+      })
+    case "diagnoseLcmDb":
+      return client.session.lcm.db.diagnose({ sessionID, ...transport })
+    case "recoverLcmDbLock":
+      return client.session.lcm.db.recoverLock({
+        sessionID,
+        ...transport,
+        lcmDbRecoverLockInput: { dryRun: message.dryRun ?? true, force: message.force ?? false },
+      })
+    case "rebuildLcmDb":
+      return client.session.lcm.db.rebuild({
+        sessionID,
+        ...transport,
+        lcmDbRebuildInput: { dryRun: message.dryRun ?? true },
+      })
+    case "exportLcmPrompts":
+      return client.session.lcm.prompts.export({ sessionID, ...transport })
+  }
+}
+
+async function requestLcmSettings(input: {
+  message: Exclude<LcmSettingsWebviewRequest, LcmSupportWebviewRequest>
+  client: KiloClient
+  sessionID?: string
+  transport: { directory: string; workspace?: string }
+}): Promise<LcmTransportResult> {
+  const { message, client, sessionID, transport } = input
+  if (message.type === "requestLcmSettings") {
+    return sessionID ? client.session.lcm.settings.get({ sessionID, ...transport }) : client.lcm.settings.get(transport)
+  }
+  const lcmUpdateSettingsInput = {
+    strategy: message.strategy,
+    storageWarningThresholdBytes: message.storageWarningThresholdBytes,
+  }
+  return sessionID
+    ? client.session.lcm.settings.update({ sessionID, ...transport, lcmUpdateSettingsInput })
+    : client.lcm.settings.update({ ...transport, lcmUpdateSettingsInput })
+}
+
 export async function handleLcmSettingsWebviewRequest(message: LcmSettingsWebviewRequest, ctx: Context) {
   const resultType = `${message.type}.result`
   if (!ctx.client || !ctx.connected) {
@@ -70,27 +150,21 @@ export async function handleLcmSettingsWebviewRequest(message: LcmSettingsWebvie
   const transport = { directory, ...(workspace ? { workspace } : {}) }
 
   try {
-    const result =
-      message.type === "requestLcmSettings"
-        ? sessionID
-          ? await ctx.client.session.lcm.settings.get({ sessionID, ...transport })
-          : await ctx.client.lcm.settings.get(transport)
-        : sessionID
-          ? await ctx.client.session.lcm.settings.update({
-              sessionID,
-              ...transport,
-              lcmUpdateSettingsInput: {
-                strategy: message.strategy,
-                storageWarningThresholdBytes: message.storageWarningThresholdBytes,
-              },
-            })
-          : await ctx.client.lcm.settings.update({
-              ...transport,
-              lcmUpdateSettingsInput: {
-                strategy: message.strategy,
-                storageWarningThresholdBytes: message.storageWarningThresholdBytes,
-              },
-            })
+    const supportRequest = isLcmSupportWebviewRequest(message)
+    if (supportRequest) {
+      if (!sessionID) {
+        ctx.post({
+          type: resultType,
+          requestID: message.requestID,
+          ok: false,
+          error: fallbackError("lcm_ui_session_required"),
+        })
+        return
+      }
+    }
+    const result = supportRequest
+      ? await requestLcmSupport({ message, client: ctx.client, sessionID: sessionID!, transport })
+      : await requestLcmSettings({ message, client: ctx.client, sessionID, transport })
     if (result.error || !result.data) {
       ctx.post({
         type: resultType,
@@ -100,7 +174,14 @@ export async function handleLcmSettingsWebviewRequest(message: LcmSettingsWebvie
       })
       return
     }
-    ctx.post({ type: resultType, requestID: message.requestID, ok: true, state: result.data })
+    ctx.post({
+      type: resultType,
+      requestID: message.requestID,
+      ok: true,
+      ...(message.type === "requestLcmSettings" || message.type === "updateLcmSettings"
+        ? { state: result.data }
+        : { body: result.data }),
+    })
   } catch (error) {
     ctx.post({
       type: resultType,

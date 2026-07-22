@@ -6,6 +6,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { eq } from "drizzle-orm"
 import { Database } from "../../src/storage/db"
+import { Database as CoreDatabase } from "@opencode-ai/core/database/database"
 import { WorkspaceID } from "../../src/session/lcm/provider-ids"
 import * as Instance from "../../src/kilocode/instance"
 import * as SessionModule from "../../src/session/session"
@@ -26,6 +27,7 @@ import {
   resolveDebugFamilyTarget,
   resolveDirectTestFamilyTarget,
   resolveSessionFamilyTarget,
+  resolveSessionFamilyTargetEffect,
   type LcmFamilyTarget,
 } from "../../src/session/lcm/family"
 import { LCM_PGLITE_GATE_TEST_SCALE } from "../../src/session/lcm/pglite-gate"
@@ -179,6 +181,13 @@ test("trusted session family resolution follows root lineage and rejects untrust
         }),
       ),
     )
+    const effectResolved = await Effect.runPromise(
+      resolveSessionFamilyTargetEffect({ sessionID: sessions.grandchild.id }).pipe(
+        Effect.provide(CoreDatabase.defaultLayer),
+      ),
+    )
+    expect(effectResolved.target.familyID).toBe(resolved.target.familyID)
+    expect(effectResolved.rootSession.id).toBe(sessions.root.id)
 
     await expect(resolveSessionFamilyTarget({ sessionID: sessions.missingParent.id })).rejects.toMatchObject({
       code: "not_found",

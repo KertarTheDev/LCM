@@ -29,7 +29,7 @@ export type Event =
   | EventLspClientDiagnostics
   | EventLcmDbStatus1
   | EventLcmContextUpdated1
-  | EventLcmMetricsUpdated1
+  | EventLcmMetricsUpdated
   | EventLcmFileStatus1
   | EventLcmMaintenanceStarted1
   | EventLcmMaintenanceEnded1
@@ -352,6 +352,86 @@ export type NotebookExecuteRequest = {
 }
 
 export type NotebookRequest = NotebookReadRequest | NotebookEditRequest | NotebookExecuteRequest
+
+export type LcmMetricsSnapshot = {
+  conversationID: string
+  lifecycleState:
+    | "passive_synced"
+    | "lcm_active"
+    | "legacy_read_only"
+    | "recovery_required"
+    | "recovery_failed"
+    | "db_unavailable"
+  strategy: "upward" | "dolt"
+  activeTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  hardLimit: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  softThreshold: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  freshTailTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  softBacklogTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  softBacklogItemCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  freshTailRawTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  freshTailRawItemCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  unconsumedRawTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  unconsumedRawItemCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  protectedTailRawTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  protectedTailRawItemCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  rawLaneTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  hardFillRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  budgetStatus?: "budgeted" | "unavailable" | "provider_limit_fallback"
+  softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
+  laneLatchDiagnostics?: Array<{
+    [key: string]: unknown
+  }>
+  providerContextLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  providerInputLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  providerOutputLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  outputReserve?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  systemPromptTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  toolSchemaTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  providerCapacityDeferred?: boolean
+  providerEndpointKeyHash?: string
+  tokenCounterMode: "provider" | "deterministic_fallback" | "fake"
+  tokenCounterVersion: string
+  laneTokens: {
+    [key: string]: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  contextItemCounts: {
+    [key: string]: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  deferredSoftMaintenanceQueued: boolean
+  deferredSoftMaintenanceQueuedCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  deferredSoftMaintenanceAttemptCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  deferredSoftMaintenanceNextRunAtMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  storageBytes: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  storageWarningThresholdBytes: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  storageWarning: boolean
+  memoryMaintenanceCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  retrievalCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  fileExplorationCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  mapCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  currency?: string
+  lastMaintenance?: {
+    operationID: string
+    status:
+      | "healthy"
+      | "scheduled"
+      | "completed"
+      | "no_op"
+      | "deferred"
+      | "skipped"
+      | "failed"
+      | "canceled"
+      | "recovery_required"
+    reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
+    blocking: boolean
+    beforeTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    afterTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  updatedAt: string
+}
 
 export type IndexingStatusState = "Disabled" | "In Progress" | "Complete" | "Error" | "Standby"
 
@@ -2909,6 +2989,106 @@ export type LcmCapabilities = {
   safeError?: LcmSafeError
 }
 
+export type LcmActivityItem = {
+  usageRecordID: string
+  sessionID: string
+  conversationID: string
+  jobID?: string
+  purpose:
+    | "leaf_summary"
+    | "condensation"
+    | "hard_limit_maintenance"
+    | "retrieval_expand_query"
+    | "file_exploration"
+    | "llm_map"
+  mode: "background" | "blocking" | "explicit_retrieval" | "explicit_exploration" | "map_item"
+  providerID?: string
+  modelID?: string
+  inputTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  outputTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  cacheReadTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  cacheWriteTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  totalTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  summaryTargetTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  summaryGenerationMaxOutputTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  maintenanceInputBudget?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  summarySourceTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  candidateSummaryTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  acceptedSummaryTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  summaryObjectiveStatus?:
+    | "provider_accepted"
+    | "rejected_empty"
+    | "rejected_not_smaller"
+    | "rejected_too_large"
+    | "rejected_tiny"
+    | "rejected_source_echo"
+    | "rejected_prompt_wrapper"
+    | "rejected_refusal"
+    | "rejected_anchorless"
+    | "retry_pending"
+    | "fallback_accepted"
+  summaryFallbackMode?: "none" | "truncated_prefix" | "extractive_key_points"
+  summaryReasoningPolicy?:
+    | "provider_default"
+    | "no_reasoning"
+    | "minimal_reasoning"
+    | "bounded_reasoning"
+    | "not_supported"
+  summaryRetryAttempt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  maintenanceStatus?:
+    | "scheduled"
+    | "completed"
+    | "no_op"
+    | "deferred"
+    | "skipped"
+    | "failed"
+    | "canceled"
+    | "recovery_required"
+  maintenanceSafeCode?:
+    | "db_unavailable"
+    | "db_locked"
+    | "db_migration_failed"
+    | "db_corrupt"
+    | "settings_unavailable"
+    | "not_found"
+    | "unauthorized"
+    | "invalid_request"
+    | "over_limit"
+    | "timeout"
+    | "canceled"
+    | "recovery_required"
+    | "recovery_failed"
+    | "missing_source"
+    | "stale_source"
+    | "permission_denied"
+    | "provider_unavailable"
+    | "hard_limit_unresolved"
+    | "legacy_read_only"
+    | "provider_capacity_deferred"
+  maintenanceDiagnosticCode?: string
+  maintenanceSafeMessage?: string
+  costAmount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  costCurrency?: string
+  costStatus: "provider_reported" | "unknown" | "not_applicable"
+  createdAt: string
+}
+
+export type LcmActivityPage = {
+  conversationID: string
+  items: Array<LcmActivityItem>
+  summary: {
+    requestCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    inputTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    outputTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    cacheReadTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    cacheWriteTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    totalTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    costAmount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    costCurrency?: string
+    costStatus: "provider_reported" | "mixed" | "unknown" | "not_applicable"
+  }
+}
+
 export type LcmCancelMaintenanceInput = {
   reason?: "user"
 }
@@ -4471,6 +4651,86 @@ export type InteractiveTerminalInfo1 = {
   }
 }
 
+export type LcmMetricsSnapshot2 = {
+  conversationID: string
+  lifecycleState:
+    | "passive_synced"
+    | "lcm_active"
+    | "legacy_read_only"
+    | "recovery_required"
+    | "recovery_failed"
+    | "db_unavailable"
+  strategy: "upward" | "dolt"
+  activeTokens: number | "NaN" | "Infinity" | "-Infinity"
+  hardLimit: number | "NaN" | "Infinity" | "-Infinity"
+  softThreshold: number | "NaN" | "Infinity" | "-Infinity"
+  freshTailTokens: number | "NaN" | "Infinity" | "-Infinity"
+  softBacklogTokens: number | "NaN" | "Infinity" | "-Infinity"
+  softBacklogItemCount: number | "NaN" | "Infinity" | "-Infinity"
+  freshTailRawTokens: number | "NaN" | "Infinity" | "-Infinity"
+  freshTailRawItemCount: number | "NaN" | "Infinity" | "-Infinity"
+  unconsumedRawTokens: number | "NaN" | "Infinity" | "-Infinity"
+  unconsumedRawItemCount: number | "NaN" | "Infinity" | "-Infinity"
+  protectedTailRawTokens: number | "NaN" | "Infinity" | "-Infinity"
+  protectedTailRawItemCount: number | "NaN" | "Infinity" | "-Infinity"
+  rawLaneTokens: number | "NaN" | "Infinity" | "-Infinity"
+  hardFillRatio?: number | "NaN" | "Infinity" | "-Infinity"
+  rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity"
+  softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity"
+  softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity"
+  budgetStatus?: "budgeted" | "unavailable" | "provider_limit_fallback"
+  softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
+  laneLatchDiagnostics?: Array<{
+    [key: string]: unknown
+  }>
+  providerContextLimit?: number | "NaN" | "Infinity" | "-Infinity"
+  providerInputLimit?: number | "NaN" | "Infinity" | "-Infinity"
+  providerOutputLimit?: number | "NaN" | "Infinity" | "-Infinity"
+  outputReserve?: number | "NaN" | "Infinity" | "-Infinity"
+  systemPromptTokens?: number | "NaN" | "Infinity" | "-Infinity"
+  toolSchemaTokens?: number | "NaN" | "Infinity" | "-Infinity"
+  providerCapacityDeferred?: boolean
+  providerEndpointKeyHash?: string
+  tokenCounterMode: "provider" | "deterministic_fallback" | "fake"
+  tokenCounterVersion: string
+  laneTokens: {
+    [key: string]: number | "NaN" | "Infinity" | "-Infinity"
+  }
+  contextItemCounts: {
+    [key: string]: number | "NaN" | "Infinity" | "-Infinity"
+  }
+  deferredSoftMaintenanceQueued: boolean
+  deferredSoftMaintenanceQueuedCount: number | "NaN" | "Infinity" | "-Infinity"
+  deferredSoftMaintenanceAttemptCount?: number | "NaN" | "Infinity" | "-Infinity"
+  deferredSoftMaintenanceNextRunAtMs?: number | "NaN" | "Infinity" | "-Infinity"
+  storageBytes: number | "NaN" | "Infinity" | "-Infinity"
+  storageWarningThresholdBytes: number | "NaN" | "Infinity" | "-Infinity"
+  storageWarning: boolean
+  memoryMaintenanceCostTotal?: number | "NaN" | "Infinity" | "-Infinity"
+  retrievalCostTotal?: number | "NaN" | "Infinity" | "-Infinity"
+  fileExplorationCostTotal?: number | "NaN" | "Infinity" | "-Infinity"
+  mapCostTotal?: number | "NaN" | "Infinity" | "-Infinity"
+  currency?: string
+  lastMaintenance?: {
+    operationID: string
+    status:
+      | "healthy"
+      | "scheduled"
+      | "completed"
+      | "no_op"
+      | "deferred"
+      | "skipped"
+      | "failed"
+      | "canceled"
+      | "recovery_required"
+    reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
+    blocking: boolean
+    beforeTokens?: number | "NaN" | "Infinity" | "-Infinity"
+    afterTokens?: number | "NaN" | "Infinity" | "-Infinity"
+  }
+  updatedAt: string
+}
+
 export type LcmMemoryError1 = {
   name: "LcmMemoryError"
   data: {
@@ -4846,85 +5106,7 @@ export type EventLcmMetricsUpdated = {
     conversationID?: string
     operationID?: string
     timestamp: string
-    payload: {
-      conversationID: string
-      lifecycleState:
-        | "passive_synced"
-        | "lcm_active"
-        | "legacy_read_only"
-        | "recovery_required"
-        | "recovery_failed"
-        | "db_unavailable"
-      strategy: "upward" | "dolt"
-      activeTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      hardLimit: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      softThreshold: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      freshTailTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      softBacklogTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      softBacklogItemCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      freshTailRawTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      freshTailRawItemCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      unconsumedRawTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      unconsumedRawItemCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      protectedTailRawTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      protectedTailRawItemCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      rawLaneTokens: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      hardFillRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      budgetStatus?: "budgeted" | "unavailable" | "provider_limit_fallback"
-      softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
-      laneLatchDiagnostics?: Array<{
-        [key: string]: unknown
-      }>
-      providerContextLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      providerInputLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      providerOutputLimit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      outputReserve?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      systemPromptTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      toolSchemaTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      providerCapacityDeferred?: boolean
-      providerEndpointKeyHash?: string
-      tokenCounterMode: "provider" | "deterministic_fallback" | "fake"
-      tokenCounterVersion: string
-      laneTokens: {
-        [key: string]: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      }
-      contextItemCounts: {
-        [key: string]: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      }
-      deferredSoftMaintenanceQueued: boolean
-      deferredSoftMaintenanceQueuedCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      deferredSoftMaintenanceAttemptCount?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      deferredSoftMaintenanceNextRunAtMs?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      storageBytes: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      storageWarningThresholdBytes: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      storageWarning: boolean
-      memoryMaintenanceCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      retrievalCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      fileExplorationCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      mapCostTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      currency?: string
-      lastMaintenance?: {
-        operationID: string
-        status:
-          | "healthy"
-          | "scheduled"
-          | "completed"
-          | "no_op"
-          | "deferred"
-          | "skipped"
-          | "failed"
-          | "canceled"
-          | "recovery_required"
-        reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
-        blocking: boolean
-        beforeTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        afterTokens?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      }
-      updatedAt: string
-    }
+    payload: LcmMetricsSnapshot
   }
 }
 
@@ -8029,97 +8211,6 @@ export type EventLcmContextUpdated1 = {
         [key: string]: number | "NaN" | "Infinity" | "-Infinity"
       }
       reason: "sync" | "rebuild" | "maintenance" | "large_file_marker" | "retrieval_cue" | "recovery"
-    }
-  }
-}
-
-export type EventLcmMetricsUpdated1 = {
-  id: string
-  type: "lcm.metrics.updated"
-  properties: {
-    type: "lcm.metrics.updated"
-    sessionID?: string
-    conversationID?: string
-    operationID?: string
-    timestamp: string
-    payload: {
-      conversationID: string
-      lifecycleState:
-        | "passive_synced"
-        | "lcm_active"
-        | "legacy_read_only"
-        | "recovery_required"
-        | "recovery_failed"
-        | "db_unavailable"
-      strategy: "upward" | "dolt"
-      activeTokens: number | "NaN" | "Infinity" | "-Infinity"
-      hardLimit: number | "NaN" | "Infinity" | "-Infinity"
-      softThreshold: number | "NaN" | "Infinity" | "-Infinity"
-      freshTailTokens: number | "NaN" | "Infinity" | "-Infinity"
-      softBacklogTokens: number | "NaN" | "Infinity" | "-Infinity"
-      softBacklogItemCount: number | "NaN" | "Infinity" | "-Infinity"
-      freshTailRawTokens: number | "NaN" | "Infinity" | "-Infinity"
-      freshTailRawItemCount: number | "NaN" | "Infinity" | "-Infinity"
-      unconsumedRawTokens: number | "NaN" | "Infinity" | "-Infinity"
-      unconsumedRawItemCount: number | "NaN" | "Infinity" | "-Infinity"
-      protectedTailRawTokens: number | "NaN" | "Infinity" | "-Infinity"
-      protectedTailRawItemCount: number | "NaN" | "Infinity" | "-Infinity"
-      rawLaneTokens: number | "NaN" | "Infinity" | "-Infinity"
-      hardFillRatio?: number | "NaN" | "Infinity" | "-Infinity"
-      rawLaneRatio?: number | "NaN" | "Infinity" | "-Infinity"
-      softBacklogRatio?: number | "NaN" | "Infinity" | "-Infinity"
-      softBacklogLargestSourceTokens?: number | "NaN" | "Infinity" | "-Infinity"
-      budgetStatus?: "budgeted" | "unavailable" | "provider_limit_fallback"
-      softPressureReason?: "global_soft_threshold" | "below_soft_raw_backlog" | "lane_latch"
-      laneLatchDiagnostics?: Array<{
-        [key: string]: unknown
-      }>
-      providerContextLimit?: number | "NaN" | "Infinity" | "-Infinity"
-      providerInputLimit?: number | "NaN" | "Infinity" | "-Infinity"
-      providerOutputLimit?: number | "NaN" | "Infinity" | "-Infinity"
-      outputReserve?: number | "NaN" | "Infinity" | "-Infinity"
-      systemPromptTokens?: number | "NaN" | "Infinity" | "-Infinity"
-      toolSchemaTokens?: number | "NaN" | "Infinity" | "-Infinity"
-      providerCapacityDeferred?: boolean
-      providerEndpointKeyHash?: string
-      tokenCounterMode: "provider" | "deterministic_fallback" | "fake"
-      tokenCounterVersion: string
-      laneTokens: {
-        [key: string]: number | "NaN" | "Infinity" | "-Infinity"
-      }
-      contextItemCounts: {
-        [key: string]: number | "NaN" | "Infinity" | "-Infinity"
-      }
-      deferredSoftMaintenanceQueued: boolean
-      deferredSoftMaintenanceQueuedCount: number | "NaN" | "Infinity" | "-Infinity"
-      deferredSoftMaintenanceAttemptCount?: number | "NaN" | "Infinity" | "-Infinity"
-      deferredSoftMaintenanceNextRunAtMs?: number | "NaN" | "Infinity" | "-Infinity"
-      storageBytes: number | "NaN" | "Infinity" | "-Infinity"
-      storageWarningThresholdBytes: number | "NaN" | "Infinity" | "-Infinity"
-      storageWarning: boolean
-      memoryMaintenanceCostTotal?: number | "NaN" | "Infinity" | "-Infinity"
-      retrievalCostTotal?: number | "NaN" | "Infinity" | "-Infinity"
-      fileExplorationCostTotal?: number | "NaN" | "Infinity" | "-Infinity"
-      mapCostTotal?: number | "NaN" | "Infinity" | "-Infinity"
-      currency?: string
-      lastMaintenance?: {
-        operationID: string
-        status:
-          | "healthy"
-          | "scheduled"
-          | "completed"
-          | "no_op"
-          | "deferred"
-          | "skipped"
-          | "failed"
-          | "canceled"
-          | "recovery_required"
-        reason: "manual" | "soft_threshold" | "hard_limit" | "repair"
-        blocking: boolean
-        beforeTokens?: number | "NaN" | "Infinity" | "-Infinity"
-        afterTokens?: number | "NaN" | "Infinity" | "-Infinity"
-      }
-      updatedAt: string
     }
   }
 }
@@ -12314,6 +12405,107 @@ export type SessionLcmCapabilitiesResponses = {
 }
 
 export type SessionLcmCapabilitiesResponse = SessionLcmCapabilitiesResponses[keyof SessionLcmCapabilitiesResponses]
+
+export type SessionLcmStatusData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/status"
+}
+
+export type SessionLcmStatusErrors = {
+  /**
+   * LcmBadRequestError | InvalidRequestError
+   */
+  400: LcmBadRequestError | InvalidRequestError
+  /**
+   * LcmForbiddenError
+   */
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
+}
+
+export type SessionLcmStatusError = SessionLcmStatusErrors[keyof SessionLcmStatusErrors]
+
+export type SessionLcmStatusResponses = {
+  /**
+   * LCM status
+   */
+  200: LcmMetricsSnapshot
+}
+
+export type SessionLcmStatusResponse = SessionLcmStatusResponses[keyof SessionLcmStatusResponses]
+
+export type SessionLcmActivityData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    limit?: string
+  }
+  url: "/session/{sessionID}/lcm/activity"
+}
+
+export type SessionLcmActivityErrors = {
+  /**
+   * LcmBadRequestError | InvalidRequestError
+   */
+  400: LcmBadRequestError | InvalidRequestError
+  /**
+   * LcmForbiddenError
+   */
+  403: LcmForbiddenError
+  /**
+   * LcmNotFoundError
+   */
+  404: LcmNotFoundError
+  /**
+   * LcmConflictError
+   */
+  409: LcmConflictError
+  /**
+   * LcmServiceUnavailableError
+   */
+  503: LcmServiceUnavailableError
+  /**
+   * LcmTimeoutError
+   */
+  504: LcmTimeoutError
+}
+
+export type SessionLcmActivityError = SessionLcmActivityErrors[keyof SessionLcmActivityErrors]
+
+export type SessionLcmActivityResponses = {
+  /**
+   * LCM activity
+   */
+  200: LcmActivityPage
+}
+
+export type SessionLcmActivityResponse = SessionLcmActivityResponses[keyof SessionLcmActivityResponses]
 
 export type SessionLcmSettingsGetData = {
   body?: never

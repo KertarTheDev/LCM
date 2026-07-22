@@ -73,6 +73,20 @@
       "status": "not_run"
     },
     {
+      "stepID": "old-session-family-continuation",
+      "manualAction": "Open pre-existing root and child sessions, continue each, and capture family/status diagnostics.",
+      "expected": "Every trusted old session resolves through the authoritative Kilo session database, builds or reuses one root family tree, and either continues under LCM or returns a stage-specific content-safe diagnostic rather than lcm_family_resolution_failed.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "output-reserve-enforcement",
+      "manualAction": "Continue a long session whose admitted input is near the provider context limit and capture the final request output cap.",
+      "expected": "The final provider maxOutputTokens is no larger than the LCM-admitted outputReserve; input does not jump to the provider context maximum and an output-length finish does not invoke legacy or hard-limit input maintenance.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
       "stepID": "retrieval-off-context",
       "manualAction": "Retrieve content that has fallen out of active context.",
       "expected": "Authorized retrieval recovers cited off-context content and denies out-of-scope handles.",
@@ -97,6 +111,27 @@
       "stepID": "cost-status-breakdown",
       "manualAction": "Inspect Memory/Retrieval/File/Map cost and status surfaces.",
       "expected": "Cost/status is content-safe, correctly categorized, and does not duplicate `agentic_map` child assistant usage.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "cli-vscode-memory-observability",
+      "manualAction": "For the same session, capture `kilo lcm status --session`, `kilo lcm activity --session`, VSCode Memory settings, prompt export, and the task timeline.",
+      "expected": "CLI and VSCode agree on hard/raw/backlog state; paid maintenance, expand-query, exploration, and map requests appear with token/cost evidence; prompt export reports its folder and file count.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "live-tool-matrix-local-qwen",
+      "manualAction": "Using the configured local Qwen provider, demonstrate lcm_grep, lcm_describe, lcm_expand, lcm_expand_query, lcm_read, llm_map, agentic_map, lcm_map_status, and lcm_map_cancel with the required root/child scopes.",
+      "expected": "All nine registered LCM tools return their real runtime success or authorized-denial shapes, tree construction is visible in status, and every provider-backed request appears in LCM activity.",
+      "actual": "",
+      "status": "not_run"
+    },
+    {
+      "stepID": "live-tool-matrix-zai",
+      "manualAction": "Repeat the nine-tool matrix through the CLI with the authenticated z.ai subscription and capture content-safe status/activity evidence.",
+      "expected": "All nine registered LCM tools use the same trusted family/scope rules through z.ai, provider-backed token activity is recorded, and no legacy compaction path is entered.",
       "actual": "",
       "status": "not_run"
     },
@@ -278,7 +313,7 @@
     {
       "stepID": "manual-compact-quarantine",
       "manualAction": "Exercise the existing summarize/compact API shape against passive and LCM-active sessions.",
-      "expected": "LCM-active requests fail closed unless explicit LCM maintenance owns the path; passive sessions keep legacy behavior only before activation.",
+      "expected": "Every product summarize/compact request delegates to LCM maintenance; passive sessions activate or fail closed, and only explicitly constructed upstream compatibility adapters can reach legacy compaction.",
       "actual": "",
       "status": "not_run"
     },

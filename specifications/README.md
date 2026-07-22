@@ -1,6 +1,6 @@
 # LCM Current-Code Specifications
 
-Status date: 2026-07-21.
+Status date: 2026-07-22.
 
 These documents describe the LCM implementation on the current release-sync branch. Current code is the authority.
 

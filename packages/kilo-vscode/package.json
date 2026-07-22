@@ -1050,6 +1050,11 @@
           "maximum": 24,
           "description": "Font size in pixels for the Kilo Code webview UI."
         },
+        "kilo-code.new.debugBackendLogs": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable verbose extension backend logs for troubleshooting the bundled CLI process, SSE transport, and LCM requests."
+        },
         "kilo-code.new.browserAutomation.enabled": {
           "type": "boolean",
           "default": false,
@@ -1182,7 +1187,8 @@
     "test": "vscode-test",
     "test:unit": "bun test tests/unit/ --dots",
     "lcm:settings-ui": "bun test tests/unit/lcm-settings-transport.test.ts",
-    "lcm:context-ui": "bun test tests/unit/lcm-context-ui.test.ts",
+    "lcm:context-ui": "bun test tests/unit/lcm-context-ui.test.ts tests/unit/task-timeline-tooltip.test.ts",
+    "lcm:extension-arch": "bun test tests/unit/extension-arch.test.ts",
     "rebuild-sdk": "bun run --cwd ../sdk/js build",
     "storybook": "storybook dev -p 6007",
     "build-storybook": "storybook build -o storybook-static",

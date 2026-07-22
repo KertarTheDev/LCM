@@ -2117,8 +2117,7 @@ describe("RemoteSender slash commands", () => {
       agent: { default: async () => "unexpected-agent" },
       provider: { default: async () => ({ providerID: "unexpected", modelID: "unexpected" }) },
       revert: { cleanup: async () => {} },
-      compaction: { create: async () => {} },
-      prompt: { loop: async () => {} },
+      memory: { maintain: async () => {} },
     })
     const sender = RemoteSender.create({
       conn,

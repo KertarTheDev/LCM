@@ -1,10 +1,25 @@
-import type { LcmSettingsState } from "@kilocode/sdk/v2/client"
+import type {
+  LcmActivityPage,
+  LcmDbDiagnoseReport,
+  LcmDbRecoverLockReport,
+  LcmDbRebuildReport,
+  LcmMaintenanceResult,
+  LcmMetricsSnapshot,
+  LcmPromptExportReport,
+  LcmSettingsState,
+} from "@kilocode/sdk/v2/client"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Card } from "@kilocode/kilo-ui/card"
 import { TextField } from "@kilocode/kilo-ui/text-field"
-import { createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createSignal, onCleanup, Show } from "solid-js"
+import { useSession } from "../../context/session"
 import { useVSCode } from "../../context/vscode"
-import type { LcmSettingsResultMessage } from "../../types/messages/extension-messages"
+import type { LcmSettingsResultMessage, LcmSupportResultMessage } from "../../types/messages/extension-messages"
+import type {
+  LcmSupportRequestMessage,
+  RequestLcmSettingsMessage,
+  UpdateLcmSettingsMessage,
+} from "../../types/messages/webview-messages"
 import SettingsRow from "./SettingsRow"
 
 function requestID() {
@@ -19,18 +34,73 @@ function bytes(value: LcmSettingsState["storageBytes"]) {
   return `${(value / 1024 ** 3).toFixed(1)} GB`
 }
 
+const LCM_RESULT_TYPES: ReadonlySet<string> = new Set([
+  "requestLcmSettings.result",
+  "updateLcmSettings.result",
+  "requestLcmStatus.result",
+  "requestLcmActivity.result",
+  "cancelLcmMaintenance.result",
+  "diagnoseLcmDb.result",
+  "recoverLcmDbLock.result",
+  "rebuildLcmDb.result",
+  "exportLcmPrompts.result",
+])
+
 export function LcmContextSettings() {
   const vscode = useVSCode()
+  const session = useSession()
   const [state, setState] = createSignal<LcmSettingsState>()
   const [pending, setPending] = createSignal(false)
+  const [metrics, setMetrics] = createSignal<LcmMetricsSnapshot>()
+  const [activity, setActivity] = createSignal<LcmActivityPage>()
+  const [supportResult, setSupportResult] = createSignal<string>()
   const [error, setError] = createSignal<string>()
   const [threshold, setThreshold] = createSignal("")
+  const activeRequests = new Map<string, string>()
+  let activeSessionID: string | undefined
+
+  const post = (message: RequestLcmSettingsMessage | UpdateLcmSettingsMessage | LcmSupportRequestMessage) => {
+    activeRequests.set(message.type, message.requestID)
+    setPending(true)
+    vscode.postMessage(message)
+  }
 
   const receive = (message: unknown) => {
-    const candidate = message as { type?: unknown }
-    if (candidate.type !== "requestLcmSettings.result" && candidate.type !== "updateLcmSettings.result") return
+    const candidate = message as { type?: unknown; requestID?: unknown }
+    if (typeof candidate.type !== "string" || !LCM_RESULT_TYPES.has(candidate.type)) return
+    const requestType = candidate.type.slice(0, -".result".length)
+    if (typeof candidate.requestID !== "string" || activeRequests.get(requestType) !== candidate.requestID) return
+    activeRequests.delete(requestType)
+    setPending(activeRequests.size > 0)
+    if (candidate.type !== "requestLcmSettings.result" && candidate.type !== "updateLcmSettings.result") {
+      const result = message as LcmSupportResultMessage
+      if (!result.ok) {
+        setError(result.error.safeMessage)
+        return
+      }
+      if (result.type === "requestLcmStatus.result") setMetrics(result.body as LcmMetricsSnapshot)
+      else if (result.type === "requestLcmActivity.result") setActivity(result.body as LcmActivityPage)
+      else if (result.type === "exportLcmPrompts.result") {
+        const report = result.body as LcmPromptExportReport
+        setSupportResult(
+          `Exported ${report.fileCount} files to ${report.exportDir}${report.warnings[0] ? ` · ${report.warnings[0]}` : ""}`,
+        )
+      } else if (result.type === "diagnoseLcmDb.result") {
+        const report = result.body as LcmDbDiagnoseReport
+        setSupportResult(
+          `Diagnosis ${report.status} · ${report.checks.filter((check) => check.status === "failed").length} failed checks`,
+        )
+      } else if (result.type === "recoverLcmDbLock.result") {
+        setSupportResult(`Lock recovery ${(result.body as LcmDbRecoverLockReport).status}.`)
+      } else if (result.type === "rebuildLcmDb.result") {
+        setSupportResult(`Database rebuild ${(result.body as LcmDbRebuildReport).status}.`)
+      } else {
+        setSupportResult(`Maintenance ${(result.body as LcmMaintenanceResult).status}.`)
+      }
+      setError(undefined)
+      return
+    }
     const result = message as LcmSettingsResultMessage
-    setPending(false)
     if (result.ok === false) {
       setError(result.error?.safeMessage ?? "LCM settings request failed.")
       return
@@ -42,15 +112,44 @@ export function LcmContextSettings() {
   }
 
   const load = () => {
-    setPending(true)
+    const sessionID = session.currentSessionID()
     setError(undefined)
-    vscode.postMessage({ type: "requestLcmSettings", requestID: requestID() })
+    post({ type: "requestLcmSettings", requestID: requestID(), sessionID })
+    if (sessionID) {
+      post({ type: "requestLcmStatus", requestID: requestID(), sessionID })
+      post({ type: "requestLcmActivity", requestID: requestID(), sessionID, limit: 20 })
+    } else {
+      setMetrics(undefined)
+      setActivity(undefined)
+    }
+  }
+
+  const support = (
+    type: "cancelLcmMaintenance" | "diagnoseLcmDb" | "recoverLcmDbLock" | "rebuildLcmDb" | "exportLcmPrompts",
+  ) => {
+    const sessionID = session.currentSessionID()
+    if (!sessionID) {
+      setError("Open a local session before using LCM support actions.")
+      return
+    }
+    setError(undefined)
+    setSupportResult(undefined)
+    post({
+      type,
+      requestID: requestID(),
+      sessionID,
+      ...(type === "recoverLcmDbLock" || type === "rebuildLcmDb" ? { dryRun: true } : {}),
+    })
   }
 
   const update = (input: { strategy?: "upward" | "dolt"; storageWarningThresholdBytes?: number }) => {
-    setPending(true)
     setError(undefined)
-    vscode.postMessage({ type: "updateLcmSettings", requestID: requestID(), ...input })
+    post({
+      type: "updateLcmSettings",
+      requestID: requestID(),
+      sessionID: session.currentSessionID(),
+      ...input,
+    })
   }
 
   const saveThreshold = () => {
@@ -64,7 +163,19 @@ export function LcmContextSettings() {
 
   const unsubscribe = vscode.onMessage(receive)
   onCleanup(unsubscribe)
-  onMount(load)
+  createEffect(() => {
+    const sessionID = session.currentSessionID()
+    if (sessionID !== activeSessionID) {
+      activeSessionID = sessionID
+      activeRequests.clear()
+      setPending(false)
+      setMetrics(undefined)
+      setActivity(undefined)
+      setSupportResult(undefined)
+      setError(undefined)
+    }
+    load()
+  })
 
   return (
     <>
@@ -104,17 +215,72 @@ export function LcmContextSettings() {
           </div>
         </SettingsRow>
         <SettingsRow
-          title="Runtime status"
+          title="Hard / raw / backlog"
           description={
-            state()?.lifecycleState
-              ? `${state()!.lifecycleState}${state()!.dbStatus ? ` · database ${state()!.dbStatus!.status}` : ""}`
-              : "Status becomes session-specific after a conversation is opened."
+            metrics()
+              ? `Hard ${metrics()!.activeTokens.toLocaleString()} / ${metrics()!.hardLimit.toLocaleString()} · raw ${metrics()!.rawLaneTokens.toLocaleString()} · backlog ${metrics()!.softBacklogTokens.toLocaleString()} tokens in ${metrics()!.softBacklogItemCount} items`
+              : state()?.lifecycleState
+                ? `${state()!.lifecycleState}${state()!.dbStatus ? ` · database ${state()!.dbStatus!.status}` : ""}`
+                : "Status becomes session-specific after a conversation is opened."
           }
-          last
         >
           <Button variant="secondary" size="small" disabled={pending()} onClick={load}>
             Refresh
           </Button>
+        </SettingsRow>
+        <SettingsRow
+          title="LCM token activity"
+          description={
+            activity()
+              ? `${activity()!.summary.requestCount} paid-token requests · ${activity()!.summary.totalTokens.toLocaleString()} tokens${activity()!.summary.costAmount !== undefined ? ` · ${activity()!.summary.costAmount} ${activity()!.summary.costCurrency ?? ""}` : ` · cost ${activity()!.summary.costStatus}`} across compaction, retrieval, exploration, and maps`
+              : "Loading model requests made by conversation memory…"
+          }
+        >
+          <div style={{ "font-size": "var(--kilo-font-size-12)", "text-align": "right" }}>
+            <Show when={activity()?.items[0]} fallback="No requests">
+              {(item) => `${item().purpose.replaceAll("_", " ")} · ${item().totalTokens.toLocaleString()} tokens`}
+            </Show>
+          </div>
+        </SettingsRow>
+        <SettingsRow
+          title="Memory support"
+          description={
+            supportResult() ?? "Diagnose storage, preview recovery, cancel queued work, or export compaction prompts."
+          }
+          last
+        >
+          <Show
+            when={session.currentSessionID()}
+            fallback={<span style={{ "font-size": "var(--kilo-font-size-12)" }}>Open a local session</span>}
+          >
+            <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap", "justify-content": "flex-end" }}>
+              <Button variant="secondary" size="small" disabled={pending()} onClick={() => support("diagnoseLcmDb")}>
+                Diagnose
+              </Button>
+              <Button variant="secondary" size="small" disabled={pending()} onClick={() => support("recoverLcmDbLock")}>
+                Preview lock recovery
+              </Button>
+              <Button variant="secondary" size="small" disabled={pending()} onClick={() => support("rebuildLcmDb")}>
+                Preview rebuild
+              </Button>
+              <Button
+                variant="secondary"
+                size="small"
+                disabled={pending()}
+                onClick={() => support("cancelLcmMaintenance")}
+              >
+                Cancel maintenance
+              </Button>
+              <Button
+                variant="secondary"
+                size="small"
+                disabled={pending() || state()?.dbStatus?.status !== "ready"}
+                onClick={() => support("exportLcmPrompts")}
+              >
+                Export compaction prompts
+              </Button>
+            </div>
+          </Show>
         </SettingsRow>
         <Show when={error()}>
           {(message) => (

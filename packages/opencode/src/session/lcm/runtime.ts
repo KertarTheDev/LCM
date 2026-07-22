@@ -1,5 +1,6 @@
 // kilocode_change - new file
 import type { PGlite } from "@electric-sql/pglite"
+import { Database as CoreDatabase } from "@opencode-ai/core/database/database"
 import { Config } from "@/config/config"
 import { Bus } from "@/bus"
 import { makeRuntime } from "@/effect/run-service"
@@ -61,6 +62,7 @@ import {
 } from "./events"
 import { createLcmFinalizedSyncPendingStore } from "./finalized-sync-retry"
 import { createOperationID } from "./id"
+import { readLcmActivity } from "./activity"
 import { resolveLcmDbLayout } from "./db-layout"
 import { renderLargeFileMarker } from "./artifacts"
 import {
@@ -895,6 +897,21 @@ export const layer = Layer.effect(
 
     const getConversationScope = Effect.fn("LcmRuntime.getConversationScope")(function* (input: { sessionID: string }) {
       return yield* getLifecycleConversationScope(input).pipe(Effect.provideService(LcmDb.Service, lcmDb))
+    })
+
+    const getStatus = Effect.fn("LcmRuntime.getStatus")(function* (input: { sessionID: string }) {
+      const conversationID = yield* getOrCreateConversation(input)
+      return yield* readMetrics({ sessionID: input.sessionID, conversationID })
+    })
+
+    const getActivity = Effect.fn("LcmRuntime.getActivity")(function* (input: { sessionID: string; limit?: number }) {
+      const conversationID = yield* getOrCreateConversation(input)
+      const ready = yield* resolveSessionFamilyDb({ sessionID: input.sessionID })
+      return yield* ready.lcmDb.executeForeground({
+        operationID: createOperationID(),
+        purpose: "debug_support",
+        run: (db) => readLcmActivity({ db: db as PGlite, conversationID, limit: input.limit }),
+      })
     })
 
     const markConversationActive = Effect.fn("LcmRuntime.markConversationActive")(function* (input: {
@@ -2612,6 +2629,8 @@ export const layer = Layer.effect(
       handleSessionDeleted,
       recordUsage: writeUsageRecord,
       getConversationScope,
+      getStatus,
+      getActivity,
       grep: (input) => LcmRetrieval.grep(input).pipe(Effect.provideService(LcmDb.Service, lcmDb)),
       describe: (input) => LcmRetrieval.describe(input).pipe(Effect.provideService(LcmDb.Service, lcmDb)),
       expand: (input) => LcmRetrieval.expand(input).pipe(Effect.provideService(LcmDb.Service, lcmDb)),
@@ -2633,6 +2652,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer: Layer.Layer<Service> = layer.pipe(
+  Layer.provide(CoreDatabase.defaultLayer),
   Layer.provide(Provider.defaultLayer),
   Layer.provide(LcmContext.layer),
   Layer.provide(Config.defaultLayer),
@@ -2692,6 +2712,14 @@ async function handleSessionDeletedStandalone(input: LcmSessionDeletionInput) {
 
 export function getCapabilities(input: { sessionID: string }) {
   return runPromise((svc) => svc.getCapabilities(input))
+}
+
+export function getStatus(input: { sessionID: string }) {
+  return runPromise((svc) => svc.getStatus(input))
+}
+
+export function getActivity(input: { sessionID: string; limit?: number }) {
+  return runPromise((svc) => svc.getActivity(input))
 }
 
 export function getSettingsState(input: { sessionID?: string; projectID?: string; workspaceID?: string }) {

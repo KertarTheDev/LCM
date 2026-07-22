@@ -7,6 +7,8 @@ This document describes the current `LcmRuntime` behavior observed in `runtime.t
 The main runtime service is `LcmRuntime.Service` in `packages/opencode/src/session/lcm/runtime.ts`. It is an Effect service with these primary operations:
 
 - `getCapabilities`
+- `getStatus`
+- `getActivity`
 - `getOrCreateConversation`
 - `getOrCreateChildConversation`
 - `acquireChildSessionSlot`
@@ -20,6 +22,7 @@ The main runtime service is `LcmRuntime.Service` in `packages/opencode/src/sessi
 - settings read/update
 - session deletion cleanup
 - usage record writes
+- content-safe prompt export and DB support actions
 - retrieval, file exploration, and map tool dispatch
 
 `LcmContext.Service` in `context.ts` owns active context assembly and maintenance. `LcmDb.Service` owns family DB startup and foreground/background DB execution.
@@ -52,7 +55,7 @@ Initial conversation state is computed by `lifecycle.ts`:
 - booleans for `lcmActive`, `canAssemble`, `canMaintain`, and `canRetrieve`
 - optional safe error
 
-`lcmActive` is true only for `lcm_active`. Prompt history selection treats both `lcm_active` and `passive_synced` as LCM-managed states and uses the full persisted message stream before preflight finishes prompt-time activation. Legacy compacted-history filtering is reserved for unavailable, recovery, or unsupported states that will not proceed to a normal provider request. Retrieval requires the active lifecycle state plus valid boundary metadata and valid capability metadata. Malformed child capability metadata makes retrieval unavailable even if a conversation row exists.
+`lcmActive` is true only for `lcm_active`. Product prompt ownership is nevertheless fixed to LCM at construction time: both `lcm_active` and `passive_synced` use the full persisted message stream before preflight finishes activation, while unavailable, recovery, or unsupported states fail before a normal provider request. They do not select legacy compacted-history filtering. Persisted legacy `compaction` parts remain source compatibility data and are removed only from the prompt control projection so an old marker cannot re-enter the obsolete compaction control flow. Retrieval requires the active lifecycle state plus valid boundary metadata and valid capability metadata. Malformed child capability metadata makes retrieval unavailable even if a conversation row exists.
 
 ## Boundary And Capability Proof
 
@@ -74,6 +77,8 @@ Child classes are trusted only when reconstructable from runtime metadata:
 - `map_child`: agentic map child. Capability proof checks the owning map run/item and agentic mode.
 
 Model-supplied capability class or conversation IDs are not trusted by retrieval or map operations.
+
+Production family resolution reads session, project, workspace, and parent lineage from the same Core Kilo database service that owns current sessions. It validates each parent stage, project/workspace scope, canonical child/parent directories, project worktree/sandbox boundaries, cycle/self links, and the derived family root. Failures retain stage-specific diagnostics such as session lookup, parent lookup, project boundary, data-directory, or family-root resolution; the former catch-all `lcm_family_resolution_failed` is not a normal product diagnostic. Standalone direct helpers remain only for isolated DB/layout tests.
 
 ## Prompt-Time Preflight
 
@@ -109,6 +114,8 @@ When preflight succeeds, `session/prompt.ts` uses the `preparedProviderPayload` 
 - render/provenance metadata carried inside `LcmPreparedProviderPayload`
 
 `session/llm.ts` wraps the provider language model and validates the final provider-transformed message payload through `validateLcmFinalProviderPayload(...)`. If validation fails, it throws `LcmSafeErrorFailure`. If validation succeeds, it records the final provider validator hash and provider-transform overhead observation back through the provider request snapshot path.
+
+The same final call boundary applies `min(providerAllowance, preflight.threshold.outputReserve)` as `maxOutputTokens`. The provider therefore cannot expand the response allowance into input space that LCM reserved during admission. A provider `length` finish remains an output-completion condition and does not trigger input hard-limit maintenance; the reserve cap prevents that condition from being caused by an unconstrained provider default, while a genuinely exhausted response reserve is still reported as an output-limit result.
 
 `session/prompt.ts` finalizes request snapshots as `resolved` on a successful non-compact provider/processor exit and as `canceled` on compact/provider-overflow, failure, or interruption. When a snapshot resolves, the runtime records which raw context items were included in that provider request. Soft backlog selection treats a post-current raw row as consumed only after such a resolved snapshot; canceled, expired, or failed requests do not prove consumption.
 
@@ -238,4 +245,6 @@ Runtime catch boundaries and persisted safe-error fields validate safe-error-lik
 
 Legacy compaction markers are persisted-history compatibility data, not a runtime context-management mode. `lifecycle.ts` no longer creates `legacy_read_only` for marker-bearing sessions, and existing `legacy_read_only` conversation rows are moved back to normal LCM activation on access.
 
-Upstream `SessionCompaction` remains installed and importable as a compatibility adapter for prompt paths that are not LCM-managed. Upstream V2 context epochs, automatic compaction, and their bounded recovery remain owned by the default upstream context engine. The current Kilo product still reaches the V1 prompt adapter, which guards every legacy compaction/filter/prune path behind the non-LCM branch. Once a conversation is passive-synced or active under LCM, provider overflow is classified by an explicit LCM-only decision helper, gets one physical LCM recovery retry with a stricter provider input reserve, and converts any remaining compact result into a `hard_limit_unresolved` safe error. Active LCM sessions never invoke lossy compaction as recovery or fallback.
+The upstream implementation remains in source because Kilo's public `session.compacted` compatibility contract, isolated upstream behavior tests, archaeology/migration comparisons, and possible non-product embedders still need an explicit adapter. Those callers must opt into `SessionCompaction.layer`, `upstreamV1DefaultLayer`, or `upstreamV1Node` by name. Product `SessionCompaction.defaultLayer` and `SessionCompaction.node` provide only `lcmV1Layer`, whose legacy operations fail immediately as construction-invariant violations. No DB error, lifecycle state, old marker, output-limit finish, HTTP summarize request, remote `/compact`, CLI path, VSCode path, or TUI path selects the legacy adapter.
+
+Upstream V2 context epochs and their default engine remain upstream code and public compatibility surface, but the current product V1 prompt owner is literal LCM. Provider overflow is classified by an explicit LCM-only decision helper, gets one physical LCM recovery retry with a stricter provider input reserve, and converts any remaining compact result into a `hard_limit_unresolved` safe error. Compatibility summarize and remote `/compact` calls perform LCM finalized-source sync plus manual maintenance. Product sessions never invoke lossy compaction as recovery or fallback.

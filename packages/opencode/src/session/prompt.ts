@@ -1579,10 +1579,9 @@ export const layer = Layer.effect(
       const envCache: KiloSessionPrompt.EnvCache = {}
       const memoryCache = KiloSessionPrompt.memoryCache() // kilocode_change
       closeReasons.delete(sessionID) // kilocode_change
-      let compactionAttempts = 0 // kilocode_change - cap compaction attempts per turn to avoid infinite loops
+      let compactionAttempts = 0 // kilocode_change - upstream V1 adapter state; unreachable for product LCM ownership
       let lcmProviderOverflowRetryAttempt = 0 // kilocode_change - one bounded authoritative rebuild
       let pendingLcmProviderOverflowRecovery: { readonly attempt: number } | undefined // kilocode_change
-      let usedLcmManagedHistory = false // kilocode_change - suppress legacy end-of-turn pruning
       const ctx = yield* InstanceState.context
       let structured: unknown
       let step = 0
@@ -1592,19 +1591,25 @@ export const layer = Layer.effect(
         yield* status.set(sessionID, { type: "busy" })
         yield* Effect.logInfo("loop", { "session.id": sessionID, step })
 
-        // kilocode_change start - LCM sees finalized durable source; legacy compaction remains the non-LCM adapter
-        yield* lcmRuntime.getOrCreateConversation({ sessionID }).pipe(Effect.catch(() => Effect.void))
+        // kilocode_change start - product V1 is construction-time LCM owned and fails closed
+        yield* lcmRuntime.getOrCreateConversation({ sessionID })
         const lcmCapabilities = yield* lcmRuntime.getCapabilities({ sessionID })
-        const useLcmManagedHistory =
-          lcmCapabilities.lifecycleState === "lcm_active" || lcmCapabilities.lifecycleState === "passive_synced"
-        usedLcmManagedHistory ||= useLcmManagedHistory
-        let msgs = useLcmManagedHistory
-          ? (yield* MessageV2.stream(sessionID).pipe(Effect.provideService(Database.Service, database))).reverse()
-          : yield* MessageV2.filterCompactedEffect(sessionID).pipe(Effect.provideService(Database.Service, database))
-        if (!useLcmManagedHistory) {
-          msgs = KiloSessionPromptQueue.scope(sessionID, msgs)
-          msgs = KiloSessionPrompt.trimBeforeLastSummary(msgs)
+        if (lcmCapabilities.lifecycleState !== "lcm_active" && lcmCapabilities.lifecycleState !== "passive_synced") {
+          return yield* Effect.fail(
+            lcmCapabilities.safeError ??
+              createLcmSafeError({
+                code: "recovery_required",
+                templateKey: "lcm.recovery.required",
+                safeParams: { action: "diagnose" },
+                retryable: false,
+                diagnosticCode: `lcm_prompt_lifecycle_${lcmCapabilities.lifecycleState}`,
+              }),
+          )
         }
+        const useLcmManagedHistory = true as const
+        let msgs = (yield* MessageV2.stream(sessionID).pipe(
+          Effect.provideService(Database.Service, database),
+        )).reverse()
         const scopedMessages = prepareKiloMessageVisibility({ sessionID, messages: msgs })
         msgs = scopedMessages.messages
         // kilocode_change end
@@ -1696,50 +1701,6 @@ export const layer = Layer.effect(
           continue
         }
 
-        if (task?.type === "compaction" && !useLcmManagedHistory) {
-          const result = yield* compaction.process({
-            messages: msgs,
-            parentID: lastUser.id,
-            sessionID,
-            auto: task.auto,
-            overflow: task.overflow,
-          })
-          // kilocode_change start - compaction.process only returns "stop" after
-          // setting ContextOverflowError on the summary message; surface as turn error
-          if (result === "stop") {
-            closeReasons.set(sessionID, "error")
-            break
-          }
-          // kilocode_change end
-          continue
-        }
-
-        if (
-          !useLcmManagedHistory &&
-          lastFinished &&
-          lastFinished.summary !== true &&
-          (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
-        ) {
-          // kilocode_change start
-          const guard = KiloSessionPrompt.guardCompactionAttempt({
-            sessionID,
-            attempts: compactionAttempts,
-            closeReasons,
-            message: lastFinished,
-          })
-          if (guard.exhausted) {
-            // lastFinished is a prior turn's assistant — record exhaustion on the
-            // message whose size tipped us past the compaction cap.
-            yield* sessions.updateMessage(lastFinished)
-            yield* events.publish(Session.Event.Error, { sessionID, error: guard.error })
-            break
-          }
-          compactionAttempts++
-          // kilocode_change end
-          yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
-          continue
-        }
-
         const agent = yield* agents.get(lastUser.agent)
         if (!agent) {
           const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
@@ -1750,14 +1711,6 @@ export const layer = Layer.effect(
         }
         const maxSteps = agent.steps ?? Infinity
         const isLastStep = step >= maxSteps
-        if (!useLcmManagedHistory) {
-          msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
-            Effect.provideService(RuntimeFlags.Service, flags),
-            Effect.provideService(FSUtil.Service, fsys),
-            Effect.provideService(Session.Service, sessions),
-          )
-        }
-
         const msg: MessageV2.Assistant = {
           id: MessageID.ascending(),
           parentID: lastUser.id,
@@ -2005,6 +1958,7 @@ export const layer = Layer.effect(
                     : undefined,
                 lcmProviderProtocol: {
                   preparedProviderPayload: preflight.assembly.preparedProviderPayload,
+                  maxOutputTokens: preflight.threshold.outputReserve,
                   recordFinalProviderValidation: ({
                     providerValidatorHash,
                     providerFamily,
@@ -2349,9 +2303,7 @@ export const layer = Layer.effect(
           Effect.onInterrupt(() => finalize),
           // kilocode_change start - final-only ingestion also covers error and interruption
           Effect.onExit(() =>
-            useLcmManagedHistory
-              ? lcmRuntime.syncFinalizedMessages({ sessionID, upToMessageID: handle.message.id }).pipe(Effect.ignore)
-              : Effect.void,
+            lcmRuntime.syncFinalizedMessages({ sessionID, upToMessageID: handle.message.id }).pipe(Effect.ignore),
           ),
           // kilocode_change end
         )
@@ -2359,8 +2311,6 @@ export const layer = Layer.effect(
         continue
       }
 
-      if (!usedLcmManagedHistory)
-        yield* compaction.prune({ sessionID, reason: "normal" }).pipe(Effect.ignore, Effect.forkIn(scope))
       return yield* lastAssistant(sessionID)
     })
 

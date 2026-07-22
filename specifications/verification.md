@@ -1,6 +1,6 @@
 # LCM Current-Code Verification
 
-Status date: 2026-07-21.
+Status date: 2026-07-22.
 
 This document records the verification surface for `kilocode-lcm-v7.4.13`.
 
@@ -33,6 +33,7 @@ The focused `typecheck:lcm` project owns the LCM tree. It does not replace the p
 - `/memory` and upstream project-memory handlers remain present;
 - `/lcm` and `/lcm-settings` own conversation-context settings;
 - upstream `SessionCompaction` remains installed only as a non-LCM adapter;
+- product `SessionCompaction.defaultLayer` and `.node` are fail-closed LCM guards, while legacy construction requires an explicitly named upstream adapter;
 - active/passive LCM prompt branches use LCM preflight, maintenance, bounded overflow recovery, and fail-closed errors;
 - summarize delegates to LCM and does not construct a legacy compaction turn;
 - OpenAPI/SDK retain upstream `session.compacted` compatibility events while LCM uses `lcm.maintenance.*` rather than `lcm.compaction.*`;
@@ -53,6 +54,7 @@ The core context-engine seam is covered by:
 - `lcm:provider-protocol`: final transformed provider payload rules.
 - `lcm:provider-overflow`: one bounded active-LCM rebuild followed by fail-closed exhaustion; inactive LCM never retries.
 - `lcm:assembly-token-budget`, `lcm:token-budget`: threshold/budget binding and reserves.
+- `lcm:output-reserve`: the final provider allowance cannot exceed the output reserve admitted by LCM.
 - `lcm:hard-limit`, `lcm:soft-backlog`, `lcm:maintenance-summary-quality`: blocking and deferred maintenance behavior.
 - `lcm:system-context`: LCM policy plus preserved upstream project memory/environment context.
 
@@ -61,6 +63,7 @@ The core context-engine seam is covered by:
 - `lcm:migration:smoke`
 - `lcm:db:support`
 - `lcm:family-runtime`
+- `lcm:activity`
 - `lcm:activation`
 - `lcm:active-context:test`
 - `lcm:crash-reopen`
@@ -81,10 +84,44 @@ The core context-engine seam is covered by:
 - `lcm:settings`: config-backed project/workspace scope and supported public fields.
 - `lcm:contracts:check`: route/DTO/safe-error drift.
 - `lcm:cost`, `lcm:status-events`: content-safe aggregate status.
+- `lcm:activity`: bounded per-request usage projection and CLI status/activity formatting.
+- `lcm:remote-maintenance`: compatibility `/compact` dispatch reaches LCM maintenance without creating a legacy turn.
 - focused server/API typecheck through the opencode package gate.
 - VSCode extension and webview typechecks cover the generated-SDK bridge and `LcmContextSettings` component.
 
 Settings verification must prove that sessionless calls do not require a conversation or PGlite, session-scoped calls derive family identity from trusted runtime state, unsupported fields are rejected, and bridge fallbacks obey canonical safe-error templates.
+
+VSCode focused verification must also prove that the Memory card exposes hard/raw/backlog, paid-token activity, runtime-owned support actions, and prompt export; that activity route limits use the generated SDK query type; that stale request IDs cannot overwrite a newly focused session; that LCM timeline bars are timestamp-merged without transcript highlight targets; and that routine bundled-runtime/SSE `console.log` calls remain behind `debugLog`.
+
+## Required Live Demonstration Matrix
+
+Tests and typechecks are prerequisites, not completion evidence. The release scenario has five evidence-backed steps that focused suites cannot mark passed: `old-session-family-continuation`, `output-reserve-enforcement`, `cli-vscode-memory-observability`, `live-tool-matrix-local-qwen`, and `live-tool-matrix-zai`. Supply one content-safe `.json`, `.txt`, or `.md` capture per step through `lcm:release-long-context:strict --manual-evidence-dir <dir>`.
+
+Use one exact committed candidate and record its SHA, VSIX SHA-256, installed extension version, bundled CLI identity, provider/model ID, session IDs, OS/architecture, and timestamps. Do not record credentials, raw provider headers, or private prompt/file content.
+
+For macOS arm64 VSCode with the configured local Qwen provider:
+
+1. Install the exact snapshot VSIX and enable `kilo-code.new.debugBackendLogs` only for the diagnostic capture.
+2. Continue representative pre-existing root and child sessions, including one containing legacy compaction markers. Capture the absence of catch-all `lcm_family_resolution_failed`, the session-specific diagnostic if continuation is legitimately blocked, and `kilo lcm status --session <id> --json` from the bundled CLI.
+3. Run a new long session until raw rows become summaries and at least one hard or soft maintenance request occurs. Capture the Memory card's hard/raw/backlog values, prompt-export folder/file count, and matching CLI `status`/`activity` JSON.
+4. Near the model context boundary, capture `outputReserve` and the final request output cap from debug logs. The cap must be no larger than the reserve. A genuine output-length finish may remain incomplete but must not schedule legacy compaction or post-response hard input maintenance.
+5. Capture the task timeline after maintenance, `lcm_expand_query`, file exploration, and `llm_map`; each provider-backed request must appear in `kilo lcm activity` with provider/model, token or unknown-usage evidence, and cost status.
+
+Run the same nine-tool matrix first with local Qwen and then from the authenticated CLI z.ai subscription:
+
+| Tool | Required live proof |
+|---|---|
+| `lcm_grep` | Root session returns authorized literal/regex matches and stable handles. |
+| `lcm_describe` | Root session returns bounded metadata for an authorized `sum_...` or `file_...` handle. |
+| `lcm_expand` | Root denial occurs before content access; a trusted child/explore/map scope expands an authorized summary. |
+| `lcm_expand_query` | Root session returns a cited answer or the specified successful no-answer shape; activity records provider usage. |
+| `lcm_read` | Root denial occurs before bytes/provenance access; a trusted read-capable child reads a bounded authorized file window. |
+| `llm_map` | An authorized JSONL run is created and returns a durable `map_...` status. |
+| `agentic_map` | An authorized read-only or write-capable child run is created without duplicate LCM usage accounting. |
+| `lcm_map_status` | Polling returns the latest authorized run counts/output handle without item content. |
+| `lcm_map_cancel` | A deliberately still-running map accepts cancellation and later status reports the terminal or cancel-requested state. |
+
+Each provider run must also prove that the same root/child sessions resolve to one trusted family lineage, `contextItemCounts`/raw/backlog metrics change as tree construction and maintenance proceed, paid-token activity increases only for provider-backed LCM requests, and no product code constructs `upstreamV1DefaultLayer`, `upstreamV1Node`, or `SessionCompaction.layer`.
 
 ## Release Evidence
 

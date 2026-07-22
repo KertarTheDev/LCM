@@ -364,6 +364,17 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return { ...capabilities, sessionID: ctx.params.sessionID }
     })
 
+    const lcmStatus = Effect.fn("SessionHttpApi.lcmStatus")(function* (ctx: { params: { sessionID: SessionID } }) {
+      return yield* mapLcmError(lcmRuntime.getStatus({ sessionID: ctx.params.sessionID }))
+    })
+
+    const lcmActivity = Effect.fn("SessionHttpApi.lcmActivity")(function* (ctx: {
+      params: { sessionID: SessionID }
+      query: { limit?: number }
+    }) {
+      return yield* mapLcmError(lcmRuntime.getActivity({ sessionID: ctx.params.sessionID, limit: ctx.query.limit }))
+    })
+
     const lcmSettingsGet = Effect.fn("SessionHttpApi.lcmSettingsGet")(function* (ctx: {
       params: { sessionID: SessionID }
     }) {
@@ -672,6 +683,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         .handle("summarize", summarize)
         // kilocode_change start
         .handle("lcmCapabilities", lcmCapabilities)
+        .handle("lcmStatus", lcmStatus)
+        .handle("lcmActivity", lcmActivity)
         .handle("lcmSettingsGet", lcmSettingsGet)
         .handle("lcmSettingsUpdate", lcmSettingsUpdate)
         .handle("lcmMaintenanceCancel", lcmMaintenanceCancel)

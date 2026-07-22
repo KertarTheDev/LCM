@@ -1,6 +1,6 @@
 // kilocode_change - LCM conversation-context settings dialog
 import { TextAttributes } from "@opentui/core"
-import type { LcmSettingsState, LcmUpdateSettingsInput } from "@kilocode/sdk/v2"
+import type { LcmActivityPage, LcmMetricsSnapshot, LcmSettingsState, LcmUpdateSettingsInput } from "@kilocode/sdk/v2"
 import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { Spinner } from "./spinner"
 import { useTheme } from "../context/theme"
@@ -47,6 +47,8 @@ export function DialogLcmSettings(props: { sessionID?: string; initialState?: Lc
   const toast = useToast()
   const { theme } = useTheme()
   const [state, setState] = createSignal<LcmSettingsState | undefined>(props.initialState)
+  const [status, setStatus] = createSignal<LcmMetricsSnapshot>()
+  const [activity, setActivity] = createSignal<LcmActivityPage>()
   const [busy, setBusy] = createSignal<string | undefined>(props.initialState ? undefined : "Loading LCM settings...")
   const [error, setError] = createSignal<string | undefined>()
 
@@ -62,6 +64,50 @@ export function DialogLcmSettings(props: { sessionID?: string; initialState?: Lc
       return
     }
     setState(result.data)
+    if (props.sessionID) {
+      const statusResult = await sdk.client.session.lcm.status({ sessionID: props.sessionID })
+      if (statusResult.data) setStatus(statusResult.data)
+      const activityResult = await sdk.client.session.lcm.activity({ sessionID: props.sessionID, limit: "20" })
+      if (activityResult.data) setActivity(activityResult.data)
+    }
+  }
+
+  async function support(action: "cancel" | "diagnose" | "recover" | "rebuild" | "export") {
+    if (!props.sessionID) {
+      toast.show({ variant: "error", message: "Open a session before using LCM support actions." })
+      return
+    }
+    setBusy("Running LCM support action...")
+    const result =
+      action === "cancel"
+        ? await sdk.client.session.lcm.maintenance.cancel({
+            sessionID: props.sessionID,
+            lcmCancelMaintenanceInput: { reason: "user" },
+          })
+        : action === "diagnose"
+          ? await sdk.client.session.lcm.db.diagnose({ sessionID: props.sessionID })
+          : action === "recover"
+            ? await sdk.client.session.lcm.db.recoverLock({
+                sessionID: props.sessionID,
+                lcmDbRecoverLockInput: { dryRun: true, force: false },
+              })
+            : action === "rebuild"
+              ? await sdk.client.session.lcm.db.rebuild({
+                  sessionID: props.sessionID,
+                  lcmDbRebuildInput: { dryRun: true },
+                })
+              : await sdk.client.session.lcm.prompts.export({ sessionID: props.sessionID })
+    setBusy(undefined)
+    if (result.error || !result.data) {
+      toast.show({ variant: "error", message: lcmSettingsErrorMessage(result.error) })
+      return
+    }
+    const message =
+      action === "export" && "exportDir" in result.data
+        ? `Exported ${result.data.fileCount} files to ${result.data.exportDir}`
+        : `LCM ${action} completed.`
+    toast.show({ variant: "success", message, duration: 3000 })
+    await load()
   }
 
   async function updateSettings(input: LcmUpdateSettingsInput) {
@@ -172,6 +218,67 @@ export function DialogLcmSettings(props: { sessionID?: string; initialState?: Lc
             },
           ]
         : []),
+      ...(status()
+        ? [
+            {
+              title: "Hard / raw / backlog",
+              value: "budget",
+              description: `hard ${status()!.activeTokens} / ${status()!.hardLimit} · raw ${status()!.rawLaneTokens} · backlog ${status()!.softBacklogTokens}`,
+              footer: `${status()!.softBacklogItemCount} backlog items`,
+              category: "Status",
+            },
+          ]
+        : []),
+      ...(activity()
+        ? [
+            {
+              title: "LCM token activity",
+              value: "activity",
+              description: `${activity()!.summary.requestCount} paid-token requests`,
+              footer: `${activity()!.summary.totalTokens} tokens${activity()!.summary.costAmount !== undefined ? ` · ${activity()!.summary.costAmount} ${activity()!.summary.costCurrency ?? ""}` : ` · cost ${activity()!.summary.costStatus}`}`,
+              category: "Status",
+            },
+          ]
+        : []),
+      ...(props.sessionID
+        ? [
+            {
+              title: "Diagnose storage",
+              value: "diagnose",
+              description: "Run content-safe LCM database checks",
+              category: "Actions",
+              onSelect: () => void support("diagnose"),
+            },
+            {
+              title: "Preview lock recovery",
+              value: "recover",
+              description: "Preview owner-lock recovery without changing storage",
+              category: "Actions",
+              onSelect: () => void support("recover"),
+            },
+            {
+              title: "Preview database rebuild",
+              value: "rebuild",
+              description: "Preview a rebuild without changing storage",
+              category: "Actions",
+              onSelect: () => void support("rebuild"),
+            },
+            {
+              title: "Cancel queued maintenance",
+              value: "cancel",
+              description: "Cancel a deferred LCM maintenance retry",
+              category: "Actions",
+              onSelect: () => void support("cancel"),
+            },
+            {
+              title: "Export compaction prompts",
+              value: "export",
+              description: "Export reconstructed LCM prompts and active context",
+              category: "Actions",
+              onSelect: () => void support("export"),
+            },
+          ]
+        : []),
       {
         title: "Refresh",
         value: "refresh",
@@ -183,7 +290,7 @@ export function DialogLcmSettings(props: { sessionID?: string; initialState?: Lc
   })
 
   onMount(() => {
-    if (!props.initialState) void load()
+    if (!props.initialState || props.sessionID) void load()
   })
 
   return (

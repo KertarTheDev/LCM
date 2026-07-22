@@ -28,6 +28,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 // kilocode_change start - LCM session routes reuse isolated LCM-owned schemas
 import {
   LcmCapabilitiesSchema,
+  LcmActivityPageSchema,
   LcmCancelMaintenanceInput,
   LcmDbDiagnoseReportSchema,
   LcmDbRecoverLockInput,
@@ -35,6 +36,7 @@ import {
   LcmDbRebuildInput,
   LcmDbRebuildReportSchema,
   LcmMaintenanceResultSchema,
+  LcmMetricsSnapshotSchema,
   LcmPromptExportReportSchema,
   LcmRouteErrors,
   LcmSettingsStateSchema,
@@ -123,6 +125,8 @@ export const SessionPaths = {
   summarize: `${root}/:sessionID/summarize`,
   // kilocode_change start
   lcmCapabilities: `${root}/:sessionID/lcm/capabilities`,
+  lcmStatus: `${root}/:sessionID/lcm/status`,
+  lcmActivity: `${root}/:sessionID/lcm/activity`,
   lcmSettings: `${root}/:sessionID/lcm/settings`,
   lcmMaintenanceCancel: `${root}/:sessionID/lcm/maintenance/cancel`,
   lcmDbDiagnose: `${root}/:sessionID/lcm/db/diagnose`,
@@ -365,6 +369,33 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.lcm.capabilities",
             summary: "Get LCM capabilities",
             description: "Get content-safe LCM lifecycle and capability state for a session.",
+          }),
+        ),
+        HttpApiEndpoint.get("lcmStatus", SessionPaths.lcmStatus, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(LcmMetricsSnapshotSchema, "LCM status"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.status",
+            summary: "Get LCM status",
+            description: "Get current hard-limit, raw-lane, backlog, storage, and cost metrics for a session.",
+          }),
+        ),
+        HttpApiEndpoint.get("lcmActivity", SessionPaths.lcmActivity, {
+          params: { sessionID: SessionID },
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            limit: Schema.optional(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThan(0))),
+          }),
+          success: described(LcmActivityPageSchema, "LCM activity"),
+          error: LcmRouteErrors,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.lcm.activity",
+            summary: "Get LCM activity",
+            description: "List paid-token LCM maintenance, retrieval, exploration, and map requests for a session.",
           }),
         ),
         HttpApiEndpoint.get("lcmSettingsGet", SessionPaths.lcmSettings, {

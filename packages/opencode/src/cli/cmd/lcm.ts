@@ -4,7 +4,12 @@ import type { Argv } from "yargs"
 import { WorkspaceContext } from "../../control-plane/workspace-context"
 import { Instance } from "../../kilocode/instance"
 import { LcmRuntime } from "../../session/lcm/runtime"
-import type { LcmSettingsState, LcmUpdateSettingsInput } from "../../session/lcm/types"
+import type {
+  LcmActivityPage,
+  LcmMetricsSnapshot,
+  LcmSettingsState,
+  LcmUpdateSettingsInput,
+} from "../../session/lcm/types"
 import { bootstrap } from "../bootstrap"
 import { cmd } from "./cmd"
 
@@ -101,6 +106,105 @@ function writeState(state: LcmSettingsState, json: boolean) {
   process.stdout.write(json ? JSON.stringify(state, null, 2) + EOL : formatLcmSettingsState(state))
 }
 
+export function formatLcmStatus(status: LcmMetricsSnapshot) {
+  const percent = (value: number | undefined) => (value === undefined ? "n/a" : `${Math.round(value * 100)}%`)
+  const costs = [
+    status.memoryMaintenanceCostTotal,
+    status.retrievalCostTotal,
+    status.fileExplorationCostTotal,
+    status.mapCostTotal,
+  ]
+  const hasCosts = costs.some((value) => value !== undefined)
+  return (
+    [
+      `lifecycle: ${status.lifecycleState}`,
+      `strategy: ${status.strategy}`,
+      `hard: ${status.activeTokens} / ${status.hardLimit} (${percent(status.hardFillRatio)})`,
+      `raw: ${status.rawLaneTokens} (${percent(status.rawLaneRatio)})`,
+      `backlog: ${status.softBacklogTokens} tokens / ${status.softBacklogItemCount} items (${percent(status.softBacklogRatio)})`,
+      `freshTailRaw: ${status.freshTailRawTokens} tokens / ${status.freshTailRawItemCount} items`,
+      `unconsumedRaw: ${status.unconsumedRawTokens} tokens / ${status.unconsumedRawItemCount} items`,
+      `outputReserve: ${status.outputReserve ?? "unavailable"}`,
+      hasCosts
+        ? `costs: maintenance ${status.memoryMaintenanceCostTotal ?? 0}, retrieval ${status.retrievalCostTotal ?? 0}, exploration ${status.fileExplorationCostTotal ?? 0}, maps ${status.mapCostTotal ?? 0}${status.currency ? ` ${status.currency}` : " (mixed or unknown currency)"}`
+        : "costs: unavailable",
+      `storage: ${status.storageBytes} / warning ${status.storageWarningThresholdBytes}${status.storageWarning ? " (warning)" : ""}`,
+      `tokenCounter: ${status.tokenCounterMode} ${status.tokenCounterVersion}`,
+    ].join(EOL) + EOL
+  )
+}
+
+export function formatLcmActivity(activity: LcmActivityPage) {
+  const lines = [
+    `requests: ${activity.summary.requestCount}`,
+    `tokens: ${activity.summary.totalTokens} (input ${activity.summary.inputTokens}, output ${activity.summary.outputTokens}, cache read ${activity.summary.cacheReadTokens}, cache write ${activity.summary.cacheWriteTokens})`,
+  ]
+  if (activity.summary.costAmount !== undefined) {
+    lines.push(
+      `cost: ${activity.summary.costAmount}${activity.summary.costCurrency ? ` ${activity.summary.costCurrency}` : ""}`,
+    )
+  } else {
+    lines.push(`cost: ${activity.summary.costStatus}`)
+  }
+  for (const item of activity.items) {
+    lines.push(
+      [
+        item.createdAt,
+        item.purpose,
+        item.mode,
+        `${item.totalTokens} tokens`,
+        item.providerID && item.modelID ? `${item.providerID}/${item.modelID}` : undefined,
+        item.maintenanceStatus,
+        item.costAmount !== undefined
+          ? `${item.costAmount}${item.costCurrency ? ` ${item.costCurrency}` : ""}`
+          : item.costStatus,
+      ]
+        .filter(Boolean)
+        .join(" | "),
+    )
+  }
+  return lines.join(EOL) + EOL
+}
+
+function sessionReadOptions<T>(yargs: Argv<T>) {
+  return yargs
+    .option("session", { type: "string", demandOption: true, describe: "session ID" })
+    .option("json", { type: "boolean", default: false, describe: "print JSON output" })
+}
+
+const LcmStatusCommand = cmd({
+  command: "status",
+  describe: "show LCM hard, raw, backlog, storage, and cost metrics",
+  builder: (yargs) => sessionReadOptions(yargs),
+  async handler(args) {
+    await bootstrap(process.cwd(), async () =>
+      withLcm(async () => {
+        const status = await LcmRuntime.getStatus({ sessionID: args.session })
+        process.stdout.write(args.json ? JSON.stringify(status, null, 2) + EOL : formatLcmStatus(status))
+      }),
+    )
+  },
+})
+
+const LcmActivityCommand = cmd({
+  command: "activity",
+  describe: "show paid-token LCM maintenance and tool requests",
+  builder: (yargs) =>
+    sessionReadOptions(yargs).option("limit", {
+      type: "number",
+      default: 100,
+      describe: "maximum activity records",
+    }),
+  async handler(args) {
+    await bootstrap(process.cwd(), async () =>
+      withLcm(async () => {
+        const activity = await LcmRuntime.getActivity({ sessionID: args.session, limit: args.limit })
+        process.stdout.write(args.json ? JSON.stringify(activity, null, 2) + EOL : formatLcmActivity(activity))
+      }),
+    )
+  },
+})
+
 const LcmSettingsShowCommand = cmd({
   command: "show",
   describe: "show LCM conversation-context settings",
@@ -158,6 +262,7 @@ export const LcmSettingsCommand = cmd({
 export const LcmCommand = cmd({
   command: "lcm",
   describe: "manage LCM conversation context",
-  builder: (yargs) => yargs.command(LcmSettingsCommand).demandCommand(),
+  builder: (yargs) =>
+    yargs.command(LcmSettingsCommand).command(LcmStatusCommand).command(LcmActivityCommand).demandCommand(),
   async handler() {},
 })

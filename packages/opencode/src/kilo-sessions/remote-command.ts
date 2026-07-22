@@ -6,6 +6,7 @@ import type { SessionPrompt } from "@/session/prompt"
 import type { Info as SessionInfo } from "@/session/session"
 import { MessageID, type SessionID } from "@/session/schema"
 import { RemoteExit } from "@/kilo-sessions/remote-exit"
+import { Effect } from "effect"
 import z from "zod"
 
 export namespace RemoteCommand {
@@ -164,15 +165,13 @@ export namespace RemoteCommand {
     agent: { default: () => Promise<string> }
     provider: { default: () => Promise<{ providerID: string; modelID: string }> }
     revert: { cleanup: (session: SessionInfo) => Promise<void> }
-    compaction: {
-      create: (input: {
+    memory: {
+      maintain: (input: {
         sessionID: SessionID
         agent: string
         model: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
-        auto: boolean
       }) => Promise<void>
     }
-    prompt: { loop: (sessionID: SessionID) => Promise<void> }
   }
 
   export type Interface = {
@@ -219,16 +218,14 @@ export namespace RemoteCommand {
               ? { providerID: user.info.model.providerID, modelID: user.info.model.modelID }
               : undefined) ??
             (await services.provider.default())
-          await services.compaction.create({
+          await services.memory.maintain({
             sessionID: input.sessionID,
             agent,
             model: {
               providerID: ProviderV2.ID.make(model.providerID),
               modelID: ModelV2.ID.make(model.modelID),
             },
-            auto: false,
           })
-          await services.prompt.loop(input.sessionID)
           return
         }
         await services.command({
@@ -300,22 +297,34 @@ export namespace RemoteCommand {
           await AppRuntime.runPromise(SessionRevert.Service.use((service) => service.cleanup(session)))
         },
       },
-      compaction: {
-        create: async (input) => {
-          const [{ AppRuntime }, { SessionCompaction }] = await Promise.all([
+      memory: {
+        maintain: async (input) => {
+          const [{ AppRuntime }, { LcmRuntime }] = await Promise.all([
             import("@/effect/app-runtime"),
-            import("@/session/compaction"),
+            import("@/session/lcm/runtime"),
           ])
-          await AppRuntime.runPromise(SessionCompaction.Service.use((service) => service.create(input)))
-        },
-      },
-      prompt: {
-        loop: async (sessionID) => {
-          const [{ AppRuntime }, { SessionPrompt }] = await Promise.all([
-            import("@/effect/app-runtime"),
-            import("@/session/prompt"),
-          ])
-          await AppRuntime.runPromise(SessionPrompt.Service.use((service) => service.loop({ sessionID })))
+          await AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const runtime = yield* LcmRuntime.Service
+              yield* runtime.getOrCreateConversation({ sessionID: input.sessionID })
+              yield* runtime.syncFinalizedMessages({ sessionID: input.sessionID })
+              const result = yield* runtime.runManualMaintenance({
+                sessionID: input.sessionID,
+                reason: "manual",
+                blocking: true,
+                renderOptions: {
+                  providerID: input.model.providerID,
+                  modelID: input.model.modelID,
+                  agentName: input.agent,
+                  providerMediaCapability: "unknown",
+                  stripMedia: false,
+                  taskCapabilityClass: "root",
+                  clockPolicy: "runtime_per_preparation",
+                },
+              })
+              if (result.safeError) return yield* Effect.fail(result.safeError)
+            }),
+          )
         },
       },
     })

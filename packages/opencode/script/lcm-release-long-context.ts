@@ -1029,6 +1029,16 @@ async function main() {
       "Inline busy status appears, abort/cancel is respected, and context stays under hard limit or fails closed.",
     ],
     [
+      "old-session-family-continuation",
+      "Open pre-existing root and child sessions, continue each, and capture family/status diagnostics.",
+      "Every trusted old session resolves through the authoritative Kilo session database, builds or reuses one root family tree, and either continues under LCM or returns a stage-specific content-safe diagnostic rather than lcm_family_resolution_failed.",
+    ],
+    [
+      "output-reserve-enforcement",
+      "Continue a long session whose admitted input is near the provider context limit and capture the final request output cap.",
+      "The final provider maxOutputTokens is no larger than the LCM-admitted outputReserve; input does not jump to the provider context maximum and an output-length finish does not invoke legacy or hard-limit input maintenance.",
+    ],
+    [
       "retrieval-off-context",
       "Retrieve content that has fallen out of active context.",
       "Authorized retrieval recovers cited off-context content and denies out-of-scope handles.",
@@ -1048,6 +1058,21 @@ async function main() {
       "cost-status-breakdown",
       "Inspect Memory/Retrieval/File/Map cost and status surfaces.",
       "Cost/status is content-safe, correctly categorized, and does not duplicate `agentic_map` child assistant usage.",
+    ],
+    [
+      "cli-vscode-memory-observability",
+      "For the same session, capture `kilo lcm status --session`, `kilo lcm activity --session`, VSCode Memory settings, prompt export, and the task timeline.",
+      "CLI and VSCode agree on hard/raw/backlog state; paid maintenance, expand-query, exploration, and map requests appear with token/cost evidence; prompt export reports its folder and file count.",
+    ],
+    [
+      "live-tool-matrix-local-qwen",
+      "Using the configured local Qwen provider, demonstrate lcm_grep, lcm_describe, lcm_expand, lcm_expand_query, lcm_read, llm_map, agentic_map, lcm_map_status, and lcm_map_cancel with the required root/child scopes.",
+      "All nine registered LCM tools return their real runtime success or authorized-denial shapes, tree construction is visible in status, and every provider-backed request appears in LCM activity.",
+    ],
+    [
+      "live-tool-matrix-zai",
+      "Repeat the nine-tool matrix through the CLI with the authenticated z.ai subscription and capture content-safe status/activity evidence.",
+      "All nine registered LCM tools use the same trusted family/scope rules through z.ai, provider-backed token activity is recorded, and no legacy compaction path is entered.",
     ],
     [
       "no-legacy-context-management",
@@ -1077,7 +1102,7 @@ async function main() {
     [
       "manual-compact-quarantine",
       "Exercise existing summarize/compact API shapes against passive and LCM-active sessions.",
-      "LCM-active requests fail closed unless explicit LCM maintenance owns the path; passive sessions keep legacy behavior only before activation.",
+      "Every product summarize/compact request delegates to LCM maintenance; passive sessions activate or fail closed, and only explicitly constructed upstream compatibility adapters can reach legacy compaction.",
     ],
     [
       "pre-beta-schema-rebaseline",
@@ -1107,7 +1132,7 @@ async function main() {
     "second-owner-db-locked": ["lcm:db:support", "lcm:activation"],
     "corrupt-pglite-diagnose-rebuild": ["lcm:db:support"],
     "preflight-result-union": ["lcm:activation"],
-    "manual-compact-quarantine": ["lcm:cutover-quarantine"],
+    "manual-compact-quarantine": ["lcm:cutover-quarantine", "lcm:remote-maintenance"],
     "pre-beta-schema-rebaseline": ["lcm:migration:smoke", "lcm:active-context:test"],
     "recursive-session-delete-cleanup": ["lcm:recursive-cleanup"],
     "vscode-inline-status": [

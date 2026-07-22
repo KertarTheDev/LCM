@@ -20,6 +20,8 @@ Sessionless settings routes:
 Session-scoped routes:
 
 - `GET /session/:sessionID/lcm/capabilities`
+- `GET /session/:sessionID/lcm/status`
+- `GET /session/:sessionID/lcm/activity?limit=<count>`
 - `GET /session/:sessionID/lcm/settings`
 - `PATCH /session/:sessionID/lcm/settings`
 - `POST /session/:sessionID/lcm/maintenance/cancel`
@@ -69,20 +71,31 @@ Unsupported fields, nulls, invalid values, and mismatched project/workspace/sess
 - `kilo lcm settings show`
 - `kilo lcm settings set --strategy upward|dolt`
 - `kilo lcm settings set --storage-warning-threshold-bytes <bytes>`
+- `kilo lcm status --session <sessionID> [--json]`
+- `kilo lcm activity --session <sessionID> [--limit <count>] [--json]`
 
-In the interactive TUI, `/lcm` opens the LCM conversation-context dialog and `/lcm-settings` is an alias. Upstream `/memory` remains the project-memory command. The two namespaces are intentionally complementary.
+`status` reports hard fill, raw lane, soft backlog, fresh/unconsumed raw counts, output reserve, storage, and token-counter provenance. `activity` reports the bounded paid-token request ledger for maintenance, expand-query retrieval, file exploration, and LLM maps, including cost status without double-counting cached input.
+
+In the interactive TUI, `/lcm` opens the LCM conversation-context dialog and `/lcm-settings` is an alias. With a session open it shows hard/raw/backlog and paid-token totals and offers runtime-owned diagnose, dry-run lock recovery/rebuild, cancel, and prompt-export actions. Upstream `/memory` remains the project-memory command. The two namespaces are intentionally complementary.
 
 ## VSCode Bridge
 
-`packages/kilo-vscode/src/kilo-provider/lcm-settings.ts` is a thin transport bridge. It handles only:
+`packages/kilo-vscode/src/kilo-provider/lcm-settings.ts` is a thin transport bridge. It handles:
 
 - `requestLcmSettings`
 - `updateLcmSettings`
+- `requestLcmStatus`
+- `requestLcmActivity`
+- `cancelLcmMaintenance`
+- `diagnoseLcmDb`
+- `recoverLcmDbLock`
+- `rebuildLcmDb`
+- `exportLcmPrompts`
 - the corresponding `.result` responses
 
 When a local session is selected it calls the generated session-scoped SDK methods; otherwise it calls the generated sessionless settings methods. Directory/workspace selectors are transport context only. Runtime safe errors are validated before forwarding, and bridge-generated fallbacks use the canonical safe-error message for their template key.
 
-The extension host does not open, migrate, inspect, repair, or delete the LCM PGlite database. DB support actions remain available through the runtime-owned public routes for CLI/support consumers, but are not duplicated as extension-host storage logic.
+The extension host does not open, migrate, inspect, repair, or delete the LCM PGlite database. Every DB support or prompt-export action remains runtime-owned behind the generated SDK. Request IDs prevent stale settings/timeline responses from a previous session from replacing current state.
 
 ## VSCode Settings UI
 
@@ -92,11 +105,19 @@ The extension host does not open, migrate, inspect, repair, or delete the LCM PG
 - storage warning threshold editing;
 - current storage size;
 - optional lifecycle/DB status;
+- session hard/active tokens, raw-lane pressure, and eligible soft backlog;
+- bounded paid-token request counts/totals and the latest request purpose;
+- content-safe diagnose, dry-run lock recovery/rebuild, and deferred-maintenance cancellation;
+- ready-session `Export compaction prompts`, which reports the runtime-returned folder, file count, and first warning;
 - explicit refresh and content-safe errors.
 
 `ContextTab.tsx` places this LCM conversation-context card before the retained upstream project-memory section. The upstream memory section and its indexing controls remain owned by Kilo project memory. Misleading legacy compaction/prune settings are not shown as the LCM context-management controls.
 
 There is no LCM enable/disable switch, raw memory browser, extension-host DB repair, or LCM-only deletion control. Normal session deletion remains the product cleanup boundary.
+
+`TaskTimeline.tsx` requests the same bounded session activity projection and timestamp-merges maintenance, expand-query, exploration, and map request bars with ordinary transcript bars. LCM bars expose content-safe purpose/token/provider/cost/status details, but have no transcript scroll target. Both the settings card and timeline correlate response IDs so an out-of-order request for a previously focused session is ignored.
+
+Routine extension-host bundled-CLI startup/stdout and SSE connection/heartbeat traces are gated behind the restored `kilo-code.new.debugBackendLogs` preference or `KILO_VSCODE_DEBUG_LOGS=1`. Warnings and errors remain visible without debug logging. This preference controls diagnostic logs only; prompt export is the separate explicit content-bearing local debugging action.
 
 ## Upstream Compatibility
 

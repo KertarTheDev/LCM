@@ -66,6 +66,7 @@ export type StreamInput = {
   // kilocode_change start - authoritative LCM request evidence and exact post-transform validation callback
   lcmProviderProtocol?: {
     readonly preparedProviderPayload: LcmPreparedProviderPayload
+    readonly maxOutputTokens: number
     readonly recordFinalProviderValidation: (input: {
       providerValidatorHash: string
       providerFamily: LcmRenderedSpanProviderFamily
@@ -159,7 +160,8 @@ const live: Layer.Layer<
         KiloSessionOverflow.enabled({ cfg, model: input.model })
       const cap = KiloLLM.needsEstimate({ model: input.model, configured: base.params.maxOutputTokens })
       const usage = cap || preflight ? KiloSessionOverflow.measure({ messages: estimated, tools }) : undefined
-      const maxOutputTokens = KiloLLM.capOutputTokens({
+      // kilocode_change start - enforce the output reserve admitted by LCM at the final provider call
+      const availableOutputTokens = KiloLLM.capOutputTokens({
         model: input.model,
         messages: estimated,
         tools,
@@ -167,6 +169,11 @@ const live: Layer.Layer<
         usage,
         reported: input.reportedContextTokens,
       })
+      const maxOutputTokens = KiloLLM.applyLcmOutputReserve({
+        available: availableOutputTokens,
+        reserve: input.lcmProviderProtocol?.maxOutputTokens,
+      })
+      // kilocode_change end
       if (
         preflight &&
         usage &&

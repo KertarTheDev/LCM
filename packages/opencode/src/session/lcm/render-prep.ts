@@ -464,7 +464,12 @@ export function prepareKiloMessageVisibility(input: { sessionID: SessionID; mess
   visibility: LcmMessageVisibilityInput
 } {
   const beforeIDs = input.messages.map((message) => message.info.id)
-  const scoped = KiloSessionPromptQueue.scope(input.sessionID, input.messages)
+  const scoped = KiloSessionPromptQueue.scope(input.sessionID, input.messages).flatMap((message) => {
+    const parts = message.parts.filter((part) => part.type !== "compaction")
+    if (parts.length === message.parts.length) return [message]
+    if (parts.length === 0) return []
+    return [{ ...message, parts }]
+  })
   const visibleMessageIDs = scoped.map((message) => message.info.id)
   const visible = new Set(visibleMessageIDs)
   const hiddenMessageIDs = beforeIDs.filter((id) => !visible.has(id))
