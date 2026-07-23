@@ -45,6 +45,8 @@ function renderResult(result: LcmMapResult | LcmToolErrorResult) {
             totalItems: result.totalItems,
             completedItems: result.completedItems,
             failedItems: result.failedItems,
+            retriedItems: result.retriedItems,
+            effectiveWorkers: result.effectiveWorkers,
             retryAfterMs: result.retryAfterMs,
           }
         : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),

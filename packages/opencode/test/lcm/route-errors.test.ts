@@ -20,6 +20,7 @@ const EXPECTED_STATUS_BY_CODE: Record<LcmSafeErrorCode, number> = {
   db_corrupt: 503,
   settings_unavailable: 503,
   provider_unavailable: 503,
+  provider_invalid_response: 502,
   hard_limit_unresolved: 503,
   provider_capacity_deferred: 503,
   timeout: 504,

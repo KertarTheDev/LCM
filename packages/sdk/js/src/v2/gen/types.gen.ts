@@ -2273,6 +2273,7 @@ export type LcmSafeError = {
     | "stale_source"
     | "permission_denied"
     | "provider_unavailable"
+    | "provider_invalid_response"
     | "hard_limit_unresolved"
     | "legacy_read_only"
     | "provider_capacity_deferred"
@@ -2288,6 +2289,7 @@ export type LcmSafeError = {
     | "lcm.hard_limit.unresolved"
     | "lcm.provider_capacity.deferred"
     | "lcm.provider.unavailable"
+    | "lcm.provider.invalid_response"
   safeParams: {
     [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
   }
@@ -3062,6 +3064,7 @@ export type LcmActivityItem = {
     | "stale_source"
     | "permission_denied"
     | "provider_unavailable"
+    | "provider_invalid_response"
     | "hard_limit_unresolved"
     | "legacy_read_only"
     | "provider_capacity_deferred"
@@ -3139,6 +3142,7 @@ export type LcmDbDiagnosticCheck = {
     | "stale_source"
     | "permission_denied"
     | "provider_unavailable"
+    | "provider_invalid_response"
     | "hard_limit_unresolved"
     | "legacy_read_only"
     | "provider_capacity_deferred"
@@ -5011,6 +5015,7 @@ export type EventLcmDbStatus = {
           | "stale_source"
           | "permission_denied"
           | "provider_unavailable"
+          | "provider_invalid_response"
           | "hard_limit_unresolved"
           | "legacy_read_only"
           | "provider_capacity_deferred"
@@ -5026,6 +5031,7 @@ export type EventLcmDbStatus = {
           | "lcm.hard_limit.unresolved"
           | "lcm.provider_capacity.deferred"
           | "lcm.provider.unavailable"
+          | "lcm.provider.invalid_response"
         safeParams: {
           [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
         }
@@ -5186,6 +5192,7 @@ export type EventLcmFileStatus = {
           | "stale_source"
           | "permission_denied"
           | "provider_unavailable"
+          | "provider_invalid_response"
           | "hard_limit_unresolved"
           | "legacy_read_only"
           | "provider_capacity_deferred"
@@ -5201,6 +5208,7 @@ export type EventLcmFileStatus = {
           | "lcm.hard_limit.unresolved"
           | "lcm.provider_capacity.deferred"
           | "lcm.provider.unavailable"
+          | "lcm.provider.invalid_response"
         safeParams: {
           [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
         }
@@ -5314,6 +5322,7 @@ export type EventLcmMaintenanceStarted = {
           | "stale_source"
           | "permission_denied"
           | "provider_unavailable"
+          | "provider_invalid_response"
           | "hard_limit_unresolved"
           | "legacy_read_only"
           | "provider_capacity_deferred"
@@ -5329,6 +5338,7 @@ export type EventLcmMaintenanceStarted = {
           | "lcm.hard_limit.unresolved"
           | "lcm.provider_capacity.deferred"
           | "lcm.provider.unavailable"
+          | "lcm.provider.invalid_response"
         safeParams: {
           [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
         }
@@ -5442,6 +5452,7 @@ export type EventLcmMaintenanceEnded = {
           | "stale_source"
           | "permission_denied"
           | "provider_unavailable"
+          | "provider_invalid_response"
           | "hard_limit_unresolved"
           | "legacy_read_only"
           | "provider_capacity_deferred"
@@ -5457,6 +5468,7 @@ export type EventLcmMaintenanceEnded = {
           | "lcm.hard_limit.unresolved"
           | "lcm.provider_capacity.deferred"
           | "lcm.provider.unavailable"
+          | "lcm.provider.invalid_response"
         safeParams: {
           [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
         }
@@ -5570,6 +5582,7 @@ export type EventLcmMaintenanceFailed = {
           | "stale_source"
           | "permission_denied"
           | "provider_unavailable"
+          | "provider_invalid_response"
           | "hard_limit_unresolved"
           | "legacy_read_only"
           | "provider_capacity_deferred"
@@ -5585,6 +5598,7 @@ export type EventLcmMaintenanceFailed = {
           | "lcm.hard_limit.unresolved"
           | "lcm.provider_capacity.deferred"
           | "lcm.provider.unavailable"
+          | "lcm.provider.invalid_response"
         safeParams: {
           [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN" | boolean
         }
@@ -8129,6 +8143,7 @@ export type EventLcmDbStatus1 = {
           | "stale_source"
           | "permission_denied"
           | "provider_unavailable"
+          | "provider_invalid_response"
           | "hard_limit_unresolved"
           | "legacy_read_only"
           | "provider_capacity_deferred"
@@ -8144,6 +8159,7 @@ export type EventLcmDbStatus1 = {
           | "lcm.hard_limit.unresolved"
           | "lcm.provider_capacity.deferred"
           | "lcm.provider.unavailable"
+          | "lcm.provider.invalid_response"
         safeParams: {
           [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
         }
@@ -8291,6 +8307,7 @@ export type EventLcmFileStatus1 = {
           | "stale_source"
           | "permission_denied"
           | "provider_unavailable"
+          | "provider_invalid_response"
           | "hard_limit_unresolved"
           | "legacy_read_only"
           | "provider_capacity_deferred"
@@ -8306,6 +8323,7 @@ export type EventLcmFileStatus1 = {
           | "lcm.hard_limit.unresolved"
           | "lcm.provider_capacity.deferred"
           | "lcm.provider.unavailable"
+          | "lcm.provider.invalid_response"
         safeParams: {
           [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
         }
@@ -8419,6 +8437,7 @@ export type EventLcmMaintenanceStarted1 = {
           | "stale_source"
           | "permission_denied"
           | "provider_unavailable"
+          | "provider_invalid_response"
           | "hard_limit_unresolved"
           | "legacy_read_only"
           | "provider_capacity_deferred"
@@ -8434,6 +8453,7 @@ export type EventLcmMaintenanceStarted1 = {
           | "lcm.hard_limit.unresolved"
           | "lcm.provider_capacity.deferred"
           | "lcm.provider.unavailable"
+          | "lcm.provider.invalid_response"
         safeParams: {
           [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
         }
@@ -8547,6 +8567,7 @@ export type EventLcmMaintenanceEnded1 = {
           | "stale_source"
           | "permission_denied"
           | "provider_unavailable"
+          | "provider_invalid_response"
           | "hard_limit_unresolved"
           | "legacy_read_only"
           | "provider_capacity_deferred"
@@ -8562,6 +8583,7 @@ export type EventLcmMaintenanceEnded1 = {
           | "lcm.hard_limit.unresolved"
           | "lcm.provider_capacity.deferred"
           | "lcm.provider.unavailable"
+          | "lcm.provider.invalid_response"
         safeParams: {
           [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
         }
@@ -8675,6 +8697,7 @@ export type EventLcmMaintenanceFailed1 = {
           | "stale_source"
           | "permission_denied"
           | "provider_unavailable"
+          | "provider_invalid_response"
           | "hard_limit_unresolved"
           | "legacy_read_only"
           | "provider_capacity_deferred"
@@ -8690,6 +8713,7 @@ export type EventLcmMaintenanceFailed1 = {
           | "lcm.hard_limit.unresolved"
           | "lcm.provider_capacity.deferred"
           | "lcm.provider.unavailable"
+          | "lcm.provider.invalid_response"
         safeParams: {
           [key: string]: string | number | "NaN" | "Infinity" | "-Infinity" | boolean
         }

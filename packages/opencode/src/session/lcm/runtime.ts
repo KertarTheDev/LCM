@@ -227,6 +227,7 @@ import {
   mergeLcmProviderOptions,
   pending,
   preflightFallbackLifecycleState,
+  providerInvalidResponse,
   providerUsageFromGeneration,
   recoveryMissing,
   thresholdEventFields,
@@ -2338,6 +2339,16 @@ export const layer = Layer.effect(
         }),
       )
       if (!resolvedResult.ok) return { ok: false, error: resolvedResult.error } satisfies LcmToolErrorResult
+      if (!resolvedResult.resolved.model.capabilities.toolcall) {
+        return {
+          ok: false,
+          error: providerInvalidResponse("lcm_agentic_map_tool_call_unsupported", {
+            operationID,
+            conversationID: scope.conversationID,
+            retryable: false,
+          }),
+        } satisfies LcmToolErrorResult
+      }
       const workers = yield* Effect.promise(() =>
         resolveRuntimeMapWorkers({
           toolKind: "agentic_map",

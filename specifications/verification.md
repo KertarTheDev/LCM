@@ -123,7 +123,7 @@ Normalize live-audit results by the nine tool identities below, not by the numbe
 | `lcm_expand_query` | Root session returns a cited answer or the specified successful no-answer shape; activity records provider usage. |
 | `lcm_read` | Root denial occurs before bytes/provenance access; a trusted read-capable child reads a bounded authorized file window. |
 | `llm_map` | An authorized JSONL run is created and returns a durable `map_...` status. |
-| `agentic_map` | An authorized read-only or write-capable child run is created without duplicate LCM usage accounting; its prompt uses the persisted `map_child` capability, propagates terminal child LCM errors before JSON validation, defers transient provider capacity without consuming retries, and does not retry permanent child limits. |
+| `agentic_map` | An authorized read-only or write-capable child run uses the trusted `StructuredOutput` finalizer after any tool work, keeps tagged item/schema content in the user channel, reports `effectiveWorkers`, and completes schema-valid output. A local-provider run requested with two workers must report one effective worker; terminal child LCM/provider errors must retain their classifications, output-length/ignored warning text must not be parsed, retryable invalid responses must consume only the durable item retry budget, and transient capacity deferral must consume no retry. |
 | `lcm_map_status` | Polling returns the latest authorized run counts/output handle without item content. |
 | `lcm_map_cancel` | A deliberately still-running map accepts cancellation and later status reports the terminal or cancel-requested state. |
 

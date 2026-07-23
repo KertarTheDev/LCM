@@ -16,6 +16,8 @@ export function lcmRouteHttpStatus(error: LcmSafeError) {
       return 403
     case "not_found":
       return 404
+    case "provider_invalid_response":
+      return 502
     case "db_locked":
     case "recovery_required":
     case "recovery_failed":

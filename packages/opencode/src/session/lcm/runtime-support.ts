@@ -98,6 +98,29 @@ export function localProviderBusy(diagnosticCode: string, input?: { localProvide
   })
 }
 
+export function providerInvalidResponse(
+  diagnosticCode: string,
+  input?: {
+    operationID?: OperationID
+    conversationID?: ConversationID
+    retryable?: boolean
+  },
+) {
+  const retryable = input?.retryable ?? true
+  return createLcmSafeError({
+    code: "provider_invalid_response",
+    templateKey: "lcm.provider.invalid_response",
+    safeParams: {
+      ...(input?.operationID ? { operationID: input.operationID } : {}),
+      ...(input?.conversationID ? { conversationID: input.conversationID } : {}),
+      retryable,
+      ...(retryable ? { action: "retry" as const } : {}),
+    },
+    retryable,
+    diagnosticCode,
+  })
+}
+
 export const LCM_DEFERRED_MAINTENANCE_CLOSE_GRACE_MS = 5_000
 
 export function legacyReadOnly(input: { operationID: OperationID; conversationID?: ConversationID }) {

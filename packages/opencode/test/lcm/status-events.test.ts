@@ -82,6 +82,12 @@ test("safe message templates are canonical and action mirrors safeParams", () =>
       retryable: false,
     },
     {
+      code: "provider_invalid_response",
+      templateKey: "lcm.provider.invalid_response",
+      safeParams: { retryable: true, action: "retry" },
+      retryable: true,
+    },
+    {
       code: "missing_source",
       templateKey: "lcm.recovery.missing_source",
       safeParams: { action: "repeat_input" },

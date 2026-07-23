@@ -41,6 +41,8 @@ function lcmPreflightFallbackAction(error: LcmSafeError): { action: LcmSafeActio
     case "provider_capacity_deferred":
     case "timeout":
       return { action: "retry", retryable: true }
+    case "provider_invalid_response":
+      return error.retryable ? { action: "retry", retryable: true } : { action: "contact_support", retryable: false }
     case "missing_source":
     case "stale_source":
     case "permission_denied":

@@ -132,6 +132,7 @@ export type LcmSafeErrorCode =
   | "stale_source"
   | "permission_denied"
   | "provider_unavailable"
+  | "provider_invalid_response"
   | "hard_limit_unresolved"
   | "legacy_read_only"
   | "provider_capacity_deferred"
@@ -154,6 +155,7 @@ export const LCM_SAFE_ERROR_CODES = [
   "stale_source",
   "permission_denied",
   "provider_unavailable",
+  "provider_invalid_response",
   "hard_limit_unresolved",
   "legacy_read_only",
   "provider_capacity_deferred",
@@ -250,6 +252,12 @@ export interface LcmSafeParamsByTemplate {
     operationID?: OperationID
     providerEndpointKeyHash?: string
     capacityClass?: LcmProviderCapacityClass
+    retryable: boolean
+    action?: LcmSafeAction
+  }
+  "lcm.provider.invalid_response": {
+    operationID?: OperationID
+    conversationID?: ConversationID
     retryable: boolean
     action?: LcmSafeAction
   }
@@ -1542,6 +1550,7 @@ export interface LcmMapResult {
   status: LcmMapRunStatus
   inputFileID: LcmFileID
   outputFileID?: LcmFileID
+  effectiveWorkers: number
   totalItems: number
   completedItems: number
   failedItems: number
@@ -1564,6 +1573,8 @@ export const LCM_SAFE_MESSAGE_TEMPLATES = {
     "Memory could not be reduced enough for this response. Start a new thread or repeat the needed input.",
   "lcm.provider_capacity.deferred": "Local model capacity is busy. The memory operation will retry later.",
   "lcm.provider.unavailable": "The model provider is not available. Retry after checking the provider connection.",
+  "lcm.provider.invalid_response":
+    "The model did not return a usable structured result. Retry or choose a compatible model.",
 } satisfies Record<LcmSafeMessageTemplateKey, string>
 
 export function createLcmSafeError<TTemplateKey extends LcmSafeMessageTemplateKey>(

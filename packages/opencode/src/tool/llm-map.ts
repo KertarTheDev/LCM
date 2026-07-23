@@ -31,7 +31,7 @@ const parameters = Schema.Struct({
   prompt: Schema.String.annotate({ description: "Instruction applied independently to each JSONL input item." }),
   model: Schema.optional(modelSelection).annotate({ description: "Model selector. Defaults to the current model." }),
   workers: Schema.optional(PositiveInt).annotate({
-    description: "Worker count. Defaults to 16 and may not exceed 16.",
+    description: "Requested worker count. Defaults to 16, may not exceed 16, and may be lowered for provider capacity.",
   }),
   maxRetries: Schema.optional(NonNegativeInt).annotate({
     description: "Retries after the initial attempt. Defaults to 2.",
@@ -101,6 +101,8 @@ function renderResult(result: LcmMapResult | LcmToolErrorResult) {
             totalItems: result.totalItems,
             completedItems: result.completedItems,
             failedItems: result.failedItems,
+            retriedItems: result.retriedItems,
+            effectiveWorkers: result.effectiveWorkers,
             retryAfterMs: result.retryAfterMs,
           }
         : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),

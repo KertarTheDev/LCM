@@ -105,3 +105,31 @@ test("LCM preflight preserves explicit safe actions", () => {
 
   expect(lcmPreflightRecoverableSafeError(safeError)).toBe(safeError)
 })
+
+test("LCM preflight gives invalid provider responses retry or support guidance", () => {
+  const retryable = createLcmSafeError({
+    code: "provider_invalid_response",
+    templateKey: "lcm.provider.invalid_response",
+    safeParams: { retryable: true },
+    retryable: true,
+    diagnosticCode: "lcm_map_item_output_json_invalid",
+  })
+  const permanent = createLcmSafeError({
+    code: "provider_invalid_response",
+    templateKey: "lcm.provider.invalid_response",
+    safeParams: { retryable: false },
+    retryable: false,
+    diagnosticCode: "lcm_agentic_map_tool_call_unsupported",
+  })
+
+  expect(lcmPreflightRecoverableSafeError(retryable)).toMatchObject({
+    retryable: true,
+    action: "retry",
+    safeParams: { retryable: true, action: "retry" },
+  })
+  expect(lcmPreflightRecoverableSafeError(permanent)).toMatchObject({
+    retryable: false,
+    action: "contact_support",
+    safeParams: { retryable: false, action: "contact_support" },
+  })
+})

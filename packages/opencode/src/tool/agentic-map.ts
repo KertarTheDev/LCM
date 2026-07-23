@@ -1,12 +1,16 @@
 // kilocode_change - new file
 import { NonNegativeInt, PositiveInt } from "@opencode-ai/core/schema"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Effect, Option, Schema } from "effect"
 import { Agent } from "../agent/agent"
+import { Provider } from "../provider/provider"
+import { lcmProviderCapacityInputFromModel, lcmProviderCapacityLane } from "../session/lcm/provider-capacity"
 import { ModelID, ProviderID } from "../session/lcm/provider-ids"
 import { Session } from "../session/session"
 import { MessageID } from "../session/schema"
 import { LCM_MAP_TOOL_DESCRIPTIONS, type AgenticMapChildRunner } from "../session/lcm/map"
 import type { AgenticMapInput, LcmMapResult, LcmToolErrorResult } from "../session/lcm/types"
+import { canonicalJson } from "../session/lcm/validators"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { lcmToolWrapperError } from "./lcm-tool-error"
 import type { TaskPromptOps } from "./task"
@@ -36,13 +40,52 @@ const parameters = Schema.Struct({
   prompt: Schema.String.annotate({ description: "Instruction applied independently to each JSONL input item." }),
   mode: Schema.Literals(["read_only", "write_capable"]).annotate({ description: "Child-session capability mode." }),
   model: Schema.optional(modelSelection).annotate({ description: "Model selector. Defaults to the current model." }),
-  workers: Schema.optional(PositiveInt).annotate({ description: "Worker count. Defaults to 8 and may not exceed 8." }),
+  workers: Schema.optional(PositiveInt).annotate({
+    description: "Requested worker count. Defaults to 8, may not exceed 8, and may be lowered for provider capacity.",
+  }),
   maxRetries: Schema.optional(NonNegativeInt).annotate({
     description: "Retries after the initial attempt. Defaults to 2.",
   }),
 })
 
 const READ_ONLY_DENIED_TOOLS = ["edit", "write", "apply_patch", "multiedit", "bash", "task", "todowrite"] as const
+
+export const AGENTIC_MAP_OUTPUT_FORMAT = {
+  type: "json_schema",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      output: {
+        description: "The final JSON value for this map item.",
+      },
+    },
+    required: ["output"],
+  },
+  retryCount: 0,
+} as const
+
+export const AGENTIC_MAP_FINALIZER_SYSTEM_INSTRUCTION = [
+  "This is an agentic map item. Use authorized tools as needed before finalizing.",
+  'When the item is complete, call StructuredOutput exactly once with the final schema-conforming JSON value in the "output" property.',
+  "Do not emit the final result as assistant prose unless the provider cannot submit the StructuredOutput call.",
+].join("\n")
+
+export function agenticMapChildPromptBoundary(request: { readonly system: string; readonly user: string }) {
+  return {
+    user: request.user,
+    system: [request.system, AGENTIC_MAP_FINALIZER_SYSTEM_INSTRUCTION].join("\n\n"),
+    format: AGENTIC_MAP_OUTPUT_FORMAT,
+  }
+}
+
+export class AgenticMapChildOutputError extends Error {
+  override readonly name = "AgenticMapChildOutputError"
+
+  constructor(readonly diagnosticCode: string) {
+    super(diagnosticCode)
+  }
+}
 
 type RuntimeAgenticMap = (
   input: {
@@ -56,11 +99,48 @@ type RuntimeAgenticMap = (
   } & AgenticMapInput,
 ) => Effect.Effect<LcmMapResult | LcmToolErrorResult>
 
+function visibleChildText(result: SessionV1.WithParts) {
+  return result.parts.findLast(
+    (item) => item.type === "text" && !item.ignored && !item.synthetic && item.text.trim().length > 0,
+  )?.text
+}
+
+function structuredOutputError(error: unknown) {
+  return SessionV1.StructuredOutputError.isInstance(error)
+}
+
 export function agenticMapChildOutput(result: SessionV1.WithParts) {
-  if (result.info.role === "assistant" && result.info.error) throw result.info.error
-  return {
-    text: result.parts.findLast((item) => item.type === "text")?.text ?? "",
+  if (result.info.role !== "assistant") {
+    throw new AgenticMapChildOutputError("lcm_map_item_child_result_invalid")
   }
+
+  if (result.info.finish === "length") {
+    throw new AgenticMapChildOutputError("lcm_map_item_child_output_length")
+  }
+  if (result.info.error && !structuredOutputError(result.info.error)) throw result.info.error
+  if (!result.info.finish || result.info.finish === "unknown" || result.info.finish === "error") {
+    throw new AgenticMapChildOutputError("lcm_map_item_child_finish_unknown")
+  }
+
+  const fallback = result.info.finish === "stop" ? visibleChildText(result) : undefined
+  if (result.info.structured !== undefined) {
+    const structured = result.info.structured
+    const validEnvelope =
+      typeof structured === "object" &&
+      structured !== null &&
+      !Array.isArray(structured) &&
+      Object.hasOwn(structured, "output") &&
+      Object.keys(structured).every((key) => key === "output") &&
+      (structured as { output?: unknown }).output !== undefined
+    if (!validEnvelope) {
+      if (fallback) return { text: fallback }
+      throw new AgenticMapChildOutputError("lcm_map_item_output_wrapper_invalid")
+    }
+    return { text: canonicalJson((structured as { output: unknown }).output) }
+  }
+
+  if (fallback) return { text: fallback }
+  throw new AgenticMapChildOutputError("lcm_map_item_structured_output_missing")
 }
 
 export const AgenticMapTool = Tool.define(
@@ -68,6 +148,7 @@ export const AgenticMapTool = Tool.define(
   Effect.gen(function* () {
     const sessions = yield* Session.Service
     const agents = yield* Agent.Service
+    const provider = yield* Provider.Service
 
     return {
       description: LCM_MAP_TOOL_DESCRIPTIONS.agentic_map,
@@ -88,6 +169,22 @@ export const AgenticMapTool = Tool.define(
           const childRunner: AgenticMapChildRunner = (itemInput) =>
             Effect.runPromise(
               Effect.gen(function* () {
+                const childModel = yield* provider.getModel(
+                  ProviderID.make(itemInput.modelSelection.providerID),
+                  ModelID.make(itemInput.modelSelection.modelID),
+                )
+                const providerInfo = yield* provider
+                  .getProvider(childModel.providerID)
+                  .pipe(Effect.catch(() => Effect.succeed(undefined)))
+                const capacityLane = lcmProviderCapacityLane(
+                  lcmProviderCapacityInputFromModel({
+                    model: childModel,
+                    priority: "background",
+                    ...(providerInfo ? { provider: providerInfo } : {}),
+                  }),
+                )
+                const localProviderCapacityKey =
+                  capacityLane.capacityClass === "remote_or_unknown" ? undefined : capacityLane.key
                 const title = `LCM map ${itemInput.mapID} item ${itemInput.itemIndex}`
                 const existing = (yield* sessions.children(ctx.sessionID)).find((child) => child.title === title)
                 const childPermission = [
@@ -127,12 +224,14 @@ export const AgenticMapTool = Tool.define(
                   projectID: childScope.projectID,
                   ...(childScope.workspaceID ? { workspaceID: childScope.workspaceID } : {}),
                   capabilityClass: "map_child",
+                  ...(localProviderCapacityKey ? { localProviderCapacityKey } : {}),
                 })
 
                 const cancel = () => ops.cancel(childSession.id)
                 itemInput.abortSignal?.addEventListener("abort", cancel, { once: true })
                 try {
-                  const parts = yield* ops.resolvePromptParts(itemInput.prompt)
+                  const boundary = agenticMapChildPromptBoundary(itemInput.request)
+                  const parts = yield* ops.resolvePromptParts(boundary.user)
                   const result = yield* ops.prompt({
                     messageID: MessageID.ascending(),
                     sessionID: childSession.id,
@@ -146,6 +245,8 @@ export const AgenticMapTool = Tool.define(
                         ? Object.fromEntries(READ_ONLY_DENIED_TOOLS.map((tool) => [tool, false]))
                         : undefined,
                     parts,
+                    system: boundary.system,
+                    format: boundary.format,
                   })
                   return agenticMapChildOutput(result)
                 } finally {
@@ -197,6 +298,8 @@ function renderResult(result: LcmMapResult | LcmToolErrorResult) {
             totalItems: result.totalItems,
             completedItems: result.completedItems,
             failedItems: result.failedItems,
+            retriedItems: result.retriedItems,
+            effectiveWorkers: result.effectiveWorkers,
             retryAfterMs: result.retryAfterMs,
           }
         : { code: result.error.code, diagnosticCode: result.error.diagnosticCode }),

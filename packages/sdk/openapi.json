@@ -31239,6 +31239,7 @@
               "stale_source",
               "permission_denied",
               "provider_unavailable",
+              "provider_invalid_response",
               "hard_limit_unresolved",
               "legacy_read_only",
               "provider_capacity_deferred"
@@ -31257,7 +31258,8 @@
               "lcm.file.stale",
               "lcm.hard_limit.unresolved",
               "lcm.provider_capacity.deferred",
-              "lcm.provider.unavailable"
+              "lcm.provider.unavailable",
+              "lcm.provider.invalid_response"
             ]
           },
           "safeParams": {
@@ -33866,6 +33868,7 @@
               "stale_source",
               "permission_denied",
               "provider_unavailable",
+              "provider_invalid_response",
               "hard_limit_unresolved",
               "legacy_read_only",
               "provider_capacity_deferred"
@@ -39538,6 +39541,7 @@
                           "stale_source",
                           "permission_denied",
                           "provider_unavailable",
+                          "provider_invalid_response",
                           "hard_limit_unresolved",
                           "legacy_read_only",
                           "provider_capacity_deferred"
@@ -39556,7 +39560,8 @@
                           "lcm.file.stale",
                           "lcm.hard_limit.unresolved",
                           "lcm.provider_capacity.deferred",
-                          "lcm.provider.unavailable"
+                          "lcm.provider.unavailable",
+                          "lcm.provider.invalid_response"
                         ]
                       },
                       "safeParams": {
@@ -41275,6 +41280,7 @@
                           "stale_source",
                           "permission_denied",
                           "provider_unavailable",
+                          "provider_invalid_response",
                           "hard_limit_unresolved",
                           "legacy_read_only",
                           "provider_capacity_deferred"
@@ -41293,7 +41299,8 @@
                           "lcm.file.stale",
                           "lcm.hard_limit.unresolved",
                           "lcm.provider_capacity.deferred",
-                          "lcm.provider.unavailable"
+                          "lcm.provider.unavailable",
+                          "lcm.provider.invalid_response"
                         ]
                       },
                       "safeParams": {
@@ -42155,6 +42162,7 @@
                           "stale_source",
                           "permission_denied",
                           "provider_unavailable",
+                          "provider_invalid_response",
                           "hard_limit_unresolved",
                           "legacy_read_only",
                           "provider_capacity_deferred"
@@ -42173,7 +42181,8 @@
                           "lcm.file.stale",
                           "lcm.hard_limit.unresolved",
                           "lcm.provider_capacity.deferred",
-                          "lcm.provider.unavailable"
+                          "lcm.provider.unavailable",
+                          "lcm.provider.invalid_response"
                         ]
                       },
                       "safeParams": {
@@ -43027,6 +43036,7 @@
                           "stale_source",
                           "permission_denied",
                           "provider_unavailable",
+                          "provider_invalid_response",
                           "hard_limit_unresolved",
                           "legacy_read_only",
                           "provider_capacity_deferred"
@@ -43045,7 +43055,8 @@
                           "lcm.file.stale",
                           "lcm.hard_limit.unresolved",
                           "lcm.provider_capacity.deferred",
-                          "lcm.provider.unavailable"
+                          "lcm.provider.unavailable",
+                          "lcm.provider.invalid_response"
                         ]
                       },
                       "safeParams": {
@@ -43899,6 +43910,7 @@
                           "stale_source",
                           "permission_denied",
                           "provider_unavailable",
+                          "provider_invalid_response",
                           "hard_limit_unresolved",
                           "legacy_read_only",
                           "provider_capacity_deferred"
@@ -43917,7 +43929,8 @@
                           "lcm.file.stale",
                           "lcm.hard_limit.unresolved",
                           "lcm.provider_capacity.deferred",
-                          "lcm.provider.unavailable"
+                          "lcm.provider.unavailable",
+                          "lcm.provider.invalid_response"
                         ]
                       },
                       "safeParams": {
@@ -52661,6 +52674,7 @@
                           "stale_source",
                           "permission_denied",
                           "provider_unavailable",
+                          "provider_invalid_response",
                           "hard_limit_unresolved",
                           "legacy_read_only",
                           "provider_capacity_deferred"
@@ -52679,7 +52693,8 @@
                           "lcm.file.stale",
                           "lcm.hard_limit.unresolved",
                           "lcm.provider_capacity.deferred",
-                          "lcm.provider.unavailable"
+                          "lcm.provider.unavailable",
+                          "lcm.provider.invalid_response"
                         ]
                       },
                       "safeParams": {
@@ -54174,6 +54189,7 @@
                           "stale_source",
                           "permission_denied",
                           "provider_unavailable",
+                          "provider_invalid_response",
                           "hard_limit_unresolved",
                           "legacy_read_only",
                           "provider_capacity_deferred"
@@ -54192,7 +54208,8 @@
                           "lcm.file.stale",
                           "lcm.hard_limit.unresolved",
                           "lcm.provider_capacity.deferred",
-                          "lcm.provider.unavailable"
+                          "lcm.provider.unavailable",
+                          "lcm.provider.invalid_response"
                         ]
                       },
                       "safeParams": {
@@ -54938,6 +54955,7 @@
                           "stale_source",
                           "permission_denied",
                           "provider_unavailable",
+                          "provider_invalid_response",
                           "hard_limit_unresolved",
                           "legacy_read_only",
                           "provider_capacity_deferred"
@@ -54956,7 +54974,8 @@
                           "lcm.file.stale",
                           "lcm.hard_limit.unresolved",
                           "lcm.provider_capacity.deferred",
-                          "lcm.provider.unavailable"
+                          "lcm.provider.unavailable",
+                          "lcm.provider.invalid_response"
                         ]
                       },
                       "safeParams": {
@@ -55694,6 +55713,7 @@
                           "stale_source",
                           "permission_denied",
                           "provider_unavailable",
+                          "provider_invalid_response",
                           "hard_limit_unresolved",
                           "legacy_read_only",
                           "provider_capacity_deferred"
@@ -55712,7 +55732,8 @@
                           "lcm.file.stale",
                           "lcm.hard_limit.unresolved",
                           "lcm.provider_capacity.deferred",
-                          "lcm.provider.unavailable"
+                          "lcm.provider.unavailable",
+                          "lcm.provider.invalid_response"
                         ]
                       },
                       "safeParams": {
@@ -56450,6 +56471,7 @@
                           "stale_source",
                           "permission_denied",
                           "provider_unavailable",
+                          "provider_invalid_response",
                           "hard_limit_unresolved",
                           "legacy_read_only",
                           "provider_capacity_deferred"
@@ -56468,7 +56490,8 @@
                           "lcm.file.stale",
                           "lcm.hard_limit.unresolved",
                           "lcm.provider_capacity.deferred",
-                          "lcm.provider.unavailable"
+                          "lcm.provider.unavailable",
+                          "lcm.provider.invalid_response"
                         ]
                       },
                       "safeParams": {
