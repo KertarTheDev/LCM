@@ -47,7 +47,7 @@
     {
       "stepID": "platform-packaged-runtime-smokes",
       "manualAction": "Collect standalone CLI and VSIX bundled-runtime DB smokes on Windows, darwin-arm64, and darwin-x64.",
-      "expected": "Every required platform records lcm-platform-packaged-runtime-smoke-v1 JSON with exact command, OS/arch/date, artifact path/hash, DB path, and passed content-safe result.",
+      "expected": "Every required platform records lcm-platform-packaged-runtime-smoke-v2 JSON with exact command, OS/arch/date, artifact path/hash, DB path, old-session continuation coverage, first-turn LCM tool registration, and a passed content-safe result.",
       "actual": "",
       "status": "not_run"
     },

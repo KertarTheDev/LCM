@@ -1,8 +1,8 @@
 # LCM Current-Code Verification
 
-Status date: 2026-07-22.
+Status date: 2026-07-23.
 
-This document records the verification surface for `kilocode-lcm-v7.4.13`.
+This document records the verification surface for `kilocode-lcm-v7.4.15`.
 
 ## Selection Rule
 
@@ -12,7 +12,7 @@ Environment-specific wrappers may select focused compiler slices, but they are n
 
 ## Required Cross-Package Gates
 
-For the v7.4.13 integration represented by this branch:
+For the v7.4.15 integration represented by this branch:
 
 - generated LCM contract: `bun run --cwd packages/opencode lcm:contracts:check`
 - generated OpenAPI/SDK: `bun run script/generate.ts` after public API changes, followed by a clean diff check
@@ -133,12 +133,12 @@ Each provider run must also prove that the same root/child sessions resolve to o
 - stable approval: `bun run --cwd packages/opencode lcm:release-long-context:strict`
 - packaged runtime: `bun run --cwd packages/opencode lcm:platform-runtime-smoke -- --runtime-path <packaged-kilo> --snapshot-path <candidate.vsix> --out-dir <evidence-dir>`
 
-Packaged platform evidence uses schema `lcm-platform-packaged-runtime-smoke-v2`. In addition to `debug lcm-db-smoke`, the extracted binary must run three separate processes: `debug lcm-session-continuation-smoke seed`, then two `continue --session-id <seed-id>` invocations. The evidence passes only when the seed creates 2 Core messages/2 parts without an LCM family, the first continuation reports the same passive conversation with 3/3 LCM coverage, and the restart continuation reports durable 4/4 coverage under that conversation ID. V1 or otherwise incomplete evidence is rejected.
+Packaged platform evidence uses schema `lcm-platform-packaged-runtime-smoke-v2`. In addition to `debug lcm-db-smoke`, the extracted binary must run three separate processes: `debug lcm-session-continuation-smoke seed`, then two `continue --session-id <seed-id>` invocations. The evidence passes only when the seed creates 2 Core messages/2 parts without an LCM family, the first continuation reports the same passive conversation with 3/3 LCM coverage and confirms that `lcm_grep` is registered for the preflight-gated first provider payload, and the restart continuation reports durable 4/4 coverage under that conversation ID with the same registration proof. V1 or otherwise incomplete evidence is rejected.
 
 Release evidence must start from a clean committed worktree and bind the source commit, release target, resolved tag commit, VSIX SHA-256, bundled runtime identity, and asset manifest. Development snapshot names are derived from committed `HEAD` even when the worktree contains uncommitted bytes, so a dirty snapshot name is not exact-SHA evidence. Commands that change working directory with `--cwd` must receive workspace-absolute artifact paths. A Linux snapshot that falls back to a source wrapper because Zig or another packaged-CLI prerequisite is unavailable is development evidence only, not packaged-runtime evidence.
 
 The compiled CLI and extracted-VSIX smoke must execute the registered `debug lcm-db-smoke` command and prove both `pglite-regex.worker.ts` and `retrieval-regex.worker.ts` through their compiled path defines. Source tests, typecheck, or bundle creation alone do not prove those assets are present.
 
-The completed `v7.4.13-lcm.2` prerelease targeted `03af6c8fbb6d42699fee337b83023ca46b3973bf`. Workflow run `29916707618` passed the release-critical gates, built 12 CLI archives and 8 nonempty VSIX assets, and passed the packaged Linux x64 runtime smoke. The superseded faulty `.1` release and matching tag were removed only after `.2` passed exact release/tag/asset verification. This is prerelease automation evidence, not stable approval.
+The `v7.4.13` prerelease line is superseded and its published GitHub release/tag is scheduled for exact-ID cleanup only after the `v7.4.15` replacement passes exact-SHA publication and asset verification. Historical `v7.4.13` workflow results are not evidence for this branch. Accept `v7.4.15-lcm.1` as prerelease automation evidence only when its exact workflow run succeeds, its tag resolves to the committed prerelease head, all required assets are nonempty, and packaged Linux continuation reports the first-turn LCM tool-registration proof above.
 
 Stable release approval additionally requires the strict long-context gate and exact-candidate installed-editor validation on the supported VSCodium/Nobara and VSCode/macOS targets.

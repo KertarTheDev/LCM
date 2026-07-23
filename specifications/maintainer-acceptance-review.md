@@ -1,8 +1,8 @@
 # Kilo LCM Maintainer Acceptance Review
 
-Review date: 2026-07-22.
+Review date: 2026-07-23.
 
-Reviewer stance: Kilo Code maintainer evaluating `kilocode-lcm-v7.4.13` for demonstrable beta use and eventual low-conflict upstream integration.
+Reviewer stance: Kilo Code maintainer evaluating `kilocode-lcm-v7.4.15` for demonstrable beta use and eventual low-conflict upstream integration.
 
 ## Assessment
 
@@ -40,7 +40,7 @@ The largest remaining conflict surface is `session/prompt.ts`, because the curre
 
 ## Conditions Before Stable Release
 
-- the completed `v7.4.13-lcm.2` workflow is accepted as prerelease automation evidence: it targeted `03af6c8fbb6d42699fee337b83023ca46b3973bf`, produced 12 CLI archives and 8 nonempty VSIX assets, and passed packaged Linux x64 runtime smoke; the superseded faulty `.1` release/tag were removed only after exact `.2` verification;
+- the exact `v7.4.15-lcm.1` workflow must be accepted as prerelease automation evidence only after its tag/SHA, complete nonempty asset profile, and packaged Linux DB/old-session continuation smoke are verified;
 - all focused compatibility, ingestion, provider, settings, contract, annotation, and compiler gates must still pass for the exact stable candidate;
 - the exact stable candidate VSIX compile/snapshot and packaged-runtime DB smoke must pass;
 - installed-editor evidence is collected from the exact candidate on supported Nobara/VSCodium and macOS/VSCode targets;
@@ -48,4 +48,4 @@ The largest remaining conflict surface is `session/prompt.ts`, because the curre
 
 ## Recommendation
 
-Accept this design for continued implementation and beta demonstration on v7.4.13. Do not declare stable/default integration until the verification and external candidate evidence above are complete.
+Accept this design for continued implementation and beta demonstration on v7.4.15. Do not declare stable/default integration until the verification and external candidate evidence above are complete.

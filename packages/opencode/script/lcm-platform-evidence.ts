@@ -206,9 +206,10 @@ function validateEvidencePayload(input: {
         first.coreMessages !== 3 ||
         first.lcmMessages !== 3 ||
         first.coreParts !== 3 ||
-        first.lcmParts !== 3
+        first.lcmParts !== 3 ||
+        first.preflightLcmGrepRegistered !== true
       ) {
-        errors.push(`${file}: first continuation report must pass with passive 3/3 coverage`)
+        errors.push(`${file}: first continuation report must pass with passive 3/3 coverage and lcm_grep registration`)
       }
       if (
         second?.status !== "passed" ||
@@ -220,9 +221,10 @@ function validateEvidencePayload(input: {
         second.lcmMessages !== 4 ||
         second.coreParts !== 4 ||
         second.lcmParts !== 4 ||
+        second.preflightLcmGrepRegistered !== true ||
         second.conversationID !== first?.conversationID
       ) {
-        errors.push(`${file}: second continuation report must pass with durable passive 4/4 coverage`)
+        errors.push(`${file}: second continuation report must pass with durable passive 4/4 coverage and lcm_grep registration`)
       }
     }
   }

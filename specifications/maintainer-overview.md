@@ -1,14 +1,14 @@
 # Kilo LCM Maintainer Overview
 
-Status date: 2026-07-21.
+Status date: 2026-07-23.
 
-This overview describes the LCM integration relative to upstream Kilo Code `v7.4.13` (`7060f8cb21d79abf00f9c9d5df07f6e95e4956ec`).
+This overview describes the LCM integration relative to upstream Kilo Code `v7.4.15` (`13e425966261e159e915903df5a9e54792a0c657`).
 
 ## Executive Summary
 
 LCM replaces routine lossy context compaction for LCM-managed conversations with a runtime-owned durable context system. It ingests finalized persisted Kilo messages and parts, derives a provider-safe active context, performs summary maintenance under explicit budgets, and exposes authorized retrieval/map tools for exact-detail recovery.
 
-The v7.4.13 integration was designed on the clean upstream tag before LCM-owned modules were transplanted. It therefore builds on current Kilo memory work instead of replaying an old total replacement.
+The v7.4.15 integration was rebuilt on the clean upstream tag after auditing its project-memory, stalled-stream, reload, provider, and UI changes. It therefore preserves current Kilo behavior instead of replaying an old total replacement.
 
 ## Best-Of-Both-Worlds Boundary
 

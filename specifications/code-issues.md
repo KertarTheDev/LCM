@@ -1,12 +1,12 @@
 # LCM Current-Code Issues
 
-Status date: 2026-07-22.
+Status date: 2026-07-23.
 
-This file records current engineering or evidence gaps for the v7.4.13 integration.
+This file records current engineering or evidence gaps for the v7.4.15 integration.
 
 ## Architecture Findings Resolved
 
-- The port now begins with target-release context-engine and V1 prompt seams on clean v7.4.13. The older LCM branch is an isolated-module/test source, not the architectural base.
+- The port now begins with target-release context-engine and V1 prompt seams on clean v7.4.15. Older LCM release branches are isolated-module/test sources, not the architectural base.
 - Upstream project memory is retained separately from LCM conversation context. `/memory` remains project memory; `/lcm` owns conversation-context settings.
 - Upstream recall retains prior-session ownership. Current-session recall is rejected in favor of trusted-lineage LCM retrieval.
 - Final persisted SWE-pruned ToolParts are canonical LCM source. A validated truncation sidecar is recovery/provenance evidence and cannot silently replace the persisted result.
@@ -24,9 +24,9 @@ The V1 `session/prompt.ts` adapter is the largest upstream conflict surface unti
 
 `packages/opencode/script/build-node.ts` currently fails on an upstream browser/Bun-builtin compatibility path that is not used by the compiled CLI or VSIX release workflow. Keep the limitation visible, but do not weaken the production `build.ts`, VSCode, or packaged-runtime gates and do not add environment-specific bypasses to publishable source.
 
-## Completed Prerelease Evidence
+## Prerelease Evidence Status
 
-GitHub workflow run `29916707618` published `v7.4.13-lcm.2` from `03af6c8fbb6d42699fee337b83023ca46b3973bf`. The run completed the release-critical LCM gates, built 12 CLI archives and 8 nonempty VSIX assets, and passed packaged Linux x64 LCM DB smoke. Earlier replacement runs exposed an undeclared Core database service in alternate activation layers and a VSIX build invoked outside its package working directory; both were corrected before the successful run. The faulty `.1` release and matching tag were removed only after `.2` passed exact release/tag/asset verification. This closes the compiler/candidate-build automation gap for that prerelease, but it is not stable-release approval.
+The `v7.4.13` prerelease line is superseded and must not be treated as evidence for the current branch. The `v7.4.15-lcm.1` candidate must pass the exact-SHA workflow, complete nonempty asset-manifest verification, and packaged Linux DB/continuation smoke—including first-turn `lcm_grep` registration for a passive old-session scope—before its publication is accepted and before the captured `v7.4.13` release/tag is deleted.
 
 ## Evidence Gaps
 
@@ -34,4 +34,4 @@ GitHub workflow run `29916707618` published `v7.4.13-lcm.2` from `03af6c8fbb6d42
 - Collect the required old-session/output-reserve/CLI-VSCode observability captures and complete all nine LCM tools with both local Qwen and authenticated z.ai as specified in `verification.md`.
 - Strict long-context release approval requires packaged-runtime DB smoke and external/manual evidence; source-tree checks alone are insufficient.
 
-Do not treat archived milestone findings as current defects unless they reproduce against `kilocode-lcm-v7.4.13`.
+Do not treat archived milestone findings as current defects unless they reproduce against `kilocode-lcm-v7.4.15`.

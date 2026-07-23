@@ -82,6 +82,7 @@ function evidence(
           coreParts: 3,
           lcmMessages: 3,
           lcmParts: 3,
+          preflightLcmGrepRegistered: true,
         },
         {
           status: "passed",
@@ -93,6 +94,7 @@ function evidence(
           coreParts: 4,
           lcmMessages: 4,
           lcmParts: 4,
+          preflightLcmGrepRegistered: true,
         },
       ],
     },
@@ -160,6 +162,26 @@ describe("platform packaged-runtime release evidence", () => {
 
     expect(result.status).toBe("failed")
     expect(result.actual).toContain("durable passive 4/4 coverage")
+  })
+
+  test("rejects continuation evidence without first-turn LCM tool registration", async () => {
+    const dir = await tempDir()
+    for (const target of REQUIRED_PLATFORM_EVIDENCE_TARGETS) {
+      const payload = evidence(target)
+      if (target === "windows") {
+        const first = payload.continuationSmoke.reports[1] as { preflightLcmGrepRegistered: boolean }
+        first.preflightLcmGrepRegistered = false
+      }
+      await writeEvidence(dir, target, payload)
+    }
+
+    const result = await validatePlatformPackagedRuntimeEvidence({
+      evidenceDir: dir,
+      expectedSnapshotSha256: "candidate-sha",
+    })
+
+    expect(result.status).toBe("failed")
+    expect(result.actual).toContain("lcm_grep registration")
   })
 
   test("requires all platform targets to pass the candidate VSIX smoke", async () => {

@@ -84,7 +84,7 @@ import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache" // kilocode_change
-// kilocode_change start - LCM adapter over the retained v7.4.13 prompt loop
+// kilocode_change start - LCM adapter over the retained v7.4.15 prompt loop
 import { renderLcmSystemPolicy } from "@/kilocode/lcm-system-policy"
 import { resolvePreflightLcmToolIDs, type LcmAllowedToolIDs } from "@/kilocode/lcm-tool-availability"
 import { markLcmRenderOnlyPart, prepareKiloMessageVisibility, prepareKiloModelInput } from "./lcm/render-prep"

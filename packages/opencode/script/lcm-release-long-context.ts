@@ -1011,7 +1011,7 @@ async function main() {
     [
       "platform-packaged-runtime-smokes",
       "Collect standalone CLI and VSIX bundled-runtime DB smokes on Windows, darwin-arm64, and darwin-x64.",
-      "Every required platform records lcm-platform-packaged-runtime-smoke-v1 JSON with exact command, OS/arch/date, artifact path/hash, DB path, and passed content-safe result.",
+      "Every required platform records lcm-platform-packaged-runtime-smoke-v2 JSON with exact command, OS/arch/date, artifact path/hash, DB path, old-session continuation coverage, first-turn LCM tool registration, and a passed content-safe result.",
     ],
     [
       "lcm-active-new-session",

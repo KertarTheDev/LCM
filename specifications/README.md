@@ -1,13 +1,13 @@
 # LCM Current-Code Specifications
 
-Status date: 2026-07-22.
+Status date: 2026-07-23.
 
 These documents describe the LCM implementation on the current release-sync branch. Current code is the authority.
 
 ## Source Of Truth
 
-- Implementation branch: `kilocode-lcm-v7.4.13`
-- Upstream base: Kilo Code `v7.4.13` (`7060f8cb21d79abf00f9c9d5df07f6e95e4956ec`)
+- Implementation branch: `kilocode-lcm-v7.4.15`
+- Upstream base: Kilo Code `v7.4.15` (`13e425966261e159e915903df5a9e54792a0c657`)
 - Current code and the current spec files in this directory are normative.
 - Branch model: release-sync branches are named for the upstream release they carry. Future syncs should create a new clean `kilocode-lcm-v<upstream-release>` branch from the upstream tag, replay the LCM delta there, then rebase prerelease-only changes on top.
 
@@ -30,7 +30,7 @@ These documents describe the LCM implementation on the current release-sync bran
 
 ## Comparison Scope
 
-Compatibility review and change inspection compare the implementation to upstream tag `v7.4.13`, excluding installed dependencies, build output, local artifacts, and the specification files themselves. Scoped comparisons inspect:
+Compatibility review and change inspection compare the implementation to upstream tag `v7.4.15`, excluding installed dependencies, build output, local artifacts, and the specification files themselves. Scoped comparisons inspect:
 
 - `packages/opencode/src`, `packages/opencode/test`, `packages/opencode/script`, and `packages/opencode/package.json`
 - `packages/kilo-vscode/src`, `packages/kilo-vscode/webview-ui/src`, and `packages/kilo-vscode/package.json`
@@ -41,7 +41,7 @@ The generated OpenAPI/SDK artifacts dominate raw line statistics, so this spec s
 
 ## Upstream Reference Refresh
 
-The LCM subsystem was transplanted onto a clean upstream `v7.4.13` base after first designing and validating the integration seams on that target. The older LCM tree was used only as a source of isolated LCM-owned modules and tests. Notable upstream behavior retained in the new base includes:
+The LCM subsystem was replayed onto a clean upstream `v7.4.15` base after auditing the target release's memory, prompt, provider, and UI changes. The older LCM release branches were used only as sources for isolated LCM-owned modules, tests, and narrow adapters. Notable upstream behavior retained in the new base includes:
 
 - upstream project memory under `packages/kilo-memory` and `packages/opencode/src/kilocode/memory`, with its own files, index, digests, lifecycle, `/memory` command, and settings surface outside the LCM family database;
 - upstream prior-session recall, while LCM owns recall and retrieval for the current conversation lineage;
