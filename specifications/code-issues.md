@@ -26,7 +26,7 @@ The V1 `session/prompt.ts` adapter is the largest upstream conflict surface unti
 
 ## Prerelease Evidence Status
 
-GitHub workflow run `29984959329` published `v7.4.15-lcm.1` as release `358493732` from exact prerelease head `90609f2a3fd49564f539ef34d18c86f73c3cc308`. Independent verification proved the tag/SHA binding and all 20 required nonempty assets. Packaged Linux x64 DB/continuation smoke passed, including first-turn `lcm_grep` registration for a passive old-session scope and durable 3/3 then 4/4 Core/LCM coverage. Superseded release `358208124` and tag `v7.4.13-lcm.3` were then deleted by exact identity and confirmed absent. This closes the v7.4.15 prerelease automation gap, but it is not stable-release approval.
+GitHub workflow run `30009846221` published `v7.4.15-lcm.2` as release `358693627` from exact prerelease head `19817f8150c8f78af7ff48d40f6f5e94738d1a06`. Independent verification proved the tag/SHA binding and all 20 required nonempty assets. Packaged Linux x64 DB/continuation smoke passed, including first-turn `lcm_grep` registration for a passive old-session scope and durable 3/3 then 4/4 Core/LCM coverage. Superseded release `358493732` and tag `v7.4.15-lcm.1`, bound to `90609f2a3fd49564f539ef34d18c86f73c3cc308`, were then deleted by exact identity; remote verification confirmed `.1` absent and `.2` still exact. This closes the v7.4.15 prerelease automation gap, but it is not stable-release approval.
 
 ## Evidence Gaps
 

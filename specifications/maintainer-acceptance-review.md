@@ -40,7 +40,7 @@ The largest remaining conflict surface is `session/prompt.ts`, because the curre
 
 ## Conditions Before Stable Release
 
-- exact-SHA workflow run `29984959329`, release `358493732`, tag `v7.4.15-lcm.1`, its complete 20-asset nonempty profile, and packaged Linux DB/old-session continuation smoke are accepted as prerelease automation evidence only; they do not establish stable approval;
+- exact-SHA workflow run `30009846221`, release `358693627`, tag `v7.4.15-lcm.2`, its complete 20-asset nonempty profile, and packaged Linux DB/old-session continuation smoke are accepted as prerelease automation evidence only; superseded release `358493732` and tag `v7.4.15-lcm.1` were deleted by exact identity after `.2` verification, and none of this establishes stable approval;
 - all focused compatibility, ingestion, provider, settings, contract, annotation, and compiler gates must still pass for the exact stable candidate;
 - the exact stable candidate VSIX compile/snapshot and packaged-runtime DB smoke must pass;
 - installed-editor evidence is collected from the exact candidate on supported Nobara/VSCodium and macOS/VSCode targets;
