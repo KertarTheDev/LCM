@@ -15,7 +15,7 @@ describe("LCM context settings UI", () => {
     expect(projectMemory).toBeGreaterThan(lcm)
     expect(source).toContain("useMemory()")
     expect(source).toContain("memory.enable()")
-    expect(source).toContain("memory.showMemory()")
+    expect(source).toContain("memory.inspect()")
   })
 
   it("presents only the supported conversation-context settings", async () => {
