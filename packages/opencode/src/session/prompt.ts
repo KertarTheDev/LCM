@@ -1730,8 +1730,17 @@ export const layer = Layer.effect(
           // kilocode_change start - authoritative LCM adapter; upstream prompt behavior continues below for non-LCM runs
           if (useLcmManagedHistory) {
             const activation = yield* lcmRuntime.getOrCreateConversation({ sessionID }).pipe(
-              Effect.flatMap(() => lcmRuntime.getCapabilities({ sessionID })),
-              Effect.map((capabilities) => ({ ok: true as const, capabilities })),
+              Effect.flatMap(() =>
+                Effect.all({
+                  capabilities: lcmRuntime.getCapabilities({ sessionID }),
+                  conversation: lcmRuntime.getConversationScope({ sessionID }),
+                }),
+              ),
+              Effect.map(({ capabilities, conversation }) => ({
+                ok: true as const,
+                capabilities,
+                conversation,
+              })),
               Effect.catch((error) =>
                 Effect.succeed({
                   ok: false as const,
@@ -1767,6 +1776,7 @@ export const layer = Layer.effect(
               return "break" as const
             }
             const lcmCapabilities = activation.capabilities
+            const lcmConversation = activation.conversation
             if (
               lcmCapabilities.lifecycleState !== "lcm_active" &&
               lcmCapabilities.lifecycleState !== "passive_synced"
@@ -1793,7 +1803,7 @@ export const layer = Layer.effect(
               lastUser,
               lastUserMessageID: lastUser.id,
               permissionProfile: Permission.merge(agent.permission, session.permission ?? []),
-              taskCapabilityClass: "root",
+              taskCapabilityClass: lcmConversation.capabilityClass,
               messageVisibility: scopedMessages.visibility,
               envCache,
               clock: {
@@ -1935,7 +1945,7 @@ export const layer = Layer.effect(
               providerModelRevision: model.release_date,
               agentName: agent.name,
               permissionProfileVersion: prepared.value.renderInputManifest.permissionProfileVersion,
-              taskCapabilityClass: "root" as const,
+              taskCapabilityClass: lcmConversation.capabilityClass,
               clockPolicy: "runtime_per_preparation" as const,
             }
             const providerOverflowRecovery = pendingLcmProviderOverflowRecovery

@@ -27,7 +27,7 @@ import { SessionRenameEditor } from "../shared/SessionRenameEditor"
 import { target as todoTarget } from "../../context/todo-revert"
 import type { Part, TodoItem, ExtensionMessage } from "../../types/messages"
 import type { LcmMetricsSnapshot } from "@kilocode/sdk/v2/client"
-import { isNewerLcmMetrics, lcmPressureDisplay } from "./lcm-status"
+import { isNewerLcmMetrics } from "./lcm-status"
 
 function lcmStatusRequestID() {
   return `lcm-header-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -125,12 +125,6 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
       },
     ),
   )
-
-  const lcmRatios = createMemo(() => {
-    const value = lcmMetrics()
-    if (!value) return undefined
-    return lcmPressureDisplay(value, language.locale())
-  })
 
   // Read initial value from VS Code settings
   onMount(() => vscode.postMessage({ type: "requestTimelineSetting" }))
@@ -306,16 +300,6 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
               </Tooltip>
             )}
           </Show>
-          <Show when={lcmRatios()}>
-            {(value) => (
-              <Tooltip
-                value={`${value().active.toLocaleString(language.locale())} active tokens of ${value().hard.toLocaleString(language.locale())} hard limit${lcmMaintenanceLabel() ? ` · ${lcmMaintenanceLabel()}` : ""}`}
-                placement="bottom"
-              >
-                <span data-slot="task-header-lcm-status">{expanded() ? value().expanded : value().collapsed}</span>
-              </Tooltip>
-            )}
-          </Show>
           <Show when={!props.readonly}>
             <Tooltip value={language.t("command.session.compact")} placement="bottom">
               <IconButton
@@ -367,7 +351,16 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
           <div data-slot="task-header-graph-row">
             <ContextProgress />
           </div>
-          <Show when={tokens()}>{(tk) => <TaskUsage tokens={tk()} usage={session.modelUsage()} />}</Show>
+          <Show when={tokens()}>
+            {(tk) => (
+              <TaskUsage
+                tokens={tk()}
+                usage={session.modelUsage()}
+                lcmMetrics={lcmMetrics()}
+                lcmMaintenanceLabel={lcmMaintenanceLabel()}
+              />
+            )}
+          </Show>
         </div>
       </Show>
       <Show when={hasTodos()}>

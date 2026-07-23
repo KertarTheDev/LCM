@@ -57,9 +57,11 @@ function content(part: Part): number {
 // ── Calculate sizes for all bars ─────────────────────────────────────
 
 export function sizes(parts: Part[]): BarSize[] {
-  if (parts.length === 0) return []
+  return sizesFromContent(parts.map((part) => content(part)))
+}
 
-  const raw = parts.map((p) => content(p))
+export function sizesFromContent(raw: number[]): BarSize[] {
+  if (raw.length === 0) return []
   const max = Math.max(...raw)
 
   return raw.map((c) => {

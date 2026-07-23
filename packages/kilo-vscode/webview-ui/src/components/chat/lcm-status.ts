@@ -18,7 +18,12 @@ export function lcmPressureDisplay(value: LcmMetricsSnapshot, locale: string) {
   return {
     active,
     hard,
-    collapsed: `${active.toLocaleString(locale)} / ${hard.toLocaleString(locale)}`,
-    expanded: `Hard ${pct(active, hard)}% · Raw ${pct(raw, soft)}% · Backlog ${pct(backlog, soft)}%`,
+    raw,
+    soft,
+    backlog,
+    hardPercent: pct(active, hard),
+    rawPercent: pct(raw, soft),
+    backlogPercent: pct(backlog, soft),
+    hardLabel: `${active.toLocaleString(locale)} / ${hard.toLocaleString(locale)}`,
   }
 }

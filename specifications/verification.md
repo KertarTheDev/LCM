@@ -95,7 +95,7 @@ LCM tests that use both the Core database service and retained V1 database acces
 
 Settings verification must prove that sessionless calls do not require a conversation or PGlite, session-scoped calls derive family identity from trusted runtime state, unsupported fields are rejected, and bridge fallbacks obey canonical safe-error templates.
 
-VSCode focused verification must also prove that the Memory card exposes hard/raw/backlog, paid-token activity, runtime-owned support actions, and prompt export; that activity route limits use the generated SDK query type; that stale request IDs cannot overwrite a newly focused session; that LCM timeline bars are timestamp-merged without transcript highlight targets; and that routine bundled-runtime/SSE `console.log` calls remain behind `debugLog`.
+VSCode focused verification must also prove that the Memory card exposes hard/raw/backlog, paid-token activity, runtime-owned support actions, and prompt export; that the task header keeps hard/raw/backlog pressure in the collapsible upstream usage details rather than the title row; that activity route limits use the generated SDK query type; that stale request IDs cannot overwrite a newly focused session; that provider-backed LCM timeline bars are timestamp-merged without transcript highlight targets, non-provider bookkeeping does not create zero-token bars, and missing provider usage is labeled unavailable; and that routine bundled-runtime/SSE `console.log` calls remain behind `debugLog`.
 
 ## Required Live Demonstration Matrix
 
@@ -109,7 +109,7 @@ For macOS arm64 VSCode with the configured local Qwen provider:
 2. Continue representative pre-existing root and child sessions, including one containing legacy compaction markers. Capture the absence of catch-all `lcm_family_resolution_failed`, the session-specific diagnostic if continuation is legitimately blocked, and `kilo lcm status --session <id> --json` from the bundled CLI.
 3. Run a new long session until raw rows become summaries and at least one hard or soft maintenance request occurs. Capture the Memory card's hard/raw/backlog values, prompt-export folder/file count, and matching CLI `status`/`activity` JSON.
 4. Near the model context boundary, capture `outputReserve` and the final request output cap from debug logs. The cap must be no larger than the reserve. A genuine output-length finish may remain incomplete but must not schedule legacy compaction or post-response hard input maintenance.
-5. Capture the task timeline after maintenance, `lcm_expand_query`, file exploration, and `llm_map`; each provider-backed request must appear in `kilo lcm activity` with provider/model, token or unknown-usage evidence, and cost status.
+5. Capture the task timeline after maintenance, `lcm_expand_query`, file exploration, and `llm_map`; each provider-backed request must appear in `kilo lcm activity` and on the timeline with provider/model, token or explicit unavailable-usage evidence, and cost status, while non-provider maintenance bookkeeping must not appear as a zero-token bar.
 
 Run the same nine-tool matrix first with local Qwen and then from the authenticated CLI z.ai subscription:
 
@@ -121,7 +121,7 @@ Run the same nine-tool matrix first with local Qwen and then from the authentica
 | `lcm_expand_query` | Root session returns a cited answer or the specified successful no-answer shape; activity records provider usage. |
 | `lcm_read` | Root denial occurs before bytes/provenance access; a trusted read-capable child reads a bounded authorized file window. |
 | `llm_map` | An authorized JSONL run is created and returns a durable `map_...` status. |
-| `agentic_map` | An authorized read-only or write-capable child run is created without duplicate LCM usage accounting. |
+| `agentic_map` | An authorized read-only or write-capable child run is created without duplicate LCM usage accounting; its prompt uses the persisted `map_child` capability, propagates terminal child LCM errors before JSON validation, defers transient provider capacity without consuming retries, and does not retry permanent child limits. |
 | `lcm_map_status` | Polling returns the latest authorized run counts/output handle without item content. |
 | `lcm_map_cancel` | A deliberately still-running map accepts cancellation and later status reports the terminal or cancel-requested state. |
 

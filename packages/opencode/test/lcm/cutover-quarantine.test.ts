@@ -161,9 +161,21 @@ describe("milestone 27 cutover quarantine", () => {
     expect(failure).toBeGreaterThan(activation)
     expect(render).toBeGreaterThan(failure)
     expect(prompt.slice(activation, render)).toContain("Effect.catchDefect")
+    expect(prompt.slice(activation, render)).toContain("lcmRuntime.getConversationScope({ sessionID })")
     expect(prompt.slice(activation, render)).toContain('code: "db_unavailable"')
     expect(prompt.slice(activation, render)).toContain('return "break" as const')
     expect(prompt).toContain("MessageV2.fromLcmSafeError(input.safeError)")
+  })
+
+  test("renders child prompts with the persisted LCM capability class", async () => {
+    const prompt = await packageFile("src/session/prompt.ts")
+    const activation = prompt.indexOf("const activation = yield* lcmRuntime.getOrCreateConversation")
+    const managedEnd = prompt.indexOf("// kilocode_change end", activation)
+    const managedPrompt = prompt.slice(activation, managedEnd)
+
+    expect(managedPrompt).toContain("const lcmConversation = activation.conversation")
+    expect(managedPrompt.match(/taskCapabilityClass: lcmConversation\.capabilityClass/g)).toHaveLength(2)
+    expect(managedPrompt).not.toContain('taskCapabilityClass: "root"')
   })
 
   test("records milestone 27 ownership for the release scenario skeleton", async () => {

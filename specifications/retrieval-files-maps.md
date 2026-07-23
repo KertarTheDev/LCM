@@ -194,9 +194,11 @@ Map schema validation accepts Draft 2020-12 JSON object schemas and boolean sche
 
 ## Agentic Map
 
-`agentic_map` creates trusted child sessions for items. The child runner receives prompt version `map-item-v1`, map/item IDs, the legacy combined prompt string, the structured rendered prompt request, schema, model selection, mode, parent session ID, root conversation ID, project/workspace, and abort signal.
+`agentic_map` creates trusted child sessions for items. The child runner receives prompt version `map-item-v1`, map/item IDs, the legacy combined prompt string, the structured rendered prompt request, schema, model selection, mode, parent session ID, root conversation ID, project/workspace, and abort signal. A terminal assistant error from the child is propagated as the map-item failure before output JSON validation; a child LCM memory-limit failure therefore retains its content-safe code and diagnostic instead of being mislabeled as `lcm_map_item_output_json_invalid`.
 
 Map child capability is reconstructed by joining `lcm_map_runs` and `lcm_map_items` in `lifecycle.ts`. If proof fails after restart, direct content tools are denied.
+
+Transient `provider_capacity_deferred` item failures remain durable `retryable` work, do not consume the item's retry count, publish `retryAfterMs`, and are rescheduled when the runtime provider gate allows work again. Other retryable provider/timeout failures consume the configured retry budget. Permanent child LCM authority, request, or hard memory-limit failures terminalize the item immediately instead of looping through the retry budget; invalid model JSON or schema output remains explicitly retryable because a subsequent model attempt can correct it.
 
 Map DB requests pass the scheduler/caller abort signal to the DB worker for claim, heartbeat, input loading, item completion, and status reads. Cancel/shutdown cleanup requests still run without caller cancellation so known map rows can be marked `canceled` content-safely.
 

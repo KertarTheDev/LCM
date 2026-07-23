@@ -7,7 +7,7 @@
 import { Component, For, Show, createMemo, createEffect, createSignal, on, onCleanup } from "solid-js"
 import { Portal } from "solid-js/web"
 import type { AssistantMessage as SDKAssistantMessage, Part as SDKPart } from "@kilocode/sdk/v2"
-import type { LcmActivityItem, LcmActivityPage } from "@kilocode/sdk/v2/client"
+import type { LcmActivityPage } from "@kilocode/sdk/v2/client"
 import { useSession } from "../../context/session"
 import { useVSCode } from "../../context/vscode"
 import type { LcmSupportResultMessage } from "../../types/messages/extension-messages"
@@ -18,6 +18,7 @@ import { dispatchTimelineHighlight, same, type TimelineHighlight } from "../../u
 import { sizes, pinned, MAX_HEIGHT } from "../../utils/timeline/sizes"
 import { isRenderable } from "../../utils/transcript-parts"
 import type { Part, Message } from "../../types/messages"
+import { lcmBars } from "./lcm-timeline"
 
 export interface TimelineBar {
   key: string
@@ -29,42 +30,6 @@ export interface TimelineBar {
   msgId?: string
   partId?: string
   time: number
-}
-
-function lcmColor(purpose: LcmActivityItem["purpose"]) {
-  if (purpose === "retrieval_expand_query") return "var(--vscode-charts-purple)"
-  if (purpose === "file_exploration") return "var(--vscode-charts-blue)"
-  if (purpose === "llm_map") return "var(--vscode-charts-orange)"
-  return "var(--vscode-charts-yellow)"
-}
-
-function lcmNumber(value: number | string) {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0
-}
-
-export function lcmBars(activity: LcmActivityPage | undefined): TimelineBar[] {
-  if (!activity) return []
-  return [...activity.items].reverse().map((item, index) => {
-    const totalTokens = lcmNumber(item.totalTokens)
-    return {
-      key: item.usageRecordID,
-      bg: lcmColor(item.purpose),
-      tip: [
-        `LCM ${item.purpose.replaceAll("_", " ")}`,
-        `${totalTokens.toLocaleString()} tokens`,
-        item.providerID && item.modelID ? `${item.providerID}/${item.modelID}` : undefined,
-        item.costAmount !== undefined
-          ? `${item.costAmount}${item.costCurrency ? ` ${item.costCurrency}` : ""}`
-          : `cost ${item.costStatus.replaceAll("_", " ")}`,
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      width: Math.min(18, 4 + Math.log2(Math.max(1, totalTokens / 256))),
-      height: item.maintenanceStatus ? 14 : 11,
-      idx: index,
-      time: Date.parse(item.createdAt),
-    }
-  })
 }
 
 function collect(messages: Message[], parts: Record<string, Part[]>): TimelineBar[] {

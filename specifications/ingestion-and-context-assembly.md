@@ -71,7 +71,7 @@ Prompt-time file part handling also admits oversized path-backed `file://` paylo
 - system prompt, tool schema, plugin transform, dynamic prompt, and visibility hashes
 - provider media capability and strip-media flag
 - model/provider/agent identity
-- task capability class
+- runtime-proven task capability class, shared by render preparation and provider assembly
 - clock policy
 
 Render-only helper parts are marked so dynamic editor context, environment details, plan reminders, max-step notices, plugin transforms, provider media fallbacks, and tool-description placement can participate in model rendering without becoming immutable source rows.

@@ -32,6 +32,7 @@ import {
 } from "../../src/session/lcm/types"
 import { createHarnessBoundaryMetadata } from "./harness"
 import { tmpdir } from "../fixture/fixture"
+import { agenticMapChildOutput } from "../../src/tool/agentic-map"
 
 const now = 1_777_800_250_000
 const sessionID = "session_m25_root"
@@ -44,6 +45,23 @@ const modelSelection = {
 
 function operationID(suffix: string): OperationID {
   return `op_m25_${suffix}` as OperationID
+}
+
+function childMemoryError() {
+  const safeError = createLcmSafeError({
+    code: "over_limit",
+    templateKey: "lcm.request.invalid",
+    safeParams: {},
+    retryable: false,
+    diagnosticCode: "lcm_child_memory_request_over_limit",
+  })
+  return {
+    name: "LcmMemoryError",
+    data: {
+      message: safeError.safeMessage,
+      ...safeError,
+    },
+  }
 }
 
 function request<T>(input: Omit<LcmDbRequest<T>, "operationID" | "purpose" | "lane">) {
@@ -452,6 +470,64 @@ test("llm_map classifies provider failures without hiding map status behind gene
     code: "provider_unavailable",
     diagnosticCode: "lcm_map_item_provider_unavailable",
   })
+  await worker.close()
+})
+
+test("agentic_map preserves child memory failures before output JSON validation", async () => {
+  const childError = childMemoryError()
+  let thrown: unknown
+  try {
+    agenticMapChildOutput({
+      info: { role: "assistant", error: childError },
+      parts: [{ type: "text", text: childError.data.safeMessage }],
+    } as never)
+  } catch (error) {
+    thrown = error
+  }
+  expect(thrown).toBe(childError)
+
+  await using tmp = await tmpdir()
+  const dataDir = path.join(tmp.path, "lcm")
+  const worker = await initialize(dataDir)
+  const service = dbService(worker)
+  const scheduler = createLcmMapScheduler(service)
+  await insertConversation({ worker, sessionID, conversationID, rootPath: tmp.path })
+  const started = await runMap(
+    service,
+    agenticMap({
+      sessionID,
+      dataDir,
+      scheduler,
+      modelSelection,
+      inputJsonl: '{"id":1}',
+      itemSchema: "true",
+      prompt: "Inspect the item.",
+      mode: "read_only",
+      childRunner: async () => {
+        throw childError
+      },
+    }),
+  )
+  expect(started.ok).toBe(true)
+  expectMapResult(started)
+  await scheduler.drain(started.mapID)
+
+  const status = await runMap(service, mapStatus({ sessionID, dataDir, mapID: started.mapID }))
+  expect(status.ok).toBe(true)
+  expectMapResult(status)
+  expect(status.status).toBe("failed")
+  expect(status.safeError).toMatchObject({
+    code: "over_limit",
+    diagnosticCode: "lcm_child_memory_request_over_limit",
+  })
+  expect(status.retriedItems).toBe(0)
+  expect(JSON.stringify(status)).not.toContain("lcm_map_item_output_json_invalid")
+  const items = await query<{ status: string; attempts: number }>(
+    worker,
+    "SELECT status, attempts FROM lcm_map_items WHERE map_id = $1",
+    [started.mapID],
+  )
+  expect(items[0]).toMatchObject({ status: "failed", attempts: 1 })
   await worker.close()
 })
 

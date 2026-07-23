@@ -98,6 +98,16 @@ function item(row: UsageRow): LcmActivityItem {
   }
 }
 
+function hasProviderRequestEvidence(record: LcmActivityItem) {
+  return (
+    record.inputTokens !== undefined ||
+    record.outputTokens !== undefined ||
+    record.cacheReadTokens !== undefined ||
+    record.cacheWriteTokens !== undefined ||
+    record.costStatus !== "not_applicable"
+  )
+}
+
 export async function readLcmActivity(input: {
   db: LcmActivityQueryable
   conversationID: ConversationID
@@ -115,14 +125,7 @@ export async function readLcmActivity(input: {
     [input.conversationID, limit],
   )
   const items = rows.rows.map(item)
-  const requests = items.filter(
-    (record) =>
-      record.providerID !== undefined ||
-      record.modelID !== undefined ||
-      record.inputTokens !== undefined ||
-      record.outputTokens !== undefined ||
-      record.costStatus === "provider_reported",
-  )
+  const requests = items.filter(hasProviderRequestEvidence)
   const costRecords = requests.filter(
     (record) =>
       record.costStatus === "provider_reported" && record.costAmount !== undefined && record.costCurrency !== undefined,

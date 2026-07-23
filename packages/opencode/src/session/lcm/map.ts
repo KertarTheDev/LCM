@@ -1382,7 +1382,11 @@ async function failItemAttempt(input: {
   readonly safeError: LcmSafeError
 }) {
   const maxRetries = asNumber(input.run.max_retries)
-  const nextStatus = input.attempts <= maxRetries ? "retryable" : "failed"
+  const retryableOutput =
+    input.safeError.diagnosticCode === "lcm_map_item_output_json_invalid" ||
+    input.safeError.diagnosticCode === "lcm_map_item_output_schema_invalid"
+  const nextStatus =
+    input.attempts <= maxRetries && (input.safeError.retryable || retryableOutput) ? "retryable" : "failed"
   await input.db.query(
     `
       UPDATE lcm_map_items
@@ -1519,6 +1523,12 @@ function mapItemSafeError(input: {
   readonly operationID: OperationID
   readonly conversationID: ConversationID
 }) {
+  const namedError = input.error && typeof input.error === "object" ? (input.error as Record<string, unknown>) : {}
+  const namedErrorData =
+    namedError.data && typeof namedError.data === "object" ? (namedError.data as Record<string, unknown>) : {}
+  const childLcmSafeError = namedError.name === "LcmMemoryError" ? lcmSafeErrorFromJson(namedErrorData) : undefined
+  if (childLcmSafeError) return childLcmSafeError
+
   const embeddedSafeError = lcmSafeErrorFromJson((input.error as { safeError?: unknown })?.safeError)
   if (embeddedSafeError) return embeddedSafeError
   const directSafeError = lcmSafeErrorFromJson(input.error)
@@ -1533,13 +1543,16 @@ function mapItemSafeError(input: {
     })
   }
 
-  const record = input.error && typeof input.error === "object" ? (input.error as Record<string, unknown>) : {}
   const status =
-    typeof record.statusCode === "number"
-      ? record.statusCode
-      : typeof record.status === "number"
-        ? record.status
-        : undefined
+    typeof namedError.statusCode === "number"
+      ? namedError.statusCode
+      : typeof namedErrorData.statusCode === "number"
+        ? namedErrorData.statusCode
+        : typeof namedError.status === "number"
+          ? namedError.status
+          : typeof namedErrorData.status === "number"
+            ? namedErrorData.status
+            : undefined
   if (status === 408) {
     return safeMapError({
       code: "timeout",
@@ -1560,9 +1573,12 @@ function mapItemSafeError(input: {
   }
 
   const message = [
-    typeof record.message === "string" ? record.message : "",
-    typeof record.code === "string" ? record.code : "",
-    typeof record.name === "string" ? record.name : "",
+    typeof namedError.message === "string" ? namedError.message : "",
+    typeof namedError.code === "string" ? namedError.code : "",
+    typeof namedError.name === "string" ? namedError.name : "",
+    typeof namedErrorData.message === "string" ? namedErrorData.message : "",
+    typeof namedErrorData.code === "string" ? namedErrorData.code : "",
+    typeof namedErrorData.name === "string" ? namedErrorData.name : "",
   ]
     .join(" ")
     .toLowerCase()

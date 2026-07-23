@@ -56,6 +56,13 @@ type RuntimeAgenticMap = (
   } & AgenticMapInput,
 ) => Effect.Effect<LcmMapResult | LcmToolErrorResult>
 
+export function agenticMapChildOutput(result: SessionV1.WithParts) {
+  if (result.info.role === "assistant" && result.info.error) throw result.info.error
+  return {
+    text: result.parts.findLast((item) => item.type === "text")?.text ?? "",
+  }
+}
+
 export const AgenticMapTool = Tool.define(
   "agentic_map",
   Effect.gen(function* () {
@@ -140,9 +147,7 @@ export const AgenticMapTool = Tool.define(
                         : undefined,
                     parts,
                   })
-                  return {
-                    text: result.parts.findLast((item) => item.type === "text")?.text ?? "",
-                  }
+                  return agenticMapChildOutput(result)
                 } finally {
                   itemInput.abortSignal?.removeEventListener("abort", cancel)
                   yield* slot.release

@@ -7,17 +7,24 @@ import { useProvider } from "../../context/provider"
 import type { SessionModelUsage } from "../../types/messages"
 import { groupModelUsage, modelUsageName, type TokenSummary } from "../../context/model-usage"
 import { formatCompactCount } from "../../utils/format"
+import type { LcmMetricsSnapshot } from "@kilocode/sdk/v2/client"
+import { lcmPressureDisplay } from "./lcm-status"
 
 interface TaskUsageProps {
   tokens: TokenSummary
   usage?: SessionModelUsage
   defaultOpen?: boolean
+  lcmMetrics?: LcmMetricsSnapshot
+  lcmMaintenanceLabel?: string
 }
 
 export const TaskUsage: Component<TaskUsageProps> = (props) => {
   const language = useLanguage()
   const provider = useProvider()
   const groups = createMemo(() => groupModelUsage(props.usage?.models ?? [], provider.providers()))
+  const memory = createMemo(() =>
+    props.lcmMetrics ? lcmPressureDisplay(props.lcmMetrics, language.locale()) : undefined,
+  )
   const money = createMemo(
     () =>
       new Intl.NumberFormat(language.locale(), {
@@ -67,7 +74,7 @@ export const TaskUsage: Component<TaskUsageProps> = (props) => {
 
   return (
     <Show
-      when={props.usage?.models.length}
+      when={(props.usage?.models.length ?? 0) > 0 || memory() !== undefined}
       fallback={
         <div class="task-header-tokens">
           <Summary />
@@ -110,6 +117,29 @@ export const TaskUsage: Component<TaskUsageProps> = (props) => {
                 </section>
               )}
             </For>
+            <Show when={memory()}>
+              {(lcm) => (
+                <section class="task-header-usage-provider" data-slot="task-header-lcm-details">
+                  <h4>Conversation memory</h4>
+                  <div class="task-header-usage-model">
+                    <div class="task-header-usage-model-name">LCM context pressure</div>
+                    <div class="task-header-usage-meta">
+                      Hard {lcm().hardLabel} ({lcm().hardPercent}%)
+                    </div>
+                    <div class="task-header-usage-meta">
+                      Raw {count(lcm().raw)} / {count(lcm().soft)} ({lcm().rawPercent}%)
+                    </div>
+                    <div class="task-header-usage-meta">
+                      Backlog {count(lcm().backlog)} tokens in {props.lcmMetrics!.softBacklogItemCount} items (
+                      {lcm().backlogPercent}%)
+                    </div>
+                    <Show when={props.lcmMaintenanceLabel}>
+                      {(label) => <div class="task-header-usage-meta">Maintenance: {label()}</div>}
+                    </Show>
+                  </div>
+                </section>
+              )}
+            </Show>
           </div>
         </Collapsible.Content>
       </Collapsible>

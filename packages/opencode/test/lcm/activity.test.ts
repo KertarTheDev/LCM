@@ -49,8 +49,8 @@ test("LCM activity exposes paid maintenance and retrieval token usage", async ()
               job_id: "op_activity",
               purpose: "hard_limit_maintenance",
               mode: "blocking",
-              provider_id: null,
-              model_id: null,
+              provider_id: "zai-coding-plan",
+              model_id: "glm-4.5",
               input_tokens: null,
               output_tokens: null,
               cache_read_tokens: null,
@@ -98,4 +98,5 @@ test("LCM activity exposes paid maintenance and retrieval token usage", async ()
     maintenanceStatus: "completed",
     maintenanceInputBudget: 40_000,
   })
+  expect(page.summary.requestCount).toBe(1)
 })
