@@ -10,6 +10,7 @@ import type { MessageV2 } from "@/session/message-v2"
 import { LcmRuntime } from "@/session/lcm/runtime"
 import { deriveLcmFamilyID } from "@/session/lcm/family"
 import { resolveLcmFamilyRoot } from "@/session/lcm/db-layout"
+import { resolvePreflightLcmToolIDs } from "@/kilocode/lcm-tool-availability"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 
@@ -100,12 +101,20 @@ async function continueSession(sessionID: SessionID) {
       const conversationID = yield* lcm.getOrCreateConversation({ sessionID })
       yield* lcm.syncFinalizedMessages({ sessionID, upToMessageID: user.id })
       const scope = yield* lcm.getConversationScope({ sessionID })
+      const allowed = resolvePreflightLcmToolIDs({
+        capabilitiesLifecycleState: scope.lifecycleState,
+        scopeLifecycleState: scope.lifecycleState,
+        capabilityClass: scope.capabilityClass,
+        capabilityProven: scope.capabilityProven,
+        directContentToolsAllowed: scope.directContentToolsAllowed,
+      })
       const core = yield* sessions.messages({ sessionID })
       const coreParts = core.reduce((count, message) => count + message.parts.length, 0)
       const passed =
         scope.lifecycleState === "passive_synced" &&
         scope.sourceCoverageCounts.messages === core.length &&
-        scope.sourceCoverageCounts.parts === coreParts
+        scope.sourceCoverageCounts.parts === coreParts &&
+        allowed.retrieval.has("lcm_grep")
       return {
         status: passed ? ("passed" as const) : ("failed" as const),
         phase: "continue" as const,
@@ -116,6 +125,7 @@ async function continueSession(sessionID: SessionID) {
         coreParts,
         lcmMessages: scope.sourceCoverageCounts.messages,
         lcmParts: scope.sourceCoverageCounts.parts,
+        preflightLcmGrepRegistered: allowed.retrieval.has("lcm_grep"),
       }
     }),
   )

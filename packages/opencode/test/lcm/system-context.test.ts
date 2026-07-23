@@ -1,6 +1,7 @@
 // kilocode_change - new file
 import { expect, test } from "bun:test"
 import { LCM_SYSTEM_POLICY, renderLcmSystemPolicy } from "../../src/kilocode/lcm-system-policy"
+import { resolvePreflightLcmToolIDs } from "../../src/kilocode/lcm-tool-availability"
 import { LCM_MAP_TOOL_IDS, LCM_RETRIEVAL_TOOL_IDS } from "../../src/session/lcm/tool-ids"
 import { assembleKiloSystemContext } from "../../src/session/prompt"
 
@@ -58,4 +59,37 @@ test("LCM system policy contains only cross-tool trust and exact-recovery guidan
 
 test("LCM system policy is omitted when no LCM tools are available", () => {
   expect(renderLcmSystemPolicy({ retrieval: new Set(), map: new Set() })).toBeUndefined()
+})
+
+test("passive old-session preflight registers root LCM tools for the post-proof provider payload", () => {
+  const allowed = resolvePreflightLcmToolIDs({
+    capabilitiesLifecycleState: "passive_synced",
+    scopeLifecycleState: "passive_synced",
+    capabilityClass: "root",
+    capabilityProven: true,
+    directContentToolsAllowed: false,
+  })
+
+  expect([...allowed.retrieval]).toEqual(["lcm_grep", "lcm_describe", "lcm_expand_query"])
+  expect([...allowed.map]).toEqual(LCM_MAP_TOOL_IDS)
+})
+
+test("preflight tool registration rejects unproven or mismatched conversation scope", () => {
+  const unproven = resolvePreflightLcmToolIDs({
+    capabilitiesLifecycleState: "passive_synced",
+    scopeLifecycleState: "passive_synced",
+    capabilityClass: "map_child",
+    capabilityProven: false,
+    directContentToolsAllowed: false,
+  })
+  const mismatched = resolvePreflightLcmToolIDs({
+    capabilitiesLifecycleState: "lcm_active",
+    scopeLifecycleState: "passive_synced",
+    capabilityClass: "root",
+    capabilityProven: true,
+    directContentToolsAllowed: false,
+  })
+
+  expect([...unproven.retrieval, ...unproven.map]).toEqual([])
+  expect([...mismatched.retrieval, ...mismatched.map]).toEqual([])
 })

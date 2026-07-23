@@ -86,6 +86,7 @@ import { LLMEvent } from "@opencode-ai/llm"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache" // kilocode_change
 // kilocode_change start - LCM adapter over the retained v7.4.13 prompt loop
 import { renderLcmSystemPolicy } from "@/kilocode/lcm-system-policy"
+import { resolvePreflightLcmToolIDs, type LcmAllowedToolIDs } from "@/kilocode/lcm-tool-availability"
 import { markLcmRenderOnlyPart, prepareKiloMessageVisibility, prepareKiloModelInput } from "./lcm/render-prep"
 import type { LcmRawLeafRenderPreparationInput } from "./lcm/context"
 import { getLcmRuntimePreparedProviderPayload } from "./lcm/provider-payload"
@@ -126,11 +127,6 @@ const REQUEST_PRUNE_BYTES = 1_250_000
 const LCM_PROVIDER_OVERFLOW_RECOVERY_MAX_ATTEMPTS = 2
 const LCM_RETRIEVAL_TOOL_ID_SET = new Set<string>(LCM_RETRIEVAL_TOOL_IDS)
 const LCM_MAP_TOOL_ID_SET = new Set<string>(LCM_MAP_TOOL_IDS)
-
-type LcmAllowedToolIDs = {
-  readonly retrieval: Set<string>
-  readonly map: Set<string>
-}
 
 type LcmProviderOverflowDecision =
   | { readonly action: "retry"; readonly nextAttempt: number; readonly providerOverflowRecovery: { attempt: number } }
@@ -255,24 +251,21 @@ export const layer = Layer.effect(
     const resolveAllowedLcmToolIDs = Effect.fn("SessionPrompt.resolveAllowedLcmToolIDs")(function* (
       sessionID: SessionID,
     ) {
-      const allowed: LcmAllowedToolIDs = { retrieval: new Set(), map: new Set() }
       const capabilities = yield* lcmRuntime
         .getCapabilities({ sessionID })
         .pipe(Effect.catch(() => Effect.succeed(undefined)))
-      if (!capabilities?.lcmActive) return allowed
+      if (!capabilities) return { retrieval: new Set(), map: new Set() } satisfies LcmAllowedToolIDs
       const conversation = yield* lcmRuntime
         .getConversationScope({ sessionID })
         .pipe(Effect.catch(() => Effect.succeed(undefined)))
-      if (!conversation || conversation.lifecycleState !== "lcm_active") return allowed
-      if (conversation.capabilityClass === "root" || conversation.capabilityClass === "map_child") {
-        for (const id of LCM_MAP_TOOL_IDS) allowed.map.add(id)
-      }
-      allowed.retrieval.add("lcm_grep")
-      allowed.retrieval.add("lcm_describe")
-      allowed.retrieval.add("lcm_expand_query")
-      if (conversation.capabilityClass !== "root") allowed.retrieval.add("lcm_expand")
-      if (conversation.directContentToolsAllowed) allowed.retrieval.add("lcm_read")
-      return allowed
+      if (!conversation) return { retrieval: new Set(), map: new Set() } satisfies LcmAllowedToolIDs
+      return resolvePreflightLcmToolIDs({
+        capabilitiesLifecycleState: capabilities.lifecycleState,
+        scopeLifecycleState: conversation.lifecycleState,
+        capabilityClass: conversation.capabilityClass,
+        capabilityProven: conversation.capabilityProven,
+        directContentToolsAllowed: conversation.directContentToolsAllowed,
+      })
     })
 
     const resolveLcmSystemPolicy = Effect.fn("SessionPrompt.resolveLcmSystemPolicy")(function* (sessionID: SessionID) {
