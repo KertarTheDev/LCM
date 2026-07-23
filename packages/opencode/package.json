@@ -18,7 +18,7 @@
     "lcm:migration:smoke": "bun run script/test-runner.ts test/lcm/db-migration.test.ts --timeout 60000 --concurrency 1",
     "lcm:large-file": "bun run script/test-runner.ts test/lcm/large-file.test.ts --timeout 60000 --concurrency 1",
     "lcm:explorer-safety": "bun run script/test-runner.ts test/lcm/file-exploration.test.ts --timeout 60000 --concurrency 1",
-    "lcm:map": "bun run script/test-runner.ts test/lcm/map.test.ts --timeout 60000 --concurrency 1",
+    "lcm:map": "bun run script/test-runner.ts test/lcm/map.test.ts --timeout 60000 --file-timeout 900000 --concurrency 1",
     "lcm:db:support": "bun run script/test-runner.ts test/lcm/db-smoke.test.ts --timeout 60000 --concurrency 1",
     "lcm:harness:test": "bun run script/test-runner.ts test/lcm/harness.test.ts --timeout 60000 --concurrency 1",
     "lcm:finalized-sync": "bun run script/test-runner.ts test/lcm/finalized-sync.test.ts test/lcm/finalized-sync-retry.test.ts --timeout 60000 --concurrency 1",

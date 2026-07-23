@@ -113,6 +113,8 @@ For macOS arm64 VSCode with the configured local Qwen provider:
 
 Run the same nine-tool matrix first with local Qwen and then from the authenticated CLI z.ai subscription:
 
+Normalize live-audit results by the nine tool identities below, not by the number of scenarios or mode variants exercised. Report each tool exactly once as `passed`, `failed`, or `not_run`, with literal/regex/case/pagination checks nested under `lcm_grep`. Tool registration or availability without an invocation is `not_run`, not `passed`. An expected authorization or cursor-scope rejection counts as `passed` only when the audit deliberately exercised that negative contract and observed the specified safe error; in particular, reusing an `lcm_grep` cursor with another query must return `lcm_retrieval_cursor_scope_mismatch`. Do not describe omitted `lcm_expand`/`lcm_read` checks or an unexercised `lcm_map_cancel` as successful coverage.
+
 | Tool | Required live proof |
 |---|---|
 | `lcm_grep` | Root session returns authorized literal/regex matches and stable handles. |
