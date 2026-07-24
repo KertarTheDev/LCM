@@ -339,6 +339,7 @@ const live: Layer.Layer<
       const providerCapacityInput = input.lcmProviderCapacity
         ? lcmProviderCapacityInputFromModel({
             model: input.model,
+            sessionID: input.sessionID,
             provider: item,
             providerOptions: prepared.params.options,
             priority: input.lcmProviderCapacity.priority,

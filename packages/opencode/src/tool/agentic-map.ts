@@ -4,7 +4,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Effect, Option, Schema } from "effect"
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
-import { lcmProviderCapacityInputFromModel, lcmProviderCapacityLane } from "../session/lcm/provider-capacity"
+import { lcmProviderCapacityInputFromModel, reserveLcmProviderCapacity } from "../session/lcm/provider-capacity"
 import { ModelID, ProviderID } from "../session/lcm/provider-ids"
 import { Session } from "../session/session"
 import { MessageID } from "../session/schema"
@@ -177,15 +177,6 @@ export const AgenticMapTool = Tool.define(
                 const providerInfo = yield* provider
                   .getProvider(childModel.providerID)
                   .pipe(Effect.catch(() => Effect.succeed(undefined)))
-                const capacityLane = lcmProviderCapacityLane(
-                  lcmProviderCapacityInputFromModel({
-                    model: childModel,
-                    priority: "background",
-                    ...(providerInfo ? { provider: providerInfo } : {}),
-                  }),
-                )
-                const localProviderCapacityKey =
-                  capacityLane.capacityClass === "remote_or_unknown" ? undefined : capacityLane.key
                 const title = `LCM map ${itemInput.mapID} item ${itemInput.itemIndex}`
                 const existing = (yield* sessions.children(ctx.sessionID)).find((child) => child.title === title)
                 const childPermission = [
@@ -225,33 +216,48 @@ export const AgenticMapTool = Tool.define(
                   projectID: childScope.projectID,
                   ...(childScope.workspaceID ? { workspaceID: childScope.workspaceID } : {}),
                   capabilityClass: "map_child",
-                  ...(localProviderCapacityKey ? { localProviderCapacityKey } : {}),
                 })
 
-                const cancel = () => ops.cancel(childSession.id)
-                itemInput.abortSignal?.addEventListener("abort", cancel, { once: true })
                 try {
-                  const boundary = agenticMapChildPromptBoundary(itemInput.request)
-                  const parts = yield* ops.resolvePromptParts(boundary.user)
-                  const result = yield* ops.prompt({
-                    messageID: MessageID.ascending(),
-                    sessionID: childSession.id,
-                    model: {
-                      providerID: ProviderID.make(itemInput.modelSelection.providerID),
-                      modelID: ModelID.make(itemInput.modelSelection.modelID),
-                    },
-                    agent: caller.name,
-                    tools:
-                      itemInput.mode === "read_only"
-                        ? Object.fromEntries(READ_ONLY_DENIED_TOOLS.map((tool) => [tool, false]))
-                        : undefined,
-                    parts,
-                    system: boundary.system,
-                    format: boundary.format,
-                  })
-                  return agenticMapChildOutput(result)
+                  const reservation = yield* Effect.promise(() =>
+                    reserveLcmProviderCapacity({
+                      ...lcmProviderCapacityInputFromModel({
+                        model: childModel,
+                        priority: "background",
+                        admission: "wait",
+                        abortSignal: itemInput.abortSignal,
+                        ...(providerInfo ? { provider: providerInfo } : {}),
+                      }),
+                      sessionID: childSession.id,
+                    }),
+                  )
+                  const cancel = () => ops.cancel(childSession.id)
+                  itemInput.abortSignal?.addEventListener("abort", cancel, { once: true })
+                  try {
+                    const boundary = agenticMapChildPromptBoundary(itemInput.request)
+                    const parts = yield* ops.resolvePromptParts(boundary.user)
+                    const result = yield* ops.prompt({
+                      messageID: MessageID.ascending(),
+                      sessionID: childSession.id,
+                      model: {
+                        providerID: ProviderID.make(itemInput.modelSelection.providerID),
+                        modelID: ModelID.make(itemInput.modelSelection.modelID),
+                      },
+                      agent: caller.name,
+                      tools:
+                        itemInput.mode === "read_only"
+                          ? Object.fromEntries(READ_ONLY_DENIED_TOOLS.map((tool) => [tool, false]))
+                          : undefined,
+                      parts,
+                      system: boundary.system,
+                      format: boundary.format,
+                    })
+                    return agenticMapChildOutput(result)
+                  } finally {
+                    itemInput.abortSignal?.removeEventListener("abort", cancel)
+                    reservation.release()
+                  }
                 } finally {
-                  itemInput.abortSignal?.removeEventListener("abort", cancel)
                   yield* slot.release
                 }
               }),

@@ -12,7 +12,6 @@ import {
   getOrCreateChildConversation,
   getOrCreateConversation,
 } from "../../src/session/lcm/lifecycle"
-import { lcmProviderCapacityKeyHash } from "../../src/session/lcm/provider-capacity"
 import { LcmRuntime } from "../../src/session/lcm/runtime"
 import type { ConversationID, OperationID } from "../../src/session/lcm/types"
 import { provideTestInstance, tmpdir } from "../fixture/fixture"
@@ -414,45 +413,31 @@ test("lcm:sub-agent-scope shares runtime worker and enforces child slot caps", a
     expect(result.workspaceActive).toBe(1)
     await Effect.runPromise(result.release)
 
-    await expect(
-      runRuntime(
-        LcmRuntime.Service.use((svc) =>
-          Effect.gen(function* () {
-            const first = yield* svc.acquireChildSessionSlot({
-              sessionID: "ses_m20_local_provider_first",
-              rootConversationID: "conv_m20_local_provider_root" as ConversationID,
-              projectID: "proj_m20",
-              workspaceID: "ws_m20",
-              capabilityClass: "task_child",
-              localProviderCapacityKey: "local_ollama|http://127.0.0.1:11434",
-            })
-            try {
-              yield* svc.acquireChildSessionSlot({
-                sessionID: "ses_m20_local_provider_second",
-                rootConversationID: "conv_m20_local_provider_root" as ConversationID,
-                projectID: "proj_m20",
-                workspaceID: "ws_m20",
-                capabilityClass: "explore_child",
-                localProviderCapacityKey: "local_ollama|http://127.0.0.1:11434",
-              })
-            } finally {
-              yield* first.release
-            }
-          }),
-        ),
+    const localChildren = await runRuntime(
+      LcmRuntime.Service.use((svc) =>
+        Effect.gen(function* () {
+          const first = yield* svc.acquireChildSessionSlot({
+            sessionID: "ses_m20_local_provider_first",
+            rootConversationID: "conv_m20_local_provider_root" as ConversationID,
+            projectID: "proj_m20",
+            workspaceID: "ws_m20",
+            capabilityClass: "task_child",
+          })
+          const second = yield* svc.acquireChildSessionSlot({
+            sessionID: "ses_m20_local_provider_second",
+            rootConversationID: "conv_m20_local_provider_root" as ConversationID,
+            projectID: "proj_m20",
+            workspaceID: "ws_m20",
+            capabilityClass: "explore_child",
+          })
+          yield* first.release
+          yield* second.release
+          return second
+        }),
       ),
-    ).rejects.toMatchObject({
-      code: "provider_capacity_deferred",
-      templateKey: "lcm.provider_capacity.deferred",
-      diagnosticCode: "lcm_child_slot_local_provider_busy",
-      retryable: true,
-      safeParams: {
-        providerEndpointKeyHash: lcmProviderCapacityKeyHash("local_ollama|http://127.0.0.1:11434"),
-        capacityClass: "local_ollama",
-        retryable: true,
-        action: "retry",
-      },
-    })
+    )
+    expect(localChildren.rootActive).toBe(2)
+    expect(localChildren.workspaceActive).toBe(2)
 
     await expect(
       runRuntime(

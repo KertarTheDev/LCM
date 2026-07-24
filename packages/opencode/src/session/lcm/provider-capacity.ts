@@ -9,6 +9,7 @@ export type LcmProviderCapacityAdmission = "wait" | "defer"
 export interface LcmProviderCapacityInput {
   readonly providerID: string
   readonly modelID: string
+  readonly sessionID?: string
   readonly priority: LcmProviderCapacityPriority
   readonly admission?: LcmProviderCapacityAdmission
   readonly operationID?: OperationID
@@ -35,6 +36,12 @@ export interface LcmProviderCapacityProviderLike {
 }
 
 interface CapacityWaiter {
+  readonly sessionID?: string
+  readonly start: () => boolean
+}
+
+interface CapacityReservationWaiter {
+  readonly sessionID: string
   readonly start: () => boolean
 }
 
@@ -42,6 +49,10 @@ interface CapacityState {
   active: number
   foregroundWaiters: CapacityWaiter[]
   backgroundWaiters: CapacityWaiter[]
+  reservationOwnerSessionID?: string
+  reservationDepth: number
+  reservationWaiters: CapacityReservationWaiter[]
+  foregroundTurnPending: boolean
 }
 
 export class LcmProviderCapacityDeferredError extends Error {
@@ -199,6 +210,7 @@ export function lcmProviderCapacityLane(
 
 export function lcmProviderCapacityInputFromModel(input: {
   readonly model: LcmProviderCapacityModelLike
+  readonly sessionID?: string
   readonly priority: LcmProviderCapacityPriority
   readonly admission?: LcmProviderCapacityAdmission
   readonly operationID?: OperationID
@@ -211,6 +223,7 @@ export function lcmProviderCapacityInputFromModel(input: {
   return {
     providerID: model.providerID,
     modelID: model.id,
+    ...(input.sessionID ? { sessionID: input.sessionID } : {}),
     priority: input.priority,
     ...(input.admission ? { admission: input.admission } : {}),
     ...(input.operationID ? { operationID: input.operationID } : {}),
@@ -316,7 +329,14 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
   function stateFor(key: string) {
     let state = states.get(key)
     if (!state) {
-      state = { active: 0, foregroundWaiters: [], backgroundWaiters: [] }
+      state = {
+        active: 0,
+        foregroundWaiters: [],
+        backgroundWaiters: [],
+        reservationDepth: 0,
+        reservationWaiters: [],
+        foregroundTurnPending: false,
+      }
       states.set(key, state)
     }
     return state
@@ -327,6 +347,8 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
       state.active === 0 &&
       state.foregroundWaiters.length === 0 &&
       state.backgroundWaiters.length === 0 &&
+      !state.reservationOwnerSessionID &&
+      state.reservationWaiters.length === 0 &&
       states.get(key) === state
     ) {
       states.delete(key)
@@ -337,9 +359,47 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
     return lcmProviderCapacityLane(input).key
   }
 
+  function shiftWaiter(waiters: CapacityWaiter[], sessionID?: string) {
+    const index = sessionID
+      ? waiters.findIndex((waiter) => waiter.sessionID === sessionID)
+      : waiters.length > 0
+        ? 0
+        : -1
+    return index >= 0 ? waiters.splice(index, 1)[0] : undefined
+  }
+
   function wakeNext(key: string, state: CapacityState) {
     while (state.active < maxLocalConcurrent) {
-      const next = state.foregroundWaiters.shift() ?? state.backgroundWaiters.shift()
+      if (state.reservationOwnerSessionID) {
+        const next =
+          shiftWaiter(state.foregroundWaiters, state.reservationOwnerSessionID) ??
+          shiftWaiter(state.backgroundWaiters, state.reservationOwnerSessionID)
+        if (!next) return
+        if (next.start()) return
+        continue
+      }
+
+      if (state.foregroundTurnPending && state.active > 0) return
+      if (state.active > 0 && state.reservationWaiters.length > 0) return
+
+      if (state.active === 0 && state.foregroundTurnPending) {
+        const foreground = shiftWaiter(state.foregroundWaiters)
+        state.foregroundTurnPending = false
+        if (foreground) {
+          if (foreground.start()) return
+          continue
+        }
+      }
+
+      if (state.active === 0) {
+        const reservation = state.reservationWaiters.shift()
+        if (reservation) {
+          if (reservation.start()) return
+          continue
+        }
+      }
+
+      const next = shiftWaiter(state.foregroundWaiters) ?? shiftWaiter(state.backgroundWaiters)
       if (!next) {
         deleteIfIdle(key, state)
         return
@@ -379,8 +439,26 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
     const state = stateFor(key)
     const admission = input.admission ?? (input.priority === "background" ? "defer" : "wait")
     const ownWaiters = input.priority === "foreground" ? state.foregroundWaiters : state.backgroundWaiters
-    const higherPriorityWaiting = input.priority === "background" && state.foregroundWaiters.length > 0
-    if (state.active < maxLocalConcurrent && ownWaiters.length === 0 && !higherPriorityWaiting) {
+    const reservationOwner = state.reservationOwnerSessionID
+    const reservationBlocks =
+      (reservationOwner !== undefined && reservationOwner !== input.sessionID) ||
+      (reservationOwner === undefined && state.reservationWaiters.length > 0)
+    const handoffDrainBlocks = state.foregroundTurnPending && state.active > 0
+    const ownWaiterCount = reservationOwner
+      ? ownWaiters.filter((waiter) => waiter.sessionID === reservationOwner).length
+      : ownWaiters.length
+    const higherPriorityWaiting =
+      input.priority === "background" &&
+      (reservationOwner
+        ? state.foregroundWaiters.some((waiter) => waiter.sessionID === reservationOwner)
+        : state.foregroundWaiters.length > 0)
+    if (
+      state.active < maxLocalConcurrent &&
+      ownWaiterCount === 0 &&
+      !higherPriorityWaiting &&
+      !reservationBlocks &&
+      !handoffDrainBlocks
+    ) {
       state.active++
       return { capacityClass, release: releaseOnce(key) }
     }
@@ -414,6 +492,7 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
         )
       }
       waiter = {
+        ...(input.sessionID ? { sessionID: input.sessionID } : {}),
         start: () => {
           if (settled) return false
           if (signal?.aborted) {
@@ -444,6 +523,103 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
     return { capacityClass, release: releaseOnce(key) }
   }
 
+  function releaseReservation(key: string, sessionID: string) {
+    const state = states.get(key)
+    if (!state || state.reservationOwnerSessionID !== sessionID) return
+    if (state.reservationDepth > 1) {
+      state.reservationDepth--
+      return
+    }
+    state.reservationOwnerSessionID = undefined
+    state.reservationDepth = 0
+    state.foregroundTurnPending = true
+    wakeNext(key, state)
+  }
+
+  function reservationLease(key: string, sessionID: string, signal?: AbortSignal) {
+    let released = false
+    const release = () => {
+      if (released) return
+      released = true
+      signal?.removeEventListener("abort", release)
+      releaseReservation(key, sessionID)
+    }
+    signal?.addEventListener("abort", release, { once: true })
+    if (signal?.aborted) release()
+    return { release }
+  }
+
+  async function reserve(input: LcmProviderCapacityInput & { readonly sessionID: string }) {
+    const capacityClass = classifyLcmProviderCapacity(input)
+    if (capacityClass === "remote_or_unknown") {
+      return { capacityClass, release: () => {} }
+    }
+
+    const signal = input.abortSignal
+    if (signal?.aborted) {
+      throw signal.reason instanceof Error ? signal.reason : new DOMException("The request was aborted.", "AbortError")
+    }
+
+    const key = keyFor(input)
+    const state = stateFor(key)
+    if (state.reservationOwnerSessionID === input.sessionID) {
+      state.reservationDepth++
+      return { capacityClass, ...reservationLease(key, input.sessionID, signal) }
+    }
+    if (!state.reservationOwnerSessionID && state.active === 0 && state.reservationWaiters.length === 0) {
+      state.reservationOwnerSessionID = input.sessionID
+      state.reservationDepth = 1
+      return { capacityClass, ...reservationLease(key, input.sessionID, signal) }
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      let settled = false
+      let waiter: CapacityReservationWaiter
+      const cleanup = () => signal?.removeEventListener("abort", onAbort)
+      const onAbort = () => {
+        if (settled) return
+        settled = true
+        cleanup()
+        const index = state.reservationWaiters.indexOf(waiter)
+        if (index >= 0) state.reservationWaiters.splice(index, 1)
+        wakeNext(key, state)
+        reject(
+          signal?.reason instanceof Error ? signal.reason : new DOMException("The request was aborted.", "AbortError"),
+        )
+      }
+      waiter = {
+        sessionID: input.sessionID,
+        start: () => {
+          if (settled) return false
+          if (signal?.aborted) {
+            settled = true
+            cleanup()
+            reject(
+              signal.reason instanceof Error
+                ? signal.reason
+                : new DOMException("The request was aborted.", "AbortError"),
+            )
+            return false
+          }
+          settled = true
+          cleanup()
+          state.reservationOwnerSessionID = input.sessionID
+          state.reservationDepth = 1
+          resolve()
+          return true
+        },
+      }
+      signal?.addEventListener("abort", onAbort, { once: true })
+      state.reservationWaiters.push(waiter)
+      if (signal?.aborted) {
+        onAbort()
+        return
+      }
+      wakeNext(key, state)
+    })
+    return { capacityClass, ...reservationLease(key, input.sessionID, signal) }
+  }
+
   async function run<T>(input: LcmProviderCapacityInput, fn: () => Promise<T> | T): Promise<T> {
     const lease = await acquire(input)
     try {
@@ -456,13 +632,22 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
   function snapshot(input: LcmProviderCapacityInput) {
     const capacityClass = classifyLcmProviderCapacity(input)
     if (capacityClass === "remote_or_unknown")
-      return { capacityClass, active: 0, foregroundQueued: 0, backgroundQueued: 0 }
+      return {
+        capacityClass,
+        active: 0,
+        foregroundQueued: 0,
+        backgroundQueued: 0,
+        reservationQueued: 0,
+        reserved: false,
+      }
     const state = states.get(keyFor(input))
     return {
       capacityClass,
       active: state?.active ?? 0,
       foregroundQueued: state?.foregroundWaiters.length ?? 0,
       backgroundQueued: state?.backgroundWaiters.length ?? 0,
+      reservationQueued: state?.reservationWaiters.length ?? 0,
+      reserved: state?.reservationOwnerSessionID !== undefined,
     }
   }
 
@@ -470,13 +655,17 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
     return states.size
   }
 
-  return { acquire, run, snapshot, stateCount }
+  return { acquire, reserve, run, snapshot, stateCount }
 }
 
 export const defaultLcmProviderCapacityRegistry = createLcmProviderCapacityRegistry()
 
 export function runWithLcmProviderCapacity<T>(input: LcmProviderCapacityInput, fn: () => Promise<T> | T): Promise<T> {
   return defaultLcmProviderCapacityRegistry.run(input, fn)
+}
+
+export function reserveLcmProviderCapacity(input: LcmProviderCapacityInput & { readonly sessionID: string }) {
+  return defaultLcmProviderCapacityRegistry.reserve(input)
 }
 
 export async function runWithLcmProviderCapacityStream<T>(

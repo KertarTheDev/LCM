@@ -66,7 +66,6 @@ export interface Interface {
     projectID: string
     workspaceID?: string
     capabilityClass: Exclude<LcmConversationCapabilityClass, "root">
-    localProviderCapacityKey?: string
   }) => Effect.Effect<{ release: Effect.Effect<void>; rootActive: number; workspaceActive: number }, LcmSafeError>
   readonly syncFinalizedMessages: (input: {
     sessionID: string

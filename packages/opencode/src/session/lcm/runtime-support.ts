@@ -15,7 +15,6 @@ import type { LcmFamilyTarget } from "./family"
 import type { LcmLargeFileRow } from "./large-files"
 import { resolveLcmModelLimits } from "./model-limits"
 import { lcmPreflightRecoverableSafeError } from "./preflight-errors"
-import { lcmProviderCapacitySafeFieldsFromKey } from "./provider-capacity"
 import {
   createLcmSafeError,
   type ConversationID,
@@ -81,20 +80,6 @@ export function operationTimeout(input: {
     retryable: true,
     ...(input.conversationID ? { conversationID: input.conversationID } : {}),
     diagnosticCode: input.diagnosticCode,
-  })
-}
-
-export function localProviderBusy(diagnosticCode: string, input?: { localProviderCapacityKey?: string }) {
-  return createLcmSafeError({
-    code: "provider_capacity_deferred",
-    templateKey: "lcm.provider_capacity.deferred",
-    safeParams: {
-      ...(input?.localProviderCapacityKey ? lcmProviderCapacitySafeFieldsFromKey(input.localProviderCapacityKey) : {}),
-      retryable: true,
-      action: "retry",
-    },
-    retryable: true,
-    diagnosticCode,
   })
 }
 

@@ -483,6 +483,201 @@ test("lcm:scheduler queues agentic background calls behind foreground work and p
   expect(registry.stateCount()).toBe(0)
 })
 
+test("lcm:scheduler gives a queued agentic item the endpoint and keeps it across child turns", async () => {
+  const registry = createLcmProviderCapacityRegistry()
+  const request = {
+    providerID: "ollama",
+    modelID: "qwen3",
+    apiID: "ollama-openai-compatible",
+    apiNpm: "@ai-sdk/openai-compatible",
+    apiURL: "http://127.0.0.1:11434/v1",
+  }
+  const parent = await registry.acquire({
+    ...request,
+    sessionID: "session_parent",
+    priority: "foreground",
+    admission: "wait",
+  })
+  const itemReservation = registry.reserve({
+    ...request,
+    sessionID: "session_map_item",
+    priority: "background",
+    admission: "wait",
+  })
+  let foregroundStarted = false
+  const nextForeground = registry
+    .acquire({
+      ...request,
+      sessionID: "session_parent",
+      priority: "foreground",
+      admission: "wait",
+    })
+    .then((lease) => {
+      foregroundStarted = true
+      return lease
+    })
+  await Promise.resolve()
+
+  expect(registry.snapshot({ ...request, priority: "foreground" })).toMatchObject({
+    active: 1,
+    foregroundQueued: 1,
+    reservationQueued: 1,
+    reserved: false,
+  })
+  parent.release()
+  const reservation = await itemReservation
+  await Promise.resolve()
+  expect(foregroundStarted).toBe(false)
+  expect(registry.snapshot({ ...request, priority: "foreground" })).toMatchObject({
+    active: 0,
+    foregroundQueued: 1,
+    reserved: true,
+  })
+
+  const firstTurn = await registry.acquire({
+    ...request,
+    sessionID: "session_map_item",
+    priority: "background",
+    admission: "wait",
+  })
+  expect(registry.snapshot({ ...request, priority: "foreground" }).active).toBe(1)
+  firstTurn.release()
+  const secondTurn = await registry.acquire({
+    ...request,
+    sessionID: "session_map_item",
+    priority: "background",
+    admission: "wait",
+  })
+  expect(foregroundStarted).toBe(false)
+  secondTurn.release()
+
+  reservation.release()
+  const foreground = await nextForeground
+  foreground.release()
+  expect(registry.stateCount()).toBe(0)
+})
+
+test("lcm:scheduler gives foreground one turn between FIFO agentic item reservations", async () => {
+  const registry = createLcmProviderCapacityRegistry()
+  const request = {
+    providerID: "ollama",
+    modelID: "qwen3",
+    apiID: "ollama-openai-compatible",
+    apiNpm: "@ai-sdk/openai-compatible",
+    apiURL: "http://127.0.0.1:11434/v1",
+  }
+  const order: string[] = []
+  const parent = await registry.acquire({
+    ...request,
+    sessionID: "session_parent",
+    priority: "foreground",
+    admission: "wait",
+  })
+  const first = registry
+    .reserve({
+      ...request,
+      sessionID: "session_map_item_1",
+      priority: "background",
+      admission: "wait",
+    })
+    .then((lease) => {
+      order.push("item-1")
+      return lease
+    })
+  const second = registry
+    .reserve({
+      ...request,
+      sessionID: "session_map_item_2",
+      priority: "background",
+      admission: "wait",
+    })
+    .then((lease) => {
+      order.push("item-2")
+      return lease
+    })
+  const third = registry
+    .reserve({
+      ...request,
+      sessionID: "session_map_item_3",
+      priority: "background",
+      admission: "wait",
+    })
+    .then((lease) => {
+      order.push("item-3")
+      return lease
+    })
+  const foreground = registry
+    .acquire({
+      ...request,
+      sessionID: "session_parent",
+      priority: "foreground",
+      admission: "wait",
+    })
+    .then((lease) => {
+      order.push("foreground")
+      return lease
+    })
+  await Promise.resolve()
+
+  parent.release()
+  const firstLease = await first
+  firstLease.release()
+  const foregroundLease = await foreground
+  foregroundLease.release()
+  const secondLease = await second
+  secondLease.release()
+  const thirdLease = await third
+  thirdLease.release()
+
+  expect(order).toEqual(["item-1", "foreground", "item-2", "item-3"])
+  expect(registry.stateCount()).toBe(0)
+})
+
+test("lcm:scheduler removes canceled waiting and active agentic item reservations", async () => {
+  const registry = createLcmProviderCapacityRegistry()
+  const request = {
+    providerID: "ollama",
+    modelID: "qwen3",
+    apiID: "ollama-openai-compatible",
+    apiNpm: "@ai-sdk/openai-compatible",
+    apiURL: "http://127.0.0.1:11434/v1",
+  }
+  const parent = await registry.acquire({
+    ...request,
+    sessionID: "session_parent",
+    priority: "foreground",
+    admission: "wait",
+  })
+  const waitingController = new AbortController()
+  const waiting = registry
+    .reserve({
+      ...request,
+      sessionID: "session_waiting_item",
+      priority: "background",
+      admission: "wait",
+      abortSignal: waitingController.signal,
+    })
+    .catch((error) => error)
+  await Promise.resolve()
+  expect(registry.snapshot({ ...request, priority: "foreground" }).reservationQueued).toBe(1)
+  waitingController.abort(new Error("waiting item canceled"))
+  expect(await waiting).toBeInstanceOf(Error)
+  expect(registry.snapshot({ ...request, priority: "foreground" }).reservationQueued).toBe(0)
+  parent.release()
+
+  const activeController = new AbortController()
+  await registry.reserve({
+    ...request,
+    sessionID: "session_active_item",
+    priority: "background",
+    admission: "wait",
+    abortSignal: activeController.signal,
+  })
+  expect(registry.snapshot({ ...request, priority: "foreground" }).reserved).toBe(true)
+  activeController.abort(new Error("active item canceled"))
+  expect(registry.stateCount()).toBe(0)
+})
+
 test("lcm:scheduler removes canceled agentic background waiters without leaking capacity", async () => {
   const registry = createLcmProviderCapacityRegistry()
   const request = {

@@ -49,7 +49,7 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
     priority: LcmProviderCapacityPriority,
     operationID: OperationID | undefined,
     run: () => Promise<T>,
-    options?: { abortSignal?: AbortSignal },
+    options?: { abortSignal?: AbortSignal; sessionID?: string },
   ) => {
     const providerInfo = provider
       ? await Effect.runPromise(
@@ -60,6 +60,7 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
     return runWithLcmProviderCapacity(
       lcmProviderCapacityInputFromModel({
         model,
+        ...(options?.sessionID ? { sessionID: options.sessionID } : {}),
         priority,
         ...(operationID ? { operationID } : {}),
         ...(options?.abortSignal ? { abortSignal: options.abortSignal } : {}),
@@ -119,7 +120,10 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
           abortSignal: input.abortSignal,
           messages,
         }),
-      input.abortSignal ? { abortSignal: input.abortSignal } : undefined,
+      {
+        sessionID: input.sessionID,
+        ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
+      },
     )
     return {
       text: generated.text,

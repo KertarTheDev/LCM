@@ -104,15 +104,6 @@ import {
 } from "./lifecycle"
 import { getLcmProductionSchemaVersion } from "./migrations"
 import { decideMaintenanceTrigger } from "./scheduler"
-import {
-  defaultLcmProviderCapacityRegistry,
-  lcmProviderBaseURLFromOptions,
-  lcmProviderCapacityInputFromModel,
-  lcmProviderCapacitySafeFieldsFromKey,
-  lcmProviderCapacityLane,
-  runWithLcmProviderCapacity,
-  type LcmProviderCapacityPriority,
-} from "./provider-capacity"
 import { LcmRetrieval } from "./retrieval"
 import { LcmMap, resolveLcmMapWorkerCount, type AgenticMapChildRunner, type LcmMapModelSelection } from "./map"
 import {
@@ -223,7 +214,6 @@ import {
   lcmMaxOutputTokens,
   lcmProviderDiagnostics,
   legacyReadOnly,
-  localProviderBusy,
   mergeLcmProviderOptions,
   pending,
   preflightFallbackLifecycleState,
@@ -302,7 +292,6 @@ export const layer = Layer.effect(
         rootConversationID: ConversationID
         workspaceKey: string
         capabilityClass: Exclude<LcmConversationCapabilityClass, "root">
-        localProviderCapacityKey?: string
       }
     >()
 
@@ -776,7 +765,6 @@ export const layer = Layer.effect(
       projectID: string
       workspaceID?: string
       capabilityClass: Exclude<LcmConversationCapabilityClass, "root">
-      localProviderCapacityKey?: string
     }) {
       const workspaceKey = input.workspaceID ? `workspace:${input.workspaceID}` : `project:${input.projectID}`
       const existing = childSlots.get(input.sessionID)
@@ -806,26 +794,10 @@ export const layer = Layer.effect(
       if (workspaceActive >= LcmConfig.RUNTIME_DEFAULTS.scheduler.maxChildSessionsPerWorkspace) {
         return yield* Effect.fail(invalidRequest("lcm_child_slot_workspace_exhausted"))
       }
-      if (input.localProviderCapacityKey) {
-        const localProviderActive = Array.from(childSlots.values()).some(
-          (slot) =>
-            slot.rootConversationID === input.rootConversationID &&
-            slot.localProviderCapacityKey === input.localProviderCapacityKey,
-        )
-        if (localProviderActive) {
-          return yield* Effect.fail(
-            localProviderBusy("lcm_child_slot_local_provider_busy", {
-              localProviderCapacityKey: input.localProviderCapacityKey,
-            }),
-          )
-        }
-      }
-
       childSlots.set(input.sessionID, {
         rootConversationID: input.rootConversationID,
         workspaceKey,
         capabilityClass: input.capabilityClass,
-        ...(input.localProviderCapacityKey ? { localProviderCapacityKey: input.localProviderCapacityKey } : {}),
       })
       return {
         rootActive: rootActive + 1,
@@ -1663,22 +1635,6 @@ export const layer = Layer.effect(
           }),
         } satisfies LcmToolErrorResult
       }
-      const providerInfo =
-        provider && model
-          ? yield* provider.getProvider(model.providerID).pipe(Effect.catch(() => Effect.succeed(undefined)))
-          : undefined
-      const localProviderCapacityKey = model
-        ? (() => {
-            const lane = lcmProviderCapacityLane(
-              lcmProviderCapacityInputFromModel({
-                model,
-                priority: "foreground",
-                ...(providerInfo ? { provider: providerInfo } : {}),
-              }),
-            )
-            return lane.capacityClass === "remote_or_unknown" ? undefined : lane.key
-          })()
-        : undefined
       if (rootScope?.capabilityClass === "root") {
         const capacitySlotID = `${input.sessionID}:lcm_expand_query:${operationID}`
         const slot = yield* acquireChildSessionSlot({
@@ -1687,7 +1643,6 @@ export const layer = Layer.effect(
           projectID: rootScope.projectID,
           ...(rootScope.workspaceID ? { workspaceID: rootScope.workspaceID } : {}),
           capabilityClass: "explore_child",
-          ...(localProviderCapacityKey ? { localProviderCapacityKey } : {}),
         }).pipe(
           Effect.match({
             onFailure: (safeError) => ({ ok: false as const, safeError }),
