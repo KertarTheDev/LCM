@@ -1199,6 +1199,7 @@ describe("session.llm.stream", () => {
     { config: () => openAIConfig(loadFixture("openai", "gpt-5.2").model, `${state.server!.url.origin}/v1`) },
   )
 
+  // kilocode_change start - local provider capacity arbitration uses the AI SDK stream boundary
   it.instance(
     "keeps classified local providers on the capacity-controlled AI SDK path",
     () =>
@@ -1286,6 +1287,7 @@ describe("session.llm.stream", () => {
       }),
     { config: () => openAIConfig(loadFixture("openai", "gpt-5.2").model, `${state.server!.url.origin}/v1`) },
   )
+  // kilocode_change end
 
   it.instance(
     "streams OpenAI through native runtime when opted in",
