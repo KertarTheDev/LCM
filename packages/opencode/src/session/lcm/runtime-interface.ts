@@ -65,6 +65,8 @@ export interface Interface {
     projectID: string
     workspaceID?: string
     capabilityClass: Exclude<LcmConversationCapabilityClass, "root">
+    abortSignal?: AbortSignal
+    onState?: (state: "waiting_capacity" | "running") => void | Promise<void>
   }) => Effect.Effect<{ release: Effect.Effect<void>; rootActive: number; workspaceActive: number }, LcmSafeError>
   readonly syncFinalizedMessages: (input: {
     sessionID: string

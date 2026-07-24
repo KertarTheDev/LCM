@@ -144,6 +144,9 @@ export const runAgenticMapChild: AgenticMapChildRunner = (input) =>
             projectID: childScope.projectID,
             ...(childScope.workspaceID ? { workspaceID: childScope.workspaceID } : {}),
             capabilityClass: "map_child",
+            ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
+            onState: (phase) =>
+              AppRuntime.runPromise(lcmRuntime.setMapChildProviderPhase({ sessionID: childSession.id, phase })),
           })
 
           const cancel = () => {

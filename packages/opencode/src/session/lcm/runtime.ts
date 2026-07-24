@@ -308,6 +308,27 @@ export const layer = Layer.effect(
         capabilityClass: Exclude<LcmConversationCapabilityClass, "root">
       }
     >()
+    type ChildSlotLease = {
+      release: Effect.Effect<void>
+      rootActive: number
+      workspaceActive: number
+    }
+    type ChildSlotRequest = {
+      sessionID: string
+      rootConversationID: ConversationID
+      projectID: string
+      workspaceID?: string
+      capabilityClass: Exclude<LcmConversationCapabilityClass, "root">
+      abortSignal?: AbortSignal
+      onState?: (state: "waiting_capacity" | "running") => void | Promise<void>
+    }
+    const childSlotWaiters: Array<{
+      input: ChildSlotRequest
+      workspaceKey: string
+      resolve: (lease: ChildSlotLease) => void
+      reject: (safeError: LcmSafeError) => void
+      abort: () => void
+    }> = []
 
     const getResolved = Effect.fn("LcmRuntime.getResolvedConfig")(function* () {
       const cfg = yield* config.get()
@@ -773,56 +794,126 @@ export const layer = Layer.effect(
       return yield* getOrCreateLifecycleChildConversation(input).pipe(Effect.provideService(LcmDb.Service, lcmDb))
     })
 
-    const acquireChildSessionSlot = Effect.fn("LcmRuntime.acquireChildSessionSlot")(function* (input: {
-      sessionID: string
-      rootConversationID: ConversationID
-      projectID: string
-      workspaceID?: string
-      capabilityClass: Exclude<LcmConversationCapabilityClass, "root">
-    }) {
-      const workspaceKey = input.workspaceID ? `workspace:${input.workspaceID}` : `project:${input.projectID}`
-      const existing = childSlots.get(input.sessionID)
-      if (existing) {
-        const rootActive = Array.from(childSlots.values()).filter(
-          (slot) => slot.rootConversationID === existing.rootConversationID,
-        ).length
-        const workspaceActive = Array.from(childSlots.values()).filter(
-          (slot) => slot.workspaceKey === existing.workspaceKey,
-        ).length
-        return {
-          rootActive,
-          workspaceActive,
-          release: Effect.sync(() => {}),
-        }
+    function childSlotCounts(rootConversationID: ConversationID, workspaceKey: string) {
+      return {
+        rootActive: Array.from(childSlots.values()).filter((slot) => slot.rootConversationID === rootConversationID)
+          .length,
+        workspaceActive: Array.from(childSlots.values()).filter((slot) => slot.workspaceKey === workspaceKey).length,
       }
+    }
 
-      const rootActive = Array.from(childSlots.values()).filter(
-        (slot) => slot.rootConversationID === input.rootConversationID,
-      ).length
-      const workspaceActive = Array.from(childSlots.values()).filter(
-        (slot) => slot.workspaceKey === workspaceKey,
-      ).length
-      if (rootActive >= LcmConfig.RUNTIME_DEFAULTS.scheduler.maxChildSessionsPerRoot) {
-        return yield* Effect.fail(invalidRequest("lcm_child_slot_root_exhausted"))
+    function childSlotAvailable(input: ChildSlotRequest, workspaceKey: string) {
+      const counts = childSlotCounts(input.rootConversationID, workspaceKey)
+      return (
+        counts.rootActive < LcmConfig.RUNTIME_DEFAULTS.scheduler.maxChildSessionsPerRoot &&
+        counts.workspaceActive < LcmConfig.RUNTIME_DEFAULTS.scheduler.maxChildSessionsPerWorkspace
+      )
+    }
+
+    function notifyChildSlotState(input: ChildSlotRequest, state: "waiting_capacity" | "running") {
+      void Promise.resolve(input.onState?.(state)).catch(() => {})
+    }
+
+    function childSlotCanceled() {
+      return createLcmSafeError({
+        code: "canceled",
+        templateKey: "lcm.operation.canceled",
+        safeParams: { retryable: false },
+        retryable: false,
+        diagnosticCode: "lcm_child_slot_wait_canceled",
+      })
+    }
+
+    function wakeChildSlotWaiters() {
+      while (true) {
+        const index = childSlotWaiters.findIndex((waiter) => {
+          if (waiter.input.abortSignal?.aborted) return true
+          return childSlotAvailable(waiter.input, waiter.workspaceKey)
+        })
+        if (index < 0) return
+        const waiter = childSlotWaiters.splice(index, 1)[0]
+        waiter.input.abortSignal?.removeEventListener("abort", waiter.abort)
+        if (waiter.input.abortSignal?.aborted) {
+          waiter.reject(childSlotCanceled())
+          continue
+        }
+        const lease = grantChildSlot(waiter.input, waiter.workspaceKey)
+        notifyChildSlotState(waiter.input, "running")
+        waiter.resolve(lease)
       }
-      if (workspaceActive >= LcmConfig.RUNTIME_DEFAULTS.scheduler.maxChildSessionsPerWorkspace) {
-        return yield* Effect.fail(invalidRequest("lcm_child_slot_workspace_exhausted"))
-      }
+    }
+
+    function grantChildSlot(input: ChildSlotRequest, workspaceKey: string): ChildSlotLease {
+      const counts = childSlotCounts(input.rootConversationID, workspaceKey)
       childSlots.set(input.sessionID, {
         rootConversationID: input.rootConversationID,
         workspaceKey,
         capabilityClass: input.capabilityClass,
       })
+      let released = false
       return {
-        rootActive: rootActive + 1,
-        workspaceActive: workspaceActive + 1,
+        rootActive: counts.rootActive + 1,
+        workspaceActive: counts.workspaceActive + 1,
         release: Effect.sync(() => {
+          if (released) return
+          released = true
           const current = childSlots.get(input.sessionID)
           if (current?.rootConversationID === input.rootConversationID && current.workspaceKey === workspaceKey) {
             childSlots.delete(input.sessionID)
+            wakeChildSlotWaiters()
           }
         }),
       }
+    }
+
+    const acquireChildSessionSlot = Effect.fn("LcmRuntime.acquireChildSessionSlot")(function* (
+      input: ChildSlotRequest,
+    ) {
+      const workspaceKey = input.workspaceID ? `workspace:${input.workspaceID}` : `project:${input.projectID}`
+      const existing = childSlots.get(input.sessionID)
+      if (existing) {
+        const counts = childSlotCounts(existing.rootConversationID, existing.workspaceKey)
+        notifyChildSlotState(input, "running")
+        return {
+          ...counts,
+          release: Effect.sync(() => {}),
+        }
+      }
+
+      if (input.abortSignal?.aborted) return yield* Effect.fail(childSlotCanceled())
+      if (childSlotAvailable(input, workspaceKey)) {
+        notifyChildSlotState(input, "running")
+        return grantChildSlot(input, workspaceKey)
+      }
+      if (input.capabilityClass !== "map_child") {
+        const counts = childSlotCounts(input.rootConversationID, workspaceKey)
+        return yield* Effect.fail(
+          invalidRequest(
+            counts.rootActive >= LcmConfig.RUNTIME_DEFAULTS.scheduler.maxChildSessionsPerRoot
+              ? "lcm_child_slot_root_exhausted"
+              : "lcm_child_slot_workspace_exhausted",
+          ),
+        )
+      }
+
+      notifyChildSlotState(input, "waiting_capacity")
+      return yield* Effect.tryPromise({
+        try: () =>
+          new Promise<ChildSlotLease>((resolve, reject) => {
+            let waiter: (typeof childSlotWaiters)[number]
+            const abort = () => {
+              const index = childSlotWaiters.indexOf(waiter)
+              if (index >= 0) childSlotWaiters.splice(index, 1)
+              input.abortSignal?.removeEventListener("abort", abort)
+              reject(childSlotCanceled())
+            }
+            waiter = { input, workspaceKey, resolve, reject, abort }
+            childSlotWaiters.push(waiter)
+            input.abortSignal?.addEventListener("abort", abort, { once: true })
+            if (input.abortSignal?.aborted) abort()
+          }),
+        catch: (error) => (isLcmSafeError(error) ? error : childSlotCanceled()),
+      })
     })
 
     const sessionDeletionTree = Effect.fn("LcmRuntime.sessionDeletionTree")(function* (input: {
@@ -872,7 +963,7 @@ export const layer = Layer.effect(
         yield* createLcmFinalizedSyncPendingStore()
           .delete(sessionID as RuntimeSessionID)
           .pipe(Effect.ignore)
-        childSlots.delete(sessionID)
+        if (childSlots.delete(sessionID)) wakeChildSlotWaiters()
       }
       const result = yield* handleLifecycleSessionDeleted(input).pipe(Effect.provideService(LcmDb.Service, lcmDb))
       aggregateStorageBytes.invalidate()
@@ -2126,9 +2217,13 @@ export const layer = Layer.effect(
         ),
       )
 
-    const persistedLlmMapProcessor = (sessionID: string, operationID: OperationID): LlmMapGenerator => {
+    const persistedLlmMapProcessor = (
+      sessionID: string,
+      operationID: OperationID,
+      mapDb: LcmDb.Interface,
+    ): LlmMapGenerator => {
       const languages = new Map<string, Promise<LanguageModelV3>>()
-      return async ({ prompt, request, modelSelection, abortSignal }) => {
+      return async ({ mapID, itemIndex, prompt, request, modelSelection, abortSignal }) => {
         if (!provider) throw invalidRequest("lcm_map_provider_unavailable", { operationID })
         const model = await Effect.runPromise(
           provider.getModel(ProviderID.make(modelSelection.providerID), ModelID.make(modelSelection.modelID)),
@@ -2145,6 +2240,15 @@ export const layer = Layer.effect(
           language,
           sessionID,
           priority: "background",
+          admission: "wait",
+          onState: (phase) =>
+            LcmMap.setMapItemProviderPhase({
+              lcmDb: mapDb,
+              mapID,
+              itemIndex,
+              phase,
+              operationID,
+            }),
           operationID,
           prompt,
           request,
@@ -2211,7 +2315,7 @@ export const layer = Layer.effect(
           operationID,
           scope: input.scope,
           scheduler: mapScheduler,
-          processor: persistedLlmMapProcessor(input.sessionID, operationID),
+          processor: persistedLlmMapProcessor(input.sessionID, operationID, family.lcmDb),
           childRunner: runtimeAgenticMapChild,
           recordUsage: recordLlmMapUsage,
         }).pipe(Effect.provideService(LcmDb.Service, family.lcmDb))
@@ -2268,7 +2372,7 @@ export const layer = Layer.effect(
       const resolvedResult = yield* resolvedEffect
       if (!resolvedResult.ok) return { ok: false, error: resolvedResult.error } satisfies LcmToolErrorResult
       const resolved = resolvedResult.resolved
-      const mapCapacity = yield* Effect.promise(() =>
+      const mapPlan = yield* Effect.promise(() =>
         resolveRuntimeMapWorkers({
           toolKind: "llm_map",
           mapInput: input,
@@ -2280,20 +2384,29 @@ export const layer = Layer.effect(
       let languagePromise: Promise<LanguageModelV3> | undefined
       const mapEffect = LcmMap.llmMap({
         ...input,
-        workers: mapCapacity.workers,
-        providerCapacityClass: mapCapacity.providerCapacityClass,
+        workers: mapPlan.effectiveWorkers,
+        providerCapacityClass: mapPlan.providerCapacityClass,
         dataDir: dbResult.db.dataDir,
         operationID,
         scope,
         scheduler: mapScheduler,
         modelSelection: resolved.modelSelection,
-        generator: async ({ prompt, request, abortSignal }) => {
+        generator: async ({ mapID, itemIndex, prompt, request, abortSignal }) => {
           const language = await (languagePromise ??= Effect.runPromise(provider!.getLanguage(resolved.model)))
           const generated = await runLcmTextGeneration({
             model: resolved.model,
             language,
             sessionID: input.sessionID,
             priority: "background",
+            admission: "wait",
+            onState: (phase) =>
+              LcmMap.setMapItemProviderPhase({
+                lcmDb: familyDb,
+                mapID,
+                itemIndex,
+                phase,
+                operationID,
+              }),
             operationID,
             prompt,
             request,
@@ -2413,7 +2526,7 @@ export const layer = Layer.effect(
           }),
         } satisfies LcmToolErrorResult
       }
-      const mapCapacity = yield* Effect.promise(() =>
+      const mapPlan = yield* Effect.promise(() =>
         resolveRuntimeMapWorkers({
           toolKind: "agentic_map",
           mapInput: input,
@@ -2423,8 +2536,8 @@ export const layer = Layer.effect(
 
       return yield* LcmMap.agenticMap({
         ...input,
-        workers: mapCapacity.workers,
-        providerCapacityClass: mapCapacity.providerCapacityClass,
+        workers: mapPlan.effectiveWorkers,
+        providerCapacityClass: mapPlan.providerCapacityClass,
         dataDir: dbResult.db.dataDir,
         operationID,
         scope,
@@ -2531,7 +2644,7 @@ export const layer = Layer.effect(
             operationID,
             scope,
             scheduler: mapScheduler,
-            processor: persistedLlmMapProcessor(input.sessionID, operationID),
+            processor: persistedLlmMapProcessor(input.sessionID, operationID, familyDb),
             childRunner: runtimeAgenticMapChild,
             recordUsage: recordLlmMapUsage,
           })
@@ -2614,6 +2727,10 @@ export const layer = Layer.effect(
       yield* Effect.promise(() => mapScheduler.shutdown({ operationID: createOperationID() })).pipe(
         Effect.catch(() => Effect.void),
       )
+      for (const waiter of childSlotWaiters.splice(0)) {
+        waiter.input.abortSignal?.removeEventListener("abort", waiter.abort)
+        waiter.reject(childSlotCanceled())
+      }
       childSlots.clear()
       yield* lcmDb.close()
     })

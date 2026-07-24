@@ -15,6 +15,7 @@ This file records current engineering or evidence gaps for the v7.4.15 integrati
 - Product family resolution now reads authoritative Core Kilo session/project lineage and reports stage-specific lookup/boundary/root diagnostics instead of collapsing old-session failures into `lcm_family_resolution_failed`. The resolver consumes the ambient app/default-layer Core service when present and scopes a Core default layer only for isolated embedders, avoiding both an undeclared Effect requirement and a second module-owned database runtime.
 - The final provider request now enforces the output reserve admitted by LCM, closing the path where a long session could grow from roughly 75K input toward a 131K context ceiling through a recomputed output allowance.
 - CLI, TUI, and VSCode now expose hard/raw/backlog plus bounded paid-token LCM activity; VSCode restores prompt export and debug backend logging and merges paid LCM requests into the task timeline.
+- Map execution planning now separates requested and effective workers, and both map kinds use the same fair local-provider wait lane. Local contention and map-child slot pressure are observable queue states rather than worker-validation or provider-capacity failures; typed item failures no longer fall through to caller `invalid_request`.
 
 ## Engineering Concern
 

@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { PGlite } from "@electric-sql/pglite"
 import path from "node:path"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
 import { Session } from "../../src/session/session"
 import { LcmDb } from "../../src/session/lcm/db"
 import {
@@ -470,4 +470,87 @@ test("lcm:sub-agent-scope shares runtime worker and enforces child slot caps", a
     if (previous === undefined) delete process.env.KILO_LCM_DATA_DIR
     else process.env.KILO_LCM_DATA_DIR = previous
   }
+})
+
+test("lcm:sub-agent-scope queues map children until a logical child slot is available", async () => {
+  const phases = await runRuntime(
+    LcmRuntime.Service.use((svc) =>
+      Effect.gen(function* () {
+        const rootConversationID = "conv_m20_map_slot_queue" as ConversationID
+        const held = []
+        for (let index = 0; index < 8; index++) {
+          held.push(
+            yield* svc.acquireChildSessionSlot({
+              sessionID: `ses_m20_map_slot_held_${index}`,
+              rootConversationID,
+              projectID: "proj_m20",
+              workspaceID: "ws_m20_map_slot_queue",
+              capabilityClass: "task_child",
+            }),
+          )
+        }
+
+        const states: string[] = []
+        const waiting = yield* svc
+          .acquireChildSessionSlot({
+            sessionID: "ses_m20_map_slot_waiting",
+            rootConversationID,
+            projectID: "proj_m20",
+            workspaceID: "ws_m20_map_slot_queue",
+            capabilityClass: "map_child",
+            onState: (state) => {
+              states.push(state)
+            },
+          })
+          .pipe(Effect.forkChild)
+        yield* Effect.sleep("10 millis")
+        expect(states).toEqual(["waiting_capacity"])
+
+        yield* held[0]!.release
+        const acquired = yield* Fiber.join(waiting)
+        expect(acquired.rootActive).toBe(8)
+        expect(acquired.workspaceActive).toBe(8)
+        yield* acquired.release
+
+        const replacement = yield* svc.acquireChildSessionSlot({
+          sessionID: "ses_m20_map_slot_replacement",
+          rootConversationID,
+          projectID: "proj_m20",
+          workspaceID: "ws_m20_map_slot_queue",
+          capabilityClass: "task_child",
+        })
+        const controller = new AbortController()
+        const canceledStates: string[] = []
+        const canceled = yield* svc
+          .acquireChildSessionSlot({
+            sessionID: "ses_m20_map_slot_canceled",
+            rootConversationID,
+            projectID: "proj_m20",
+            workspaceID: "ws_m20_map_slot_queue",
+            capabilityClass: "map_child",
+            abortSignal: controller.signal,
+            onState: (state) => {
+              canceledStates.push(state)
+            },
+          })
+          .pipe(Effect.forkChild)
+        yield* Effect.sleep("10 millis")
+        controller.abort()
+        const canceledError = yield* Fiber.join(canceled).pipe(Effect.flip)
+        expect(canceledStates).toEqual(["waiting_capacity"])
+        expect(canceledError).toMatchObject({
+          code: "canceled",
+          diagnosticCode: "lcm_child_slot_wait_canceled",
+        })
+
+        yield* replacement.release
+        yield* Effect.all(
+          held.slice(1).map((slot) => slot.release),
+          { concurrency: 1 },
+        )
+        return states
+      }),
+    ),
+  )
+  expect(phases).toEqual(["waiting_capacity", "running"])
 })

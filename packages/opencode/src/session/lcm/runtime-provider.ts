@@ -14,6 +14,8 @@ import {
   lcmProviderBaseURLFromOptions,
   lcmProviderCapacityInputFromModel,
   runWithLcmProviderCapacity,
+  type LcmProviderCapacityAdmission,
+  type LcmProviderCapacityClass,
   type LcmProviderCapacityPriority,
 } from "./provider-capacity"
 import {
@@ -36,6 +38,34 @@ export type RuntimeSummaryGenerator = (input: {
   abortSignal?: AbortSignal
 }) => Promise<{ text: string; usage: ReturnType<typeof providerUsageFromGeneration> }>
 
+export interface LcmRuntimeMapExecutionPlan {
+  readonly requestedWorkers?: number
+  readonly effectiveWorkers: number
+  readonly providerCapacityClass: LcmProviderCapacityClass
+}
+
+export function resolveLcmRuntimeMapExecutionPlan(input: {
+  readonly toolKind: "llm_map" | "agentic_map"
+  readonly requestedWorkers?: number
+  readonly modelSelector: LcmMapModelSelection["selector"]
+  readonly providerCapacityClass: LcmProviderCapacityClass
+  readonly providerActive?: number
+  readonly providerForegroundQueued?: number
+}): LcmRuntimeMapExecutionPlan {
+  return {
+    ...(input.requestedWorkers !== undefined ? { requestedWorkers: input.requestedWorkers } : {}),
+    effectiveWorkers: resolveLcmMapWorkerCount({
+      toolKind: input.toolKind,
+      requestedWorkers: input.requestedWorkers,
+      modelSelector: input.modelSelector,
+      providerCapacityClass: input.providerCapacityClass,
+      providerActive: input.providerActive,
+      providerForegroundQueued: input.providerForegroundQueued,
+    }),
+    providerCapacityClass: input.providerCapacityClass,
+  }
+}
+
 /**
  * Centralizes all runtime-owned model invocation policy. New provider-backed
  * LCM operations must pass through this factory so transforms, local capacity,
@@ -49,7 +79,12 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
     priority: LcmProviderCapacityPriority,
     operationID: OperationID | undefined,
     run: () => Promise<T>,
-    options?: { abortSignal?: AbortSignal; sessionID?: string },
+    options?: {
+      abortSignal?: AbortSignal
+      sessionID?: string
+      admission?: LcmProviderCapacityAdmission
+      onState?: (state: "waiting_capacity" | "running") => void | Promise<void>
+    },
   ) => {
     const providerInfo = provider
       ? await Effect.runPromise(
@@ -57,17 +92,30 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
         )
       : undefined
     const providerBaseURL = lcmProviderBaseURLFromOptions(providerInfo?.options)
-    return runWithLcmProviderCapacity(
-      lcmProviderCapacityInputFromModel({
+    let waitState: Promise<void> | undefined
+    const capacityInput = {
+      ...lcmProviderCapacityInputFromModel({
         model,
         ...(options?.sessionID ? { sessionID: options.sessionID } : {}),
         priority,
+        ...(options?.admission ? { admission: options.admission } : {}),
         ...(operationID ? { operationID } : {}),
         ...(options?.abortSignal ? { abortSignal: options.abortSignal } : {}),
         ...(providerBaseURL ? { providerBaseURL } : {}),
       }),
-      run,
-    )
+      ...(options?.onState
+        ? {
+            onWaitStart: () => {
+              waitState ??= Promise.resolve(options.onState?.("waiting_capacity")).catch(() => {})
+            },
+          }
+        : {}),
+    }
+    return runWithLcmProviderCapacity(capacityInput, async () => {
+      await waitState
+      await Promise.resolve(options?.onState?.("running")).catch(() => {})
+      return run()
+    })
   }
 
   const runLcmTextGeneration = async (input: {
@@ -75,6 +123,8 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
     readonly language: LanguageModelV3
     readonly sessionID: string
     readonly priority: LcmProviderCapacityPriority
+    readonly admission?: LcmProviderCapacityAdmission
+    readonly onState?: (state: "waiting_capacity" | "running") => void | Promise<void>
     readonly operationID?: OperationID
     readonly prompt: string
     readonly request?: { readonly messages: readonly LcmGenerationMessage[] }
@@ -122,6 +172,8 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
         }),
       {
         sessionID: input.sessionID,
+        ...(input.admission ? { admission: input.admission } : {}),
+        ...(input.onState ? { onState: input.onState } : {}),
         ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
       },
     )
@@ -312,17 +364,14 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
       ...(providerInfo ? { provider: providerInfo } : {}),
     })
     const snapshot = defaultLcmProviderCapacityRegistry.snapshot(capacityInput)
-    return {
-      workers: resolveLcmMapWorkerCount({
-        toolKind: input.toolKind,
-        requestedWorkers: input.mapInput.workers,
-        modelSelector: input.resolved.modelSelection.selector,
-        providerCapacityClass: snapshot.capacityClass,
-        providerActive: snapshot.active,
-        providerForegroundQueued: snapshot.foregroundQueued,
-      }),
+    return resolveLcmRuntimeMapExecutionPlan({
+      toolKind: input.toolKind,
+      requestedWorkers: input.mapInput.workers,
+      modelSelector: input.resolved.modelSelection.selector,
       providerCapacityClass: snapshot.capacityClass,
-    }
+      providerActive: snapshot.active,
+      providerForegroundQueued: snapshot.foregroundQueued,
+    })
   }
 
   return {
