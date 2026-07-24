@@ -51,6 +51,11 @@ The trigger paths include upstream context-engine/epoch code, `packages/kilo-mem
 
 On `kilocode-lcm-prerelease`, `node --test script/lcm-prerelease-release.test.mjs` is the release-workflow sentinel. It must cover release-ID-bound create/upload/validate/publish/cleanup behavior, the exact 20-asset manifest, archive-only CLI construction, and the LCM VSIX step's package working directory.
 
+`.github/workflows/workflow-validation.yml` runs when GitHub Actions workflows or their checker change. The canonical
+`bun run script/check-workflows.ts` gate checks both the explicit workflow allowlist and every active workflow with
+checksum-pinned actionlint. It must fail before a push is accepted when YAML mapping keys are duplicated or GitHub
+Actions expressions, runner labels, job dependencies, or workflow structure are invalid.
+
 ## Drift Checklist
 
 The following upstream changes require an LCM review before merge:

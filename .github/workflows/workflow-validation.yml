@@ -1,0 +1,50 @@
+# kilocode_change - new file
+name: Validate GitHub Actions workflows
+
+on:
+  push:
+    branches:
+      - main
+      - "kilocode-lcm-v*"
+      - kilocode-lcm-prerelease
+    paths:
+      - ".github/workflows/**"
+      - ".github/actionlint.yaml"
+      - "script/check-workflows.ts"
+      - "script/check-workflows.test.ts"
+  pull_request:
+    branches:
+      - main
+      - "kilocode-lcm-v*"
+      - kilocode-lcm-prerelease
+    paths:
+      - ".github/workflows/**"
+      - ".github/actionlint.yaml"
+      - "script/check-workflows.ts"
+      - "script/check-workflows.test.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate workflow syntax and policy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Run workflow validation tests
+        env:
+          ACTIONLINT_CACHE_DIR: ${{ runner.tool_cache }}/actionlint
+        run: bun test "$GITHUB_WORKSPACE/script/check-workflows.test.ts"
+        working-directory: ${{ runner.temp }}
+
+      - name: Validate all workflows
+        env:
+          ACTIONLINT_CACHE_DIR: ${{ runner.tool_cache }}/actionlint
+        run: bun run script/check-workflows.ts
