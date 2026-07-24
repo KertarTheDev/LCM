@@ -68,7 +68,7 @@ export type StreamInput = {
   small?: boolean
   tools: Record<string, Tool>
   retries?: number
-  providerRetryLimit?: number
+  providerRetryLimit?: number // kilocode_change
   toolChoice?: "auto" | "required" | "none"
   preflight?: boolean // kilocode_change - enable proactive threshold compaction for normal session turns
   reportedContextTokens?: number // kilocode_change - provider-reported context size from the last finished turn, source of truth for the output cap
@@ -603,7 +603,7 @@ const live: Layer.Layer<
               result.result.fullStream as AsyncIterable<import("@ai-sdk/provider").LanguageModelV2StreamPart>,
               result.idleMs,
               ctrl,
-              result.firstIdleMs,
+              result.firstIdleMs, // kilocode_change
             )
             return Stream.fromAsyncIterable(watched, (e) => (e instanceof Error ? e : new Error(String(e)))).pipe(
               // kilocode_change: the watchdog consumes raw LanguageModelV2 parts;
