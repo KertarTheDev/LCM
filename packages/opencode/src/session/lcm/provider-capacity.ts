@@ -1,14 +1,16 @@
 // kilocode_change - new file
 import { createHash } from "node:crypto"
-import { createLcmSafeError, type LcmSafeError, type OperationID } from "./types"
+import { createLcmSafeError, type LcmConversationCapabilityClass, type LcmSafeError, type OperationID } from "./types"
 
 export type LcmProviderCapacityClass = "remote_or_unknown" | "local_ollama" | "local_openai_compatible"
 export type LcmProviderCapacityPriority = "foreground" | "background"
+export type LcmProviderCapacityAdmission = "wait" | "defer"
 
 export interface LcmProviderCapacityInput {
   readonly providerID: string
   readonly modelID: string
   readonly priority: LcmProviderCapacityPriority
+  readonly admission?: LcmProviderCapacityAdmission
   readonly operationID?: OperationID
   readonly abortSignal?: AbortSignal
   readonly apiID?: string
@@ -32,13 +34,14 @@ export interface LcmProviderCapacityProviderLike {
   readonly options?: Record<string, unknown>
 }
 
-interface ForegroundWaiter {
+interface CapacityWaiter {
   readonly start: () => boolean
 }
 
 interface CapacityState {
   active: number
-  foregroundWaiters: ForegroundWaiter[]
+  foregroundWaiters: CapacityWaiter[]
+  backgroundWaiters: CapacityWaiter[]
 }
 
 export class LcmProviderCapacityDeferredError extends Error {
@@ -149,7 +152,7 @@ function providerCapacitySafeError(input: {
 }
 
 export function classifyLcmProviderCapacity(
-  input: Omit<LcmProviderCapacityInput, "priority" | "operationID">,
+  input: Omit<LcmProviderCapacityInput, "priority" | "admission" | "operationID">,
 ): LcmProviderCapacityClass {
   const providerID = lower(input.providerID)
   const modelID = lower(input.modelID)
@@ -179,7 +182,9 @@ export function classifyLcmProviderCapacity(
   return "remote_or_unknown"
 }
 
-export function lcmProviderCapacityLane(input: Omit<LcmProviderCapacityInput, "priority" | "operationID">) {
+export function lcmProviderCapacityLane(
+  input: Omit<LcmProviderCapacityInput, "priority" | "admission" | "operationID">,
+) {
   const capacityClass = classifyLcmProviderCapacity(input)
   const endpoint =
     lcmProviderCapacityEndpointFromURL(input.baseURL) ||
@@ -195,6 +200,7 @@ export function lcmProviderCapacityLane(input: Omit<LcmProviderCapacityInput, "p
 export function lcmProviderCapacityInputFromModel(input: {
   readonly model: LcmProviderCapacityModelLike
   readonly priority: LcmProviderCapacityPriority
+  readonly admission?: LcmProviderCapacityAdmission
   readonly operationID?: OperationID
   readonly providerBaseURL?: string
   readonly provider?: LcmProviderCapacityProviderLike
@@ -206,6 +212,7 @@ export function lcmProviderCapacityInputFromModel(input: {
     providerID: model.providerID,
     modelID: model.id,
     priority: input.priority,
+    ...(input.admission ? { admission: input.admission } : {}),
     ...(input.operationID ? { operationID: input.operationID } : {}),
     ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
     apiID: model.api?.id,
@@ -213,9 +220,18 @@ export function lcmProviderCapacityInputFromModel(input: {
     apiURL: model.api?.url,
     baseURL:
       input.providerBaseURL ??
-      lcmProviderBaseURLFromOptions(input.providerOptions ?? input.provider?.options) ??
+      lcmProviderBaseURLFromOptions(input.providerOptions) ??
+      lcmProviderBaseURLFromOptions(input.provider?.options) ??
       lcmProviderBaseURLFromOptions(model.options),
   }
+}
+
+export function lcmProviderCapacityPolicyForConversation(
+  capabilityClass: LcmConversationCapabilityClass,
+): Pick<LcmProviderCapacityInput, "priority" | "admission"> {
+  return capabilityClass === "map_child"
+    ? { priority: "background", admission: "wait" }
+    : { priority: "foreground", admission: "wait" }
 }
 
 export function isLcmProviderCapacityDeferredError(value: unknown): value is LcmProviderCapacityDeferredError {
@@ -259,6 +275,40 @@ export function wrapAsyncIterableWithRelease<T, TStream extends AsyncIterable<T>
   }) as TStream
 }
 
+export function wrapReadableStreamWithRelease<T>(stream: ReadableStream<T>, release: () => void) {
+  const reader = stream.getReader()
+  let released = false
+  const releaseOnce = () => {
+    if (released) return
+    released = true
+    reader.releaseLock()
+    release()
+  }
+  return new ReadableStream<T>({
+    async pull(controller) {
+      try {
+        const next = await reader.read()
+        if (next.done) {
+          releaseOnce()
+          controller.close()
+          return
+        }
+        controller.enqueue(next.value)
+      } catch (error) {
+        releaseOnce()
+        controller.error(error)
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason)
+      } finally {
+        releaseOnce()
+      }
+    },
+  })
+}
+
 export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalConcurrent?: number }) {
   const maxLocalConcurrent = Math.max(1, input?.maxLocalConcurrent ?? 1)
   const states = new Map<string, CapacityState>()
@@ -266,14 +316,19 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
   function stateFor(key: string) {
     let state = states.get(key)
     if (!state) {
-      state = { active: 0, foregroundWaiters: [] }
+      state = { active: 0, foregroundWaiters: [], backgroundWaiters: [] }
       states.set(key, state)
     }
     return state
   }
 
   function deleteIfIdle(key: string, state: CapacityState) {
-    if (state.active === 0 && state.foregroundWaiters.length === 0 && states.get(key) === state) {
+    if (
+      state.active === 0 &&
+      state.foregroundWaiters.length === 0 &&
+      state.backgroundWaiters.length === 0 &&
+      states.get(key) === state
+    ) {
       states.delete(key)
     }
   }
@@ -284,7 +339,7 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
 
   function wakeNext(key: string, state: CapacityState) {
     while (state.active < maxLocalConcurrent) {
-      const next = state.foregroundWaiters.shift()
+      const next = state.foregroundWaiters.shift() ?? state.backgroundWaiters.shift()
       if (!next) {
         deleteIfIdle(key, state)
         return
@@ -322,36 +377,37 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
 
     const key = keyFor(input)
     const state = stateFor(key)
-    if (input.priority === "background") {
-      if (state.active > 0 || state.foregroundWaiters.length > 0) {
-        throw new LcmProviderCapacityDeferredError({
-          capacityClass,
-          safeError: providerCapacitySafeError({
-            operationID: input.operationID,
-            diagnosticCode: "lcm_provider_capacity_background_deferred",
-            localProviderCapacityKey: key,
-          }),
-        })
-      }
+    const admission = input.admission ?? (input.priority === "background" ? "defer" : "wait")
+    const ownWaiters = input.priority === "foreground" ? state.foregroundWaiters : state.backgroundWaiters
+    const higherPriorityWaiting = input.priority === "background" && state.foregroundWaiters.length > 0
+    if (state.active < maxLocalConcurrent && ownWaiters.length === 0 && !higherPriorityWaiting) {
       state.active++
       return { capacityClass, release: releaseOnce(key) }
     }
 
-    if (state.active < maxLocalConcurrent) {
-      state.active++
-      return { capacityClass, release: releaseOnce(key) }
+    if (admission === "defer") {
+      deleteIfIdle(key, state)
+      throw new LcmProviderCapacityDeferredError({
+        capacityClass,
+        safeError: providerCapacitySafeError({
+          operationID: input.operationID,
+          diagnosticCode: "lcm_provider_capacity_background_deferred",
+          localProviderCapacityKey: key,
+        }),
+      })
     }
 
     await new Promise<void>((resolve, reject) => {
       let settled = false
-      let waiter: ForegroundWaiter
+      let waiter: CapacityWaiter
+      const waiters = input.priority === "foreground" ? state.foregroundWaiters : state.backgroundWaiters
       const cleanup = () => signal?.removeEventListener("abort", onAbort)
       const onAbort = () => {
         if (settled) return
         settled = true
         cleanup()
-        const index = state.foregroundWaiters.indexOf(waiter)
-        if (index >= 0) state.foregroundWaiters.splice(index, 1)
+        const index = waiters.indexOf(waiter)
+        if (index >= 0) waiters.splice(index, 1)
         deleteIfIdle(key, state)
         reject(
           signal?.reason instanceof Error ? signal.reason : new DOMException("The request was aborted.", "AbortError"),
@@ -359,11 +415,7 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
       }
       waiter = {
         start: () => {
-          if (settled) {
-            settled = true
-            cleanup()
-            return false
-          }
+          if (settled) return false
           if (signal?.aborted) {
             settled = true
             cleanup()
@@ -382,22 +434,12 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
         },
       }
       signal?.addEventListener("abort", onAbort, { once: true })
-      state.foregroundWaiters.push(waiter)
+      waiters.push(waiter)
       if (signal?.aborted) {
         onAbort()
         return
       }
-      if (state.active < maxLocalConcurrent) {
-        const index = state.foregroundWaiters.indexOf(waiter)
-        if (index >= 0) state.foregroundWaiters.splice(index, 1)
-        if (!waiter.start()) {
-          reject(
-            signal?.reason instanceof Error
-              ? signal.reason
-              : new DOMException("The request was aborted.", "AbortError"),
-          )
-        }
-      }
+      wakeNext(key, state)
     })
     return { capacityClass, release: releaseOnce(key) }
   }
@@ -413,12 +455,14 @@ export function createLcmProviderCapacityRegistry(input?: { readonly maxLocalCon
 
   function snapshot(input: LcmProviderCapacityInput) {
     const capacityClass = classifyLcmProviderCapacity(input)
-    if (capacityClass === "remote_or_unknown") return { capacityClass, active: 0, foregroundQueued: 0 }
+    if (capacityClass === "remote_or_unknown")
+      return { capacityClass, active: 0, foregroundQueued: 0, backgroundQueued: 0 }
     const state = states.get(keyFor(input))
     return {
       capacityClass,
       active: state?.active ?? 0,
       foregroundQueued: state?.foregroundWaiters.length ?? 0,
+      backgroundQueued: state?.backgroundWaiters.length ?? 0,
     }
   }
 
@@ -433,4 +477,22 @@ export const defaultLcmProviderCapacityRegistry = createLcmProviderCapacityRegis
 
 export function runWithLcmProviderCapacity<T>(input: LcmProviderCapacityInput, fn: () => Promise<T> | T): Promise<T> {
   return defaultLcmProviderCapacityRegistry.run(input, fn)
+}
+
+export async function runWithLcmProviderCapacityStream<T>(
+  input: LcmProviderCapacityInput,
+  doStream: () => PromiseLike<{ stream: ReadableStream<T> }>,
+  registry = defaultLcmProviderCapacityRegistry,
+) {
+  const lease = await registry.acquire(input)
+  try {
+    const result = await doStream()
+    return {
+      ...result,
+      stream: wrapReadableStreamWithRelease(result.stream, lease.release),
+    }
+  } catch (error) {
+    lease.release()
+    throw error
+  }
 }

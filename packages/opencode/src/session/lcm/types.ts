@@ -1519,6 +1519,7 @@ export interface LcmUpdateSettingsInput {
 }
 
 export type LcmMapRunStatus = "queued" | "running" | "completed" | "failed" | "canceled"
+export type LcmMapExecutionState = "queued" | "running" | "waiting_capacity" | "completed" | "failed" | "canceled"
 export type LcmMapItemStatus = "pending" | "running" | "completed" | "retryable" | "failed" | "canceled"
 
 export interface LlmMapInput {
@@ -1548,6 +1549,7 @@ export interface LcmMapResult {
   ok: true
   mapID: MapRunID
   status: LcmMapRunStatus
+  executionState: LcmMapExecutionState
   inputFileID: LcmFileID
   outputFileID?: LcmFileID
   effectiveWorkers: number
@@ -1555,6 +1557,9 @@ export interface LcmMapResult {
   completedItems: number
   failedItems: number
   retriedItems: number
+  retryableItems: number
+  capacityDeferredItems: number
+  lastUpdatedAtMs: number
   safeError?: LcmSafeError
   retryAfterMs?: number
 }

@@ -11,6 +11,8 @@ import {
   lcmProviderCapacityInputFromModel,
   lcmProviderCapacityKeyHash,
   lcmProviderCapacityLane,
+  lcmProviderCapacityPolicyForConversation,
+  runWithLcmProviderCapacityStream,
 } from "../../src/session/lcm/provider-capacity"
 import {
   createLcmSoftSweepBudget,
@@ -426,6 +428,161 @@ test("lcm:scheduler defers local background model jobs while a foreground Ollama
     await foreground
   }
   expect(backgroundRan).toBe(false)
+})
+
+test("lcm:scheduler maps trusted conversation capabilities onto local provider admission", () => {
+  expect(lcmProviderCapacityPolicyForConversation("root")).toEqual({ priority: "foreground", admission: "wait" })
+  expect(lcmProviderCapacityPolicyForConversation("task_child")).toEqual({
+    priority: "foreground",
+    admission: "wait",
+  })
+  expect(lcmProviderCapacityPolicyForConversation("explore_child")).toEqual({
+    priority: "foreground",
+    admission: "wait",
+  })
+  expect(lcmProviderCapacityPolicyForConversation("map_child")).toEqual({
+    priority: "background",
+    admission: "wait",
+  })
+})
+
+test("lcm:scheduler queues agentic background calls behind foreground work and preserves foreground priority", async () => {
+  const registry = createLcmProviderCapacityRegistry()
+  const request = {
+    providerID: "ollama",
+    modelID: "qwen3",
+    apiID: "ollama-openai-compatible",
+    apiNpm: "@ai-sdk/openai-compatible",
+    apiURL: "http://127.0.0.1:11434/v1",
+  }
+  const order: string[] = []
+  let releaseActive!: () => void
+  const active = registry.run({ ...request, priority: "foreground", admission: "wait" }, async () => {
+    order.push("active")
+    await new Promise<void>((resolve) => {
+      releaseActive = resolve
+    })
+  })
+  await Promise.resolve()
+  const background = registry.run({ ...request, priority: "background", admission: "wait" }, async () => {
+    order.push("background")
+  })
+  const foreground = registry.run({ ...request, priority: "foreground", admission: "wait" }, async () => {
+    order.push("foreground")
+  })
+  await Promise.resolve()
+
+  expect(registry.snapshot({ ...request, priority: "foreground" })).toMatchObject({
+    active: 1,
+    foregroundQueued: 1,
+    backgroundQueued: 1,
+  })
+  releaseActive()
+  await Promise.all([active, background, foreground])
+  expect(order).toEqual(["active", "foreground", "background"])
+  expect(registry.stateCount()).toBe(0)
+})
+
+test("lcm:scheduler removes canceled agentic background waiters without leaking capacity", async () => {
+  const registry = createLcmProviderCapacityRegistry()
+  const request = {
+    providerID: "ollama",
+    modelID: "qwen3",
+    apiID: "ollama-openai-compatible",
+    apiNpm: "@ai-sdk/openai-compatible",
+    apiURL: "http://127.0.0.1:11434/v1",
+  }
+  let releaseActive!: () => void
+  const active = registry.run({ ...request, priority: "foreground", admission: "wait" }, async () => {
+    await new Promise<void>((resolve) => {
+      releaseActive = resolve
+    })
+  })
+  await Promise.resolve()
+  const controller = new AbortController()
+  const queued = registry
+    .run(
+      {
+        ...request,
+        priority: "background",
+        admission: "wait",
+        abortSignal: controller.signal,
+      },
+      async () => {
+        throw new Error("canceled agentic work should not start")
+      },
+    )
+    .catch((error) => error)
+  await Promise.resolve()
+  expect(registry.snapshot({ ...request, priority: "foreground" }).backgroundQueued).toBe(1)
+
+  controller.abort(new Error("agentic map canceled"))
+  expect(await queued).toBeInstanceOf(Error)
+  expect(registry.snapshot({ ...request, priority: "foreground" }).backgroundQueued).toBe(0)
+  releaseActive()
+  await active
+  expect(registry.stateCount()).toBe(0)
+})
+
+test("lcm:scheduler releases local provider capacity with the physical response stream lifecycle", async () => {
+  const registry = createLcmProviderCapacityRegistry()
+  const request = {
+    providerID: "ollama",
+    modelID: "qwen3",
+    apiID: "ollama-openai-compatible",
+    apiNpm: "@ai-sdk/openai-compatible",
+    apiURL: "http://127.0.0.1:11434/v1",
+    priority: "foreground" as const,
+    admission: "wait" as const,
+  }
+  const completed = await runWithLcmProviderCapacityStream(
+    request,
+    async () => ({ stream: new ReadableStream<string>({ start: (controller) => controller.close() }) }),
+    registry,
+  )
+  expect(registry.snapshot(request).active).toBe(1)
+  expect((await completed.stream.getReader().read()).done).toBe(true)
+  expect(registry.stateCount()).toBe(0)
+
+  const canceled = await runWithLcmProviderCapacityStream(
+    request,
+    async () => ({ stream: new ReadableStream<string>() }),
+    registry,
+  )
+  const reader = canceled.stream.getReader()
+  await reader.cancel("test cancellation")
+  expect(registry.stateCount()).toBe(0)
+
+  const streamFailure = new Error("provider stream failed")
+  const errored = await runWithLcmProviderCapacityStream(
+    request,
+    async () => ({
+      stream: new ReadableStream<string>({
+        pull(controller) {
+          controller.error(streamFailure)
+        },
+      }),
+    }),
+    registry,
+  )
+  expect(
+    await errored.stream
+      .getReader()
+      .read()
+      .catch((error) => error),
+  ).toBe(streamFailure)
+  expect(registry.stateCount()).toBe(0)
+
+  const providerFailure = new Error("provider stream creation failed")
+  const failure = await runWithLcmProviderCapacityStream(
+    request,
+    async () => {
+      throw providerFailure
+    },
+    registry,
+  ).catch((error) => error)
+  expect(failure).toBe(providerFailure)
+  expect(registry.stateCount()).toBe(0)
 })
 
 test("lcm:scheduler removes aborted foreground waiters from local provider queues", async () => {

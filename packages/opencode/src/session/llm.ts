@@ -41,6 +41,13 @@ import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
 // kilocode_change start - exact provider-body validation for authoritative conversation context
 import { validateLcmFinalProviderPayload } from "./lcm/provider-protocol"
+import {
+  classifyLcmProviderCapacity,
+  lcmProviderCapacityInputFromModel,
+  runWithLcmProviderCapacityStream,
+  type LcmProviderCapacityAdmission,
+  type LcmProviderCapacityPriority,
+} from "./lcm/provider-capacity"
 import { LcmSafeErrorFailure, type LcmPreparedProviderPayload, type LcmRenderedSpanProviderFamily } from "./lcm/types"
 // kilocode_change end
 
@@ -63,6 +70,12 @@ export type StreamInput = {
   toolChoice?: "auto" | "required" | "none"
   preflight?: boolean // kilocode_change - enable proactive threshold compaction for normal session turns
   reportedContextTokens?: number // kilocode_change - provider-reported context size from the last finished turn, source of truth for the output cap
+  // kilocode_change start - coordinate classified local-provider calls across root and child sessions
+  lcmProviderCapacity?: {
+    readonly priority: LcmProviderCapacityPriority
+    readonly admission: LcmProviderCapacityAdmission
+  }
+  // kilocode_change end
   // kilocode_change start - authoritative LCM request evidence and exact post-transform validation callback
   lcmProviderProtocol?: {
     readonly preparedProviderPayload: LcmPreparedProviderPayload
@@ -322,15 +335,36 @@ const live: Layer.Layer<
       }
       // kilocode_change end
 
+      // kilocode_change start - acquire local-provider capacity at the physical provider stream boundary
+      const providerCapacityInput = input.lcmProviderCapacity
+        ? lcmProviderCapacityInputFromModel({
+            model: input.model,
+            provider: item,
+            providerOptions: prepared.params.options,
+            priority: input.lcmProviderCapacity.priority,
+            admission: input.lcmProviderCapacity.admission,
+            abortSignal: input.abort,
+          })
+        : undefined
+      const providerCapacityClass = providerCapacityInput
+        ? classifyLcmProviderCapacity(providerCapacityInput)
+        : "remote_or_unknown"
+      // kilocode_change end
+
       // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
       // either returns a ready LLMEvent stream or a concrete fallback reason.
-      // kilocode_change start - LCM final-payload validation currently requires the AI SDK transform hook
-      if (flags.experimentalNativeLlm && input.lcmProviderProtocol) {
+      // kilocode_change start - LCM validation and local-provider arbitration currently require AI SDK middleware
+      const nativeFallbackReason = input.lcmProviderProtocol
+        ? "LCM provider validation requires AI SDK transform"
+        : providerCapacityClass !== "remote_or_unknown"
+          ? "local provider capacity requires AI SDK stream middleware"
+          : undefined
+      if (flags.experimentalNativeLlm && nativeFallbackReason) {
         l.info("native runtime unavailable; falling back to ai-sdk", {
-          reason: "LCM provider validation requires AI SDK transform",
+          reason: nativeFallbackReason,
         })
       }
-      if (flags.experimentalNativeLlm && !input.lcmProviderProtocol) {
+      if (flags.experimentalNativeLlm && !nativeFallbackReason) {
         const native = LLMNativeRuntime.stream({
           model: input.model,
           provider: item,
@@ -465,6 +499,10 @@ const live: Layer.Layer<
                   args.params.prompt = transformed as typeof args.params.prompt
                 }
                 return args.params
+              },
+              async wrapStream({ doStream }) {
+                if (!providerCapacityInput || providerCapacityClass === "remote_or_unknown") return doStream()
+                return runWithLcmProviderCapacityStream(providerCapacityInput, doStream)
               },
             },
           ],

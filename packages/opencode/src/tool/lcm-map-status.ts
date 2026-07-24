@@ -42,10 +42,14 @@ function renderResult(result: LcmMapResult | LcmToolErrorResult) {
         ? {
             mapID: result.mapID,
             status: result.status,
+            executionState: result.executionState,
             totalItems: result.totalItems,
             completedItems: result.completedItems,
             failedItems: result.failedItems,
             retriedItems: result.retriedItems,
+            retryableItems: result.retryableItems,
+            capacityDeferredItems: result.capacityDeferredItems,
+            lastUpdatedAtMs: result.lastUpdatedAtMs,
             effectiveWorkers: result.effectiveWorkers,
             retryAfterMs: result.retryAfterMs,
           }

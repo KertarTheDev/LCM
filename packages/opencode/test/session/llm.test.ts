@@ -1200,6 +1200,94 @@ describe("session.llm.stream", () => {
   )
 
   it.instance(
+    "keeps classified local providers on the capacity-controlled AI SDK path",
+    () =>
+      Effect.gen(function* () {
+        const model = loadFixture("openai", "gpt-5.2").model
+        const request = waitRequest(
+          "/responses",
+          createEventResponse(
+            [
+              {
+                type: "response.created",
+                response: {
+                  id: "resp-local-capacity",
+                  created_at: Math.floor(Date.now() / 1000),
+                  model: model.id,
+                  service_tier: null,
+                },
+              },
+              {
+                type: "response.completed",
+                response: {
+                  incomplete_details: null,
+                  usage: {
+                    input_tokens: 1,
+                    input_tokens_details: null,
+                    output_tokens: 1,
+                    output_tokens_details: null,
+                  },
+                  service_tier: null,
+                },
+              },
+            ],
+            true,
+          ),
+        )
+        const failingNativeClient = Layer.succeed(
+          LLMClient.Service,
+          LLMClient.Service.of({
+            prepare: () => Effect.die(new Error("local provider capacity must bypass the native runtime")),
+            dispatch: () => Effect.die(new Error("local provider capacity must bypass the native runtime")),
+            stream: () => Stream.die(new Error("local provider capacity must bypass the native runtime")),
+            generate: () => Effect.die(new Error("local provider capacity must bypass the native runtime")),
+          }),
+        )
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.openai, ModelV2.ID.make(model.id))
+        const sessionID = SessionID.make("session-test-local-capacity")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        yield* drainWith(
+          LLM.layer.pipe(
+            Layer.provide(Auth.defaultLayer),
+            Layer.provide(Config.defaultLayer),
+            Layer.provide(Provider.defaultLayer),
+            Layer.provide(Plugin.defaultLayer),
+            Layer.provide(failingNativeClient),
+            Layer.provide(RuntimeFlags.layer({ experimentalNativeLlm: true })),
+          ),
+          {
+            user: {
+              id: MessageID.make("msg_user-local-capacity"),
+              sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: agent.name,
+              model: { providerID: ProviderV2.ID.make("openai"), modelID: resolved.id, variant: "high" },
+            } satisfies SessionV1.User,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+            lcmProviderCapacity: { priority: "foreground", admission: "wait" },
+          },
+        )
+
+        const capture = yield* Effect.promise(() => request)
+        expect(capture.url.pathname.endsWith("/responses")).toBe(true)
+        expect(capture.body.model).toBe(resolved.api.id)
+      }),
+    { config: () => openAIConfig(loadFixture("openai", "gpt-5.2").model, `${state.server!.url.origin}/v1`) },
+  )
+
+  it.instance(
     "streams OpenAI through native runtime when opted in",
     () =>
       Effect.gen(function* () {

@@ -223,7 +223,9 @@ Invalid settings input returns content-safe `invalid_request` safe errors. Confi
 
 ## Local Provider Capacity
 
-`provider-capacity.ts` classifies provider endpoints and gates local Ollama/OpenAI-compatible capacity. Child-session admission and background model jobs can return `provider_capacity_deferred` with safe hashed endpoint identity, capacity class, retryable guidance, and action `retry`.
+`provider-capacity.ts` classifies provider endpoints and gates all LCM-active local Ollama/OpenAI-compatible provider streams in one process-wide lane per endpoint. Root calls and trusted task-child or explore-child calls use foreground/wait admission. Agentic map children use background/wait admission, and foreground waiters are always selected before queued background work. Durable background maintenance keeps background/defer admission and can return `provider_capacity_deferred` with safe hashed endpoint identity, capacity class, retryable guidance, and action `retry`.
+
+The AI SDK middleware acquires capacity immediately before the physical provider stream starts and releases it exactly once when that stream completes, errors, or is canceled. It does not retain capacity across client-side tool execution. Classified local calls fall back from the experimental native runtime to this controlled path; remote native calls remain unchanged.
 
 The runtime records endpoint/capacity metadata without raw URLs. Runtime map dispatch also lowers effective map worker counts before durable run creation for local endpoints, small-model map selectors, or observed foreground provider pressure, so background map throughput does not overwhelm normal chat or maintenance provider calls.
 

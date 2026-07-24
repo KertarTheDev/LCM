@@ -34,7 +34,8 @@ const parameters = Schema.Struct({
     description: "Requested worker count. Defaults to 16, may not exceed 16, and may be lowered for provider capacity.",
   }),
   maxRetries: Schema.optional(NonNegativeInt).annotate({
-    description: "Retries after the initial attempt. Defaults to 2.",
+    description:
+      "Retries after the initial provider or response failure. Defaults to 2. Transient capacity waiting or deferral is automatic and does not consume this budget.",
   }),
 })
 
@@ -98,10 +99,14 @@ function renderResult(result: LcmMapResult | LcmToolErrorResult) {
         ? {
             mapID: result.mapID,
             status: result.status,
+            executionState: result.executionState,
             totalItems: result.totalItems,
             completedItems: result.completedItems,
             failedItems: result.failedItems,
             retriedItems: result.retriedItems,
+            retryableItems: result.retryableItems,
+            capacityDeferredItems: result.capacityDeferredItems,
+            lastUpdatedAtMs: result.lastUpdatedAtMs,
             effectiveWorkers: result.effectiveWorkers,
             retryAfterMs: result.retryAfterMs,
           }

@@ -1,6 +1,6 @@
 # LCM Current-Code Issues
 
-Status date: 2026-07-23.
+Status date: 2026-07-24.
 
 This file records current engineering or evidence gaps for the v7.4.15 integration.
 
@@ -23,6 +23,8 @@ This file records current engineering or evidence gaps for the v7.4.15 integrati
 The V1 `session/prompt.ts` adapter is the largest upstream conflict surface until the product prompt path can use the core context-engine dispatch directly.
 
 `packages/opencode/script/build-node.ts` currently fails on an upstream browser/Bun-builtin compatibility path that is not used by the compiled CLI or VSIX release workflow. Keep the limitation visible, but do not weaken the production `build.ts`, VSCode, or packaged-runtime gates and do not add environment-specific bypasses to publishable source.
+
+Agentic map execution is durable in storage but its active scheduler is process-owned. After a runtime restart, `lcm_map_status` intentionally does not recreate child-session work for a nonterminal agentic run; the run must be canceled and recreated. Durable restart recovery needs explicit child-session reconstruction, lease reconciliation, and duplicate-work guarantees before it can replace this fail-closed behavior.
 
 ## Prerelease Evidence Status
 

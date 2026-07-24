@@ -90,6 +90,7 @@ import { resolvePreflightLcmToolIDs, type LcmAllowedToolIDs } from "@/kilocode/l
 import { markLcmRenderOnlyPart, prepareKiloMessageVisibility, prepareKiloModelInput } from "./lcm/render-prep"
 import type { LcmRawLeafRenderPreparationInput } from "./lcm/context"
 import { getLcmRuntimePreparedProviderPayload } from "./lcm/provider-payload"
+import { lcmProviderCapacityPolicyForConversation } from "./lcm/provider-capacity"
 import { Service as LcmRuntimeService, defaultLayer as LcmRuntimeDefaultLayer } from "./lcm/runtime"
 import { LCM_MAP_TOOL_IDS, LCM_RETRIEVAL_TOOL_IDS } from "./lcm/tool-ids"
 import {
@@ -2001,6 +2002,7 @@ export const layer = Layer.effect(
                   lastFinished && lastFinished.summary !== true
                     ? KiloSessionOverflow.count(lastFinished.tokens)
                     : undefined,
+                lcmProviderCapacity: lcmProviderCapacityPolicyForConversation(lcmConversation.capabilityClass),
                 lcmProviderProtocol: {
                   preparedProviderPayload: preflight.assembly.preparedProviderPayload,
                   maxOutputTokens: preflight.threshold.outputReserve,
