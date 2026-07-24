@@ -1559,7 +1559,10 @@ export interface LcmMapResult {
   retriedItems: number
   retryableItems: number
   capacityDeferredItems: number
+  runningItems: number
+  waitingCapacityItems: number
   lastUpdatedAtMs: number
+  lastProgressAtMs: number
   safeError?: LcmSafeError
   retryAfterMs?: number
 }

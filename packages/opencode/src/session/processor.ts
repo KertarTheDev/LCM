@@ -1296,6 +1296,7 @@ export const layer = Layer.effect(
                     abort: ac.signal,
                     set: status.set,
                     used: retries.provider,
+                    limit: streamInput.providerRetryLimit,
                   }),
                   set: (info) => {
                     if (info.attempt > 0) retries.provider += 1

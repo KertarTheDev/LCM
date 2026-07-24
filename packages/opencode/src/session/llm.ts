@@ -42,9 +42,10 @@ import { LLMRequestPrep } from "./llm/request"
 // kilocode_change start - exact provider-body validation for authoritative conversation context
 import { validateLcmFinalProviderPayload } from "./lcm/provider-protocol"
 import {
+  acquireLcmProviderCapacity,
   classifyLcmProviderCapacity,
   lcmProviderCapacityInputFromModel,
-  runWithLcmProviderCapacityStream,
+  wrapReadableStreamWithRelease,
   type LcmProviderCapacityAdmission,
   type LcmProviderCapacityPriority,
 } from "./lcm/provider-capacity"
@@ -67,6 +68,7 @@ export type StreamInput = {
   small?: boolean
   tools: Record<string, Tool>
   retries?: number
+  providerRetryLimit?: number
   toolChoice?: "auto" | "required" | "none"
   preflight?: boolean // kilocode_change - enable proactive threshold compaction for normal session turns
   reportedContextTokens?: number // kilocode_change - provider-reported context size from the last finished turn, source of truth for the output cap
@@ -74,6 +76,7 @@ export type StreamInput = {
   lcmProviderCapacity?: {
     readonly priority: LcmProviderCapacityPriority
     readonly admission: LcmProviderCapacityAdmission
+    readonly onState?: (state: "waiting_capacity" | "running") => Promise<void>
   }
   // kilocode_change end
   // kilocode_change start - authoritative LCM request evidence and exact post-transform validation callback
@@ -336,6 +339,7 @@ const live: Layer.Layer<
       // kilocode_change end
 
       // kilocode_change start - acquire local-provider capacity at the physical provider stream boundary
+      let providerCapacityWaitState: Promise<void> | undefined
       const providerCapacityInput = input.lcmProviderCapacity
         ? lcmProviderCapacityInputFromModel({
             model: input.model,
@@ -345,6 +349,15 @@ const live: Layer.Layer<
             priority: input.lcmProviderCapacity.priority,
             admission: input.lcmProviderCapacity.admission,
             abortSignal: input.abort,
+            ...(input.lcmProviderCapacity.onState
+              ? {
+                  onWaitStart: () => {
+                    providerCapacityWaitState ??= input.lcmProviderCapacity
+                      ?.onState?.("waiting_capacity")
+                      .catch(() => {})
+                  },
+                }
+              : {}),
           })
         : undefined
       const providerCapacityClass = providerCapacityInput
@@ -420,6 +433,19 @@ const live: Layer.Layer<
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       const requestProviderOptions = ProviderTransform.providerOptions(input.model, prepared.params.options)
+      const providerCapacityLease =
+        providerCapacityInput && providerCapacityClass !== "remote_or_unknown"
+          ? yield* Effect.acquireRelease(
+              Effect.promise(() => acquireLcmProviderCapacity(providerCapacityInput)),
+              (lease) => Effect.sync(() => lease.release()),
+            )
+          : undefined
+      if (providerCapacityLease && input.lcmProviderCapacity?.onState) {
+        yield* Effect.promise(async () => {
+          await providerCapacityWaitState
+          await input.lcmProviderCapacity!.onState!("running")
+        }).pipe(Effect.catch(() => Effect.void))
+      }
       // kilocode_change end
       const result = streamText({
         onError(error) {
@@ -502,8 +528,12 @@ const live: Layer.Layer<
                 return args.params
               },
               async wrapStream({ doStream }) {
-                if (!providerCapacityInput || providerCapacityClass === "remote_or_unknown") return doStream()
-                return runWithLcmProviderCapacityStream(providerCapacityInput, doStream)
+                const streamed = await doStream()
+                if (!providerCapacityLease) return streamed
+                return {
+                  ...streamed,
+                  stream: wrapReadableStreamWithRelease(streamed.stream, providerCapacityLease.release),
+                }
               },
             },
           ],
@@ -517,11 +547,18 @@ const live: Layer.Layer<
       // kilocode_change: resolve per-subscription idle watchdog so concurrent
       // sessions each get their own timer. Computed here (not at the stream
       // consumer) so the resolved value travels with the returned fullStream.
-      const idleMs = KiloLLM.resolveIdleMs({
+      const idlePolicy = KiloLLM.resolveIdlePolicy({
         options: prepared.params.options,
         fallback: item.options,
       })
-      if (!exportable) return { type: "ai-sdk" as const, result, idleMs }
+      const firstIdleMs =
+        providerCapacityClass !== "remote_or_unknown" &&
+        input.lcmProviderCapacity?.priority === "background" &&
+        !idlePolicy.explicit &&
+        idlePolicy.idleMs !== undefined
+          ? 180_000
+          : idlePolicy.idleMs
+      if (!exportable) return { type: "ai-sdk" as const, result, idleMs: idlePolicy.idleMs, firstIdleMs }
       return {
         type: "ai-sdk" as const,
         result: {
@@ -535,7 +572,8 @@ const live: Layer.Layer<
             retries: input.retries ?? 0,
           }),
         },
-        idleMs,
+        idleMs: idlePolicy.idleMs,
+        firstIdleMs,
       }
       // kilocode_change end
     })
@@ -565,6 +603,7 @@ const live: Layer.Layer<
               result.result.fullStream as AsyncIterable<import("@ai-sdk/provider").LanguageModelV2StreamPart>,
               result.idleMs,
               ctrl,
+              result.firstIdleMs,
             )
             return Stream.fromAsyncIterable(watched, (e) => (e instanceof Error ? e : new Error(String(e)))).pipe(
               // kilocode_change: the watchdog consumes raw LanguageModelV2 parts;

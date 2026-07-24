@@ -41,13 +41,20 @@ export namespace KiloLLM {
     options: Record<string, unknown>
     fallback?: Record<string, unknown>
   }): number | undefined {
+    return resolveIdlePolicy(input).idleMs
+  }
+
+  export function resolveIdlePolicy(input: { options: Record<string, unknown>; fallback?: Record<string, unknown> }): {
+    idleMs: number | undefined
+    explicit: boolean
+  } {
     const prepared = resolve(input.options["chunkTimeout"])
-    if (prepared.disabled) return undefined
-    if (prepared.value !== undefined) return prepared.value
+    if (prepared.disabled) return { idleMs: undefined, explicit: true }
+    if (prepared.value !== undefined) return { idleMs: prepared.value, explicit: true }
     const fallback = resolve(input.fallback?.["chunkTimeout"])
-    if (fallback.disabled) return undefined
-    if (fallback.value !== undefined) return fallback.value
-    return DEFAULT_CHUNK_IDLE_MS
+    if (fallback.disabled) return { idleMs: undefined, explicit: true }
+    if (fallback.value !== undefined) return { idleMs: fallback.value, explicit: true }
+    return { idleMs: DEFAULT_CHUNK_IDLE_MS, explicit: false }
   }
 
   // Tri-state: `disabled` means "explicitly off"; `value` is a usable ms count.
@@ -105,9 +112,10 @@ export namespace KiloLLM {
     source: AsyncIterable<FullStreamPart>,
     idleMs: number | undefined,
     abort?: AbortController,
+    firstIdleMs = idleMs,
   ): AsyncIterable<FullStreamPart> {
     if (idleMs === undefined) return source
-    return { [Symbol.asyncIterator]: () => watchIterator(source, idleMs, abort) }
+    return { [Symbol.asyncIterator]: () => watchIterator(source, idleMs, abort, firstIdleMs) }
   }
 
   /**
@@ -128,11 +136,13 @@ export namespace KiloLLM {
     source: AsyncIterable<FullStreamPart>,
     idleMs: number,
     abort?: AbortController,
+    firstIdleMs = idleMs,
   ): AsyncIterator<FullStreamPart> {
     const local = new Set<string>()
     const iter = source[Symbol.asyncIterator]()
     let suspended = false
     let closed = false
+    let first = true
     return {
       async next(): Promise<IteratorResult<FullStreamPart>> {
         if (closed) return { done: true, value: undefined }
@@ -141,8 +151,10 @@ export namespace KiloLLM {
           // long as upstream needs. Local tool work in flight must not be timed
           // out — the AI SDK only emits a tool-result / tool-error once the
           // client-side tool has actually finished.
-          const pull = suspended ? iter.next() : raceWithTimeout(iter.next(), idleMs, abort)
+          const timeoutMs = first ? firstIdleMs : idleMs
+          const pull = suspended ? iter.next() : raceWithTimeout(iter.next(), timeoutMs, abort)
           const value = await pull
+          first = false
           suspended = false
           if (value.done) {
             closed = true

@@ -1,6 +1,5 @@
 // kilocode_change - new file
 import { Context, Effect } from "effect"
-import type { AgenticMapChildRunner } from "./map"
 import type { LcmChildConversationInput, LcmChildConversationResult, LcmConversationScope } from "./lifecycle"
 import type { LcmPathPermissionCheck } from "./large-files"
 import type { LcmPreflightRuntimeInput } from "./runtime-support"
@@ -163,9 +162,14 @@ export interface Interface {
       checkPathPermission?: LcmPathPermissionCheck
       providerID?: string
       modelID?: string
-      childRunner: AgenticMapChildRunner
+      submittingAgent: string
+      parentDirectory: string
     } & AgenticMapInput,
   ) => Effect.Effect<LcmMapResult | LcmToolErrorResult>
+  readonly setMapChildProviderPhase: (input: {
+    sessionID: string
+    phase: "waiting_capacity" | "running"
+  }) => Effect.Effect<void>
   readonly mapStatus: (
     input: { sessionID: string; abortSignal?: AbortSignal } & LcmMapStatusInput,
   ) => Effect.Effect<LcmMapResult | LcmToolErrorResult>

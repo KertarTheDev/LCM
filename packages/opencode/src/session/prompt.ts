@@ -1998,11 +1998,20 @@ export const layer = Layer.effect(
                 tools: providerPayload.tools,
                 model,
                 toolChoice: providerPayload.toolChoice,
+                providerRetryLimit: lcmConversation.capabilityClass === "map_child" ? 0 : undefined,
                 reportedContextTokens:
                   lastFinished && lastFinished.summary !== true
                     ? KiloSessionOverflow.count(lastFinished.tokens)
                     : undefined,
-                lcmProviderCapacity: lcmProviderCapacityPolicyForConversation(lcmConversation.capabilityClass),
+                lcmProviderCapacity: {
+                  ...lcmProviderCapacityPolicyForConversation(lcmConversation.capabilityClass),
+                  ...(lcmConversation.capabilityClass === "map_child"
+                    ? {
+                        onState: (phase: "waiting_capacity" | "running") =>
+                          Effect.runPromise(lcmRuntime.setMapChildProviderPhase({ sessionID, phase })),
+                      }
+                    : {}),
+                },
                 lcmProviderProtocol: {
                   preparedProviderPayload: preflight.assembly.preparedProviderPayload,
                   maxOutputTokens: preflight.threshold.outputReserve,

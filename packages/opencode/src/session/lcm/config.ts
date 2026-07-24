@@ -113,6 +113,8 @@ export const RUNTIME_DEFAULTS = {
     itemLeaseMs: 600_000,
     claimHeartbeatMs: 30_000,
     providerCapacityRetryMs: 10_000,
+    localActiveAttemptMs: 600_000,
+    remoteActiveAttemptMs: 1_800_000,
   },
   upward: {
     freshTailCount: 2,

@@ -106,7 +106,10 @@ function renderResult(result: LcmMapResult | LcmToolErrorResult) {
             retriedItems: result.retriedItems,
             retryableItems: result.retryableItems,
             capacityDeferredItems: result.capacityDeferredItems,
+            runningItems: result.runningItems,
+            waitingCapacityItems: result.waitingCapacityItems,
             lastUpdatedAtMs: result.lastUpdatedAtMs,
+            lastProgressAtMs: result.lastProgressAtMs,
             effectiveWorkers: result.effectiveWorkers,
             retryAfterMs: result.retryAfterMs,
           }

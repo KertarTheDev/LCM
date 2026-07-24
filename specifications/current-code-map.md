@@ -49,7 +49,8 @@ Key files:
 - `db.ts`, `db-worker.ts`, `owner-lock.ts`, `migrations.ts`, `pglite-assets.ts`, `pglite-gate.ts`, and `pglite-regex.worker.ts`: PGlite startup, schema migration, packaging/runtime gate checks, owner lock, worker execution lanes, and cancellable database regex work.
 - `large-files.ts`, `path-provenance.ts`, `artifacts.ts`, `file-exploration.ts`: artifact storage, path-backed provenance, byte-window reads, previews, exploration status, and file summaries.
 - `retrieval.ts`, `retrieval-regex.ts`, `retrieval-regex.worker.ts`: lineage-scoped search, describe, expand, expand-query, read, memory cues, cursor handling, and isolated regex execution/cancellation. Both regex workers are compiled entrypoints and must survive CLI and VSIX packaging.
-- `map.ts`: `llm_map`, `agentic_map`, map status/cancel, JSONL input validation, map run/item persistence, leases, retry, and output artifacts.
+- `map.ts`: `llm_map`, `agentic_map`, map status/cancel, immutable JSONL input snapshots, runtime-owned map identity/progress, restart recovery, leases, retry, and output artifacts.
+- `agentic-map-runner.ts`: reconstructable full Kilo child-session execution, trusted prompt/finalizer boundary, tool permissions, child-slot ownership, and structured-output adaptation.
 - `provider-protocol.ts`, `provider-capacity.ts`, `provider-overhead.ts`, `model-limits.ts`, `preflight-errors.ts`, `render-prep.ts`, `token-budget.ts`, `summary.ts`: provider transform/protocol validation, local endpoint concurrency, provider-transform overhead reserve sizing, model-limit fallback/recovery windows, preflight safe-action classification, render manifests, deterministic token counting, and summary quality/fallback behavior.
 - `types.ts`: shared runtime DTOs, safe-error enums/templates, lifecycle enums, settings state, preflight result union, retrieval/map DTOs, event payloads, and tool result shapes.
 

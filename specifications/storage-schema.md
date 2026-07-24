@@ -22,9 +22,9 @@ Important owner-lock constants:
 
 ## Schema Baseline
 
-Current migration file: `packages/opencode/src/session/lcm/migrations/0001_initial_schema.sql`.
+Current schema version: `2`.
 
-The baseline creates `pg_trgm`, 21 LCM tables, and 61 explicit indexes. This is the only current schema baseline in the code inspected for this rebaseline.
+Migration `0001_initial_schema.sql` creates the `pg_trgm` baseline, 21 LCM tables, and 61 explicit indexes. Migration `0002_runtime_owned_maps.sql` adds runtime-owned map identity/progress fields and two map scheduling indexes without rewriting the baseline checksum.
 
 Tables:
 
@@ -189,9 +189,11 @@ The persisted soft-maintenance payload includes session ID, provider/model IDs, 
 
 ## Map Tables
 
-`lcm_map_runs` stores one asynchronous map request. It records tool kind, status, input/output file IDs, prompt and schema hashes, model selection, worker/retry configuration, agentic mode, safe error JSON, owner, lease, and timestamps.
+`lcm_map_runs` stores one asynchronous map request. It records tool kind, status, immutable input/output artifact IDs, prompt and schema hashes, model selection, worker/retry configuration, agentic mode, parent session, submitting agent, parent directory, provider capacity class, safe error JSON, owner/lease fields, start time, durable last-progress time, and update timestamps. The persisted parent/agent/directory identity is sufficient for the runtime to reconstruct an agentic child after process restart without retaining tool-call closures.
 
-`lcm_map_items` stores per-item status, attempts, owner/lease, safe error, output JSON, and timestamps. Indexes support item claiming and lease recovery.
+`lcm_map_items` stores per-item status, attempts, owner/lease, safe error, output JSON, execution phase, phase start, accumulated active-work milliseconds, and timestamps. `execution_phase` distinguishes queued, running, provider-capacity wait, retry delay, and terminal work. Provider-capacity wait time is not added to `active_ms`. Indexes support item claiming, phase snapshots, and lease recovery.
+
+Migration 2 intentionally terminalizes only unfinished alpha `agentic_map` rows with content-safe `recovery_required` / `lcm_map_alpha_restart_required`. Completed map artifacts and all conversation memory remain intact; testers may submit replacement maps for those discarded in-flight alpha jobs.
 
 ## Cleanup
 

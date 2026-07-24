@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto"
 import type { PGlite } from "@electric-sql/pglite"
 import initialSchemaSqlPath from "./migrations/0001_initial_schema.sql" with { type: "file" }
+import runtimeOwnedMapsSqlPath from "./migrations/0002_runtime_owned_maps.sql" with { type: "file" }
 import { createDbMigrationFailedError, isLcmSafeError } from "./db-errors"
 import type { LcmSafeError } from "./types"
 
@@ -33,18 +34,25 @@ function checksumSql(sql: string) {
 let migrationsCache: Promise<LcmMigration[]> | undefined
 
 export function getLcmProductionSchemaVersion() {
-  return 1
+  return 2
 }
 
 export async function getLcmMigrations(): Promise<LcmMigration[]> {
   migrationsCache ??= (async () => {
     const initialSql = await loadSql(initialSchemaSqlPath)
+    const runtimeOwnedMapsSql = await loadSql(runtimeOwnedMapsSqlPath)
     return [
       {
         version: 1,
         name: "current_schema",
         sql: initialSql,
         checksum: checksumSql(initialSql),
+      },
+      {
+        version: 2,
+        name: "runtime_owned_maps",
+        sql: runtimeOwnedMapsSql,
+        checksum: checksumSql(runtimeOwnedMapsSql),
       },
     ]
   })()

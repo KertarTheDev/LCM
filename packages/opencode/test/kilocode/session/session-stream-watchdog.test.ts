@@ -96,6 +96,18 @@ describe("kilocode.session.llm.resolveIdleMs", () => {
       }),
     ).toBe(60_000)
   })
+
+  test("distinguishes the default idle policy from explicit provider configuration", () => {
+    expect(KiloLLM.resolveIdlePolicy({ options: {} })).toEqual({ idleMs: 60_000, explicit: false })
+    expect(KiloLLM.resolveIdlePolicy({ options: {}, fallback: { chunkTimeout: 30_000 } })).toEqual({
+      idleMs: 30_000,
+      explicit: true,
+    })
+    expect(KiloLLM.resolveIdlePolicy({ options: { chunkTimeout: false } })).toEqual({
+      idleMs: undefined,
+      explicit: true,
+    })
+  })
 })
 
 describe("kilocode.session.llm.watchdogStream", () => {
@@ -278,5 +290,19 @@ describe("kilocode.session.llm.watchdogStream", () => {
     expect(sourceReturnCalled).toBe(true)
     // The abandoned pull is left unresolved; only return() is asserted here.
     void pending
+  })
+
+  test("uses a longer first-event window only for the first provider event", async () => {
+    const source = (async function* (): AsyncIterable<FullStreamPart> {
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      yield part("stream-start", { warnings: [] as LanguageModelV2CallWarning[] })
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      yield part("finish", { finishReason: "stop", usage: {} })
+    })()
+    const wrapped = KiloLLM.watchdogAsyncIterable(source, 30, undefined, 200)
+    const error = await run(
+      Effect.flip(Stream.runCollect(Stream.fromAsyncIterable(wrapped, (cause) => cause as never))),
+    )
+    expect(error).toBeInstanceOf(ProviderError.ResponseStreamError)
   })
 })

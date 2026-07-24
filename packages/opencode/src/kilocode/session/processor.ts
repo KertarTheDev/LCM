@@ -193,8 +193,9 @@ export namespace KiloSessionProcessor {
     abort: AbortSignal
     set: (sessionID: SessionID, status: SessionStatus.Info) => Effect.Effect<void>
     used?: number
+    limit?: number
   }) {
-    const limit = Flag.KILO_SESSION_RETRY_LIMIT
+    const limit = input.limit ?? Flag.KILO_SESSION_RETRY_LIMIT
     return {
       limit: limit === undefined ? undefined : Math.max(0, limit - (input.used ?? 0)),
       offline: (info: { error: unknown; message: string }) =>

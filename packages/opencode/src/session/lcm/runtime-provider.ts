@@ -312,14 +312,17 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
       ...(providerInfo ? { provider: providerInfo } : {}),
     })
     const snapshot = defaultLcmProviderCapacityRegistry.snapshot(capacityInput)
-    return resolveLcmMapWorkerCount({
-      toolKind: input.toolKind,
-      requestedWorkers: input.mapInput.workers,
-      modelSelector: input.resolved.modelSelection.selector,
+    return {
+      workers: resolveLcmMapWorkerCount({
+        toolKind: input.toolKind,
+        requestedWorkers: input.mapInput.workers,
+        modelSelector: input.resolved.modelSelection.selector,
+        providerCapacityClass: snapshot.capacityClass,
+        providerActive: snapshot.active,
+        providerForegroundQueued: snapshot.foregroundQueued,
+      }),
       providerCapacityClass: snapshot.capacityClass,
-      providerActive: snapshot.active,
-      providerForegroundQueued: snapshot.foregroundQueued,
-    })
+    }
   }
 
   return {

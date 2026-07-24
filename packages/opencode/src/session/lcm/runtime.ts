@@ -105,7 +105,13 @@ import {
 import { getLcmProductionSchemaVersion } from "./migrations"
 import { decideMaintenanceTrigger } from "./scheduler"
 import { LcmRetrieval } from "./retrieval"
-import { LcmMap, resolveLcmMapWorkerCount, type AgenticMapChildRunner, type LcmMapModelSelection } from "./map"
+import {
+  LcmMap,
+  resolveLcmMapWorkerCount,
+  type AgenticMapChildRunner,
+  type LcmMapModelSelection,
+  type LlmMapGenerator,
+} from "./map"
 import {
   createLcmSoftSweepBudget,
   emptyMaintenanceResult,
@@ -196,6 +202,7 @@ import {
   type LcmUsageRecord,
   type LcmPathBackedAdmissionInput,
   type LlmMapInput,
+  type MapRunID,
   type OperationID,
 } from "./types"
 import { syncFinalizedMessages as syncFinalizedSourceMessages } from "./source-sync"
@@ -250,6 +257,11 @@ export {
 
 type LcmSessionDeletionInput = { sessionID: string; recursive: boolean }
 
+const runtimeAgenticMapChild: AgenticMapChildRunner = async (input) => {
+  const runner = await import("./agentic-map-runner")
+  return runner.runAgenticMapChild(input)
+}
+
 let activeSessionCleanup:
   | {
       readonly owner: symbol
@@ -268,6 +280,8 @@ export const layer = Layer.effect(
     const bus = Option.getOrUndefined(yield* Effect.serviceOption(Bus.Service))
     const sessionStatus = Option.getOrUndefined(yield* Effect.serviceOption(SessionStatus.Service))
     const mapScheduler = LcmMap.createLcmMapScheduler(lcmDb)
+    let resumeSessionMapWork: (input: { sessionID: string; scope: LcmConversationScope }) => Effect.Effect<void> = () =>
+      Effect.void
     const aggregateStorageBytes = createAggregateLcmStorageBytesSampler({
       resolveKiloDataDir: () => resolveKiloDataDirForLcm(),
     })
@@ -870,7 +884,9 @@ export const layer = Layer.effect(
     })
 
     const getConversationScope = Effect.fn("LcmRuntime.getConversationScope")(function* (input: { sessionID: string }) {
-      return yield* getLifecycleConversationScope(input).pipe(Effect.provideService(LcmDb.Service, lcmDb))
+      const scope = yield* getLifecycleConversationScope(input).pipe(Effect.provideService(LcmDb.Service, lcmDb))
+      yield* resumeSessionMapWork({ sessionID: input.sessionID, scope }).pipe(Effect.catch(() => Effect.void))
+      return scope
     })
 
     const getStatus = Effect.fn("LcmRuntime.getStatus")(function* (input: { sessionID: string }) {
@@ -2110,6 +2126,97 @@ export const layer = Layer.effect(
         ),
       )
 
+    const persistedLlmMapProcessor = (sessionID: string, operationID: OperationID): LlmMapGenerator => {
+      const languages = new Map<string, Promise<LanguageModelV3>>()
+      return async ({ prompt, request, modelSelection, abortSignal }) => {
+        if (!provider) throw invalidRequest("lcm_map_provider_unavailable", { operationID })
+        const model = await Effect.runPromise(
+          provider.getModel(ProviderID.make(modelSelection.providerID), ModelID.make(modelSelection.modelID)),
+        )
+        const key = `${model.providerID}/${model.id}`
+        const language = await (languages.get(key) ??
+          (() => {
+            const promise = Effect.runPromise(provider.getLanguage(model))
+            languages.set(key, promise)
+            return promise
+          })())
+        const generated = await runLcmTextGeneration({
+          model,
+          language,
+          sessionID,
+          priority: "background",
+          operationID,
+          prompt,
+          request,
+          maxOutputTokens: Math.min(
+            resolveLcmModelLimits(model).output ?? ProviderTransform.maxOutputTokens(model),
+            4096,
+          ),
+          abortSignal,
+        })
+        return {
+          text: generated.text,
+          usage: providerUsageFromGeneration({
+            usage: generated.usage,
+            providerID: modelSelection.providerID,
+            modelID: modelSelection.modelID,
+          }),
+        }
+      }
+    }
+
+    const recordLlmMapUsage = async (usageInput: {
+      sessionID: string
+      conversationID: ConversationID
+      jobID: OperationID
+      usage: {
+        providerID?: string
+        modelID?: string
+        inputTokens?: number
+        outputTokens?: number
+        cacheReadTokens?: number
+        cacheWriteTokens?: number
+        costAmount?: number
+        costCurrency?: string
+        costStatus: LcmUsageRecord["costStatus"]
+      }
+    }) => {
+      await Effect.runPromise(
+        writeUsageRecord({
+          sessionID: usageInput.sessionID,
+          conversationID: usageInput.conversationID,
+          jobID: usageInput.jobID,
+          purpose: "llm_map",
+          mode: "map_item",
+          providerID: usageInput.usage.providerID,
+          modelID: usageInput.usage.modelID,
+          inputTokens: usageInput.usage.inputTokens,
+          outputTokens: usageInput.usage.outputTokens,
+          cacheReadTokens: usageInput.usage.cacheReadTokens,
+          cacheWriteTokens: usageInput.usage.cacheWriteTokens,
+          costAmount: usageInput.usage.costAmount,
+          costCurrency: usageInput.usage.costCurrency,
+          costStatus: usageInput.usage.costStatus,
+        }).pipe(Effect.catch(() => Effect.void)),
+      )
+    }
+
+    resumeSessionMapWork = (input) =>
+      Effect.gen(function* () {
+        const family = yield* resolveSessionFamilyDb({ sessionID: input.sessionID })
+        const operationID = createOperationID()
+        yield* LcmMap.resumeSessionMaps({
+          sessionID: input.sessionID,
+          dataDir: family.dataDir,
+          operationID,
+          scope: input.scope,
+          scheduler: mapScheduler,
+          processor: persistedLlmMapProcessor(input.sessionID, operationID),
+          childRunner: runtimeAgenticMapChild,
+          recordUsage: recordLlmMapUsage,
+        }).pipe(Effect.provideService(LcmDb.Service, family.lcmDb))
+      })
+
     const llmMap = Effect.fn("LcmRuntime.llmMap")(function* (
       input: {
         sessionID: string
@@ -2161,7 +2268,7 @@ export const layer = Layer.effect(
       const resolvedResult = yield* resolvedEffect
       if (!resolvedResult.ok) return { ok: false, error: resolvedResult.error } satisfies LcmToolErrorResult
       const resolved = resolvedResult.resolved
-      const workers = yield* Effect.promise(() =>
+      const mapCapacity = yield* Effect.promise(() =>
         resolveRuntimeMapWorkers({
           toolKind: "llm_map",
           mapInput: input,
@@ -2173,7 +2280,8 @@ export const layer = Layer.effect(
       let languagePromise: Promise<LanguageModelV3> | undefined
       const mapEffect = LcmMap.llmMap({
         ...input,
-        workers,
+        workers: mapCapacity.workers,
+        providerCapacityClass: mapCapacity.providerCapacityClass,
         dataDir: dbResult.db.dataDir,
         operationID,
         scope,
@@ -2248,7 +2356,8 @@ export const layer = Layer.effect(
         checkPathPermission?: LcmPathPermissionCheck
         providerID?: string
         modelID?: string
-        childRunner: AgenticMapChildRunner
+        submittingAgent: string
+        parentDirectory: string
       } & AgenticMapInput,
     ) {
       const operationID = createOperationID()
@@ -2304,7 +2413,7 @@ export const layer = Layer.effect(
           }),
         } satisfies LcmToolErrorResult
       }
-      const workers = yield* Effect.promise(() =>
+      const mapCapacity = yield* Effect.promise(() =>
         resolveRuntimeMapWorkers({
           toolKind: "agentic_map",
           mapInput: input,
@@ -2314,14 +2423,15 @@ export const layer = Layer.effect(
 
       return yield* LcmMap.agenticMap({
         ...input,
-        workers,
+        workers: mapCapacity.workers,
+        providerCapacityClass: mapCapacity.providerCapacityClass,
         dataDir: dbResult.db.dataDir,
         operationID,
         scope,
         scheduler: mapScheduler,
         modelSelection: resolvedResult.resolved.modelSelection,
         permissionCheck: input.checkPathPermission,
-        childRunner: input.childRunner,
+        childRunner: runtimeAgenticMapChild,
       }).pipe(
         Effect.provideService(LcmDb.Service, familyDb),
         Effect.catch((error) =>
@@ -2335,6 +2445,53 @@ export const layer = Layer.effect(
                 }),
           } satisfies LcmToolErrorResult),
         ),
+      )
+    })
+
+    const setMapChildProviderPhase = Effect.fn("LcmRuntime.setMapChildProviderPhase")(function* (input: {
+      sessionID: string
+      phase: "waiting_capacity" | "running"
+    }) {
+      const family = yield* resolveSessionFamilyDb({ sessionID: input.sessionID })
+      const metadata = yield* family.lcmDb.execute({
+        operationID: createOperationID(),
+        lane: "background",
+        purpose: "map",
+        run: async (db) =>
+          (
+            await (db as PGlite).query<{ orchestration_metadata_json: unknown }>(
+              `
+                SELECT orchestration_metadata_json
+                FROM lcm_conversations
+                WHERE source_session_id = $1 AND capability_class = 'map_child'
+                LIMIT 1
+              `,
+              [input.sessionID],
+            )
+          ).rows[0]?.orchestration_metadata_json,
+      })
+      const value =
+        typeof metadata === "string"
+          ? (() => {
+              try {
+                return JSON.parse(metadata) as unknown
+              } catch {
+                return undefined
+              }
+            })()
+          : metadata
+      if (!value || typeof value !== "object" || Array.isArray(value)) return
+      const record = value as Record<string, unknown>
+      const mapID = typeof record.mapID === "string" ? (record.mapID as MapRunID) : undefined
+      const itemMatch = typeof record.mapItemID === "string" ? /^item_(\d+)$/.exec(record.mapItemID) : undefined
+      if (!mapID || !itemMatch) return
+      yield* Effect.promise(() =>
+        LcmMap.setMapItemProviderPhase({
+          lcmDb: family.lcmDb,
+          mapID,
+          itemIndex: Number(itemMatch[1]),
+          phase: input.phase,
+        }),
       )
     })
 
@@ -2366,7 +2523,6 @@ export const layer = Layer.effect(
       )
       if (!scopeResult.ok) return { ok: false, error: scopeResult.error } satisfies LcmToolErrorResult
       const scope = scopeResult.scope
-      const languagePromises = new Map<string, Promise<LanguageModelV3>>()
       const statusEffect = provider
         ? LcmMap.resumeMap({
             mapID: input.mapID,
@@ -2375,60 +2531,9 @@ export const layer = Layer.effect(
             operationID,
             scope,
             scheduler: mapScheduler,
-            processor: async ({ prompt, request, modelSelection, abortSignal }) => {
-              const model = await Effect.runPromise(
-                provider.getModel(ProviderID.make(modelSelection.providerID), ModelID.make(modelSelection.modelID)),
-              )
-              const key = `${model.providerID}/${model.id}`
-              const language = await (languagePromises.get(key) ??
-                (() => {
-                  const promise = Effect.runPromise(provider.getLanguage(model))
-                  languagePromises.set(key, promise)
-                  return promise
-                })())
-              const generated = await runLcmTextGeneration({
-                model,
-                language,
-                sessionID: input.sessionID,
-                priority: "background",
-                operationID,
-                prompt,
-                request,
-                maxOutputTokens: Math.min(
-                  resolveLcmModelLimits(model).output ?? ProviderTransform.maxOutputTokens(model),
-                  4096,
-                ),
-                abortSignal,
-              })
-              return {
-                text: generated.text,
-                usage: providerUsageFromGeneration({
-                  usage: generated.usage,
-                  providerID: modelSelection.providerID,
-                  modelID: modelSelection.modelID,
-                }),
-              }
-            },
-            recordUsage: async (usageInput) => {
-              await Effect.runPromise(
-                writeUsageRecord({
-                  sessionID: usageInput.sessionID,
-                  conversationID: usageInput.conversationID,
-                  jobID: usageInput.jobID,
-                  purpose: "llm_map",
-                  mode: "map_item",
-                  providerID: usageInput.usage.providerID,
-                  modelID: usageInput.usage.modelID,
-                  inputTokens: usageInput.usage.inputTokens,
-                  outputTokens: usageInput.usage.outputTokens,
-                  cacheReadTokens: usageInput.usage.cacheReadTokens,
-                  cacheWriteTokens: usageInput.usage.cacheWriteTokens,
-                  costAmount: usageInput.usage.costAmount,
-                  costCurrency: usageInput.usage.costCurrency,
-                  costStatus: usageInput.usage.costStatus,
-                }).pipe(Effect.catch(() => Effect.void)),
-              )
-            },
+            processor: persistedLlmMapProcessor(input.sessionID, operationID),
+            childRunner: runtimeAgenticMapChild,
+            recordUsage: recordLlmMapUsage,
           })
         : LcmMap.mapStatus({
             mapID: input.mapID,
@@ -2613,6 +2718,7 @@ export const layer = Layer.effect(
       exploreFile,
       llmMap,
       agenticMap,
+      setMapChildProviderPhase: (input) => setMapChildProviderPhase(input).pipe(Effect.catch(() => Effect.void)),
       mapStatus,
       mapCancel,
       close: () => closeRuntime(),
@@ -2791,7 +2897,8 @@ export function agenticMap(
     checkPathPermission?: LcmPathPermissionCheck
     providerID?: string
     modelID?: string
-    childRunner: AgenticMapChildRunner
+    submittingAgent: string
+    parentDirectory: string
   } & AgenticMapInput,
 ) {
   return runPromise((svc) => svc.agenticMap(input))
