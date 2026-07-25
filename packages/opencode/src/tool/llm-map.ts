@@ -2,7 +2,7 @@
 import { NonNegativeInt, PositiveInt } from "@opencode-ai/core/schema"
 import { Effect, Option, Schema } from "effect"
 import { LCM_MAP_TOOL_DESCRIPTIONS } from "../session/lcm/map"
-import type { LlmMapInput, LcmMapResult, LcmToolErrorResult } from "../session/lcm/types"
+import type { LlmMapInput, LcmMapStartResult, LcmToolErrorResult } from "../session/lcm/types"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { lcmToolWrapperError } from "./lcm-tool-error"
 import * as Tool from "./tool"
@@ -17,12 +17,16 @@ const modelSelection = Schema.Union([
 ])
 
 const parameters = Schema.Struct({
-  inputFileID: Schema.optional(Schema.String).annotate({ description: "Authorized LCM JSONL input file handle." }),
+  inputFileID: Schema.optional(Schema.String).annotate({
+    description:
+      "Authorized LCM JSONL input file handle. Provide exactly one of inputFileID, inputPath, or inputJsonl.",
+  }),
   inputPath: Schema.optional(Schema.String).annotate({
-    description: "Path to a JSONL input file to register before mapping.",
+    description:
+      "Path to a JSONL input file to register. Provide exactly one of inputFileID, inputPath, or inputJsonl.",
   }),
   inputJsonl: Schema.optional(Schema.String).annotate({
-    description: "Inline JSONL input to register before mapping.",
+    description: "Inline JSONL input to register. Provide exactly one of inputFileID, inputPath, or inputJsonl.",
   }),
   itemSchema: Schema.Unknown.annotate({
     description:
@@ -48,7 +52,7 @@ type RuntimeMap = (
     providerID?: string
     modelID?: string
   } & LlmMapInput,
-) => Effect.Effect<LcmMapResult | LcmToolErrorResult>
+) => Effect.Effect<LcmMapStartResult | LcmToolErrorResult>
 
 export const LlmMapTool = Tool.define(
   "llm_map",
@@ -90,7 +94,7 @@ export const LlmMapTool = Tool.define(
   }),
 )
 
-function renderResult(result: LcmMapResult | LcmToolErrorResult) {
+function renderResult(result: LcmMapStartResult | LcmToolErrorResult) {
   return {
     title: "LLM Map",
     metadata: {
@@ -98,6 +102,7 @@ function renderResult(result: LcmMapResult | LcmToolErrorResult) {
       ...(result.ok
         ? {
             mapID: result.mapID,
+            runDisposition: result.runDisposition,
             status: result.status,
             executionState: result.executionState,
             totalItems: result.totalItems,

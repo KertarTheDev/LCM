@@ -7,9 +7,13 @@ import { lcmToolWrapperError } from "./lcm-tool-error"
 import * as Tool from "./tool"
 
 const parameters = Schema.Struct({
-  pattern: Schema.String.annotate({ description: "Pattern to search for in authorized current-lineage memory" }),
+  pattern: Schema.String.annotate({
+    description:
+      "Search text. In literal mode this is one exact contiguous substring, not fuzzy matching or an AND of words.",
+  }),
   mode: Schema.optional(Schema.Literals(["regex", "literal"])).annotate({
-    description: "Search mode. Defaults to literal.",
+    description:
+      "Search mode. Defaults to exact contiguous literal matching; choose regex only when pattern contains regex syntax.",
   }),
   caseSensitive: Schema.optional(Schema.Boolean).annotate({
     description: "Whether matching is case-sensitive. Defaults to false.",
@@ -17,9 +21,11 @@ const parameters = Schema.Struct({
   summaryID: Schema.optional(Schema.String).annotate({
     description: "Optional authorized summary handle to scope search.",
   }),
-  limit: Schema.optional(PositiveInt).annotate({ description: "Maximum results to return on this page." }),
+  limit: Schema.optional(PositiveInt).annotate({
+    description: "Maximum results on this page. If page.hasMore is true, continue with page.nextCursor.",
+  }),
   cursor: Schema.optional(Schema.String).annotate({
-    description: "Opaque cursor returned by a previous lcm_grep call.",
+    description: "Opaque page.nextCursor from the same lcm_grep query and limit.",
   }),
 })
 

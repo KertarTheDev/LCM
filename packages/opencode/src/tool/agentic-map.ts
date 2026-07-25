@@ -3,7 +3,7 @@ import { NonNegativeInt, PositiveInt } from "@opencode-ai/core/schema"
 import { Effect, Option, Schema } from "effect"
 import { Session } from "../session/session"
 import { LCM_MAP_TOOL_DESCRIPTIONS } from "../session/lcm/map"
-import type { AgenticMapInput, LcmMapResult, LcmToolErrorResult } from "../session/lcm/types"
+import type { AgenticMapInput, LcmMapStartResult, LcmToolErrorResult } from "../session/lcm/types"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { lcmToolWrapperError } from "./lcm-tool-error"
 import * as Tool from "./tool"
@@ -18,19 +18,26 @@ const modelSelection = Schema.Union([
 ])
 
 const parameters = Schema.Struct({
-  inputFileID: Schema.optional(Schema.String).annotate({ description: "Authorized LCM JSONL input file handle." }),
+  inputFileID: Schema.optional(Schema.String).annotate({
+    description:
+      "Authorized LCM JSONL input file handle. Provide exactly one of inputFileID, inputPath, or inputJsonl.",
+  }),
   inputPath: Schema.optional(Schema.String).annotate({
-    description: "Path to a JSONL input file to register before mapping.",
+    description:
+      "Path to a JSONL input file to register. Provide exactly one of inputFileID, inputPath, or inputJsonl.",
   }),
   inputJsonl: Schema.optional(Schema.String).annotate({
-    description: "Inline JSONL input to register before mapping.",
+    description: "Inline JSONL input to register. Provide exactly one of inputFileID, inputPath, or inputJsonl.",
   }),
   itemSchema: Schema.Unknown.annotate({
     description:
       "Draft 2020-12 JSON Schema object or boolean for each output item. A valid JSON-stringified schema is also accepted.",
   }),
   prompt: Schema.String.annotate({ description: "Instruction applied independently to each JSONL input item." }),
-  mode: Schema.Literals(["read_only", "write_capable"]).annotate({ description: "Child-session capability mode." }),
+  mode: Schema.Literals(["read_only", "write_capable"]).annotate({
+    description:
+      "read_only denies edits, writes, patching, shell, tasks, and todo mutation. write_capable only inherits parent permissions and sandboxing.",
+  }),
   model: Schema.optional(modelSelection).annotate({ description: "Model selector. Defaults to the current model." }),
   workers: Schema.optional(PositiveInt).annotate({
     description: "Requested worker count. Defaults to 8, may not exceed 8, and may be lowered for provider capacity.",
@@ -52,7 +59,7 @@ type RuntimeAgenticMap = (
     submittingAgent: string
     parentDirectory: string
   } & AgenticMapInput,
-) => Effect.Effect<LcmMapResult | LcmToolErrorResult>
+) => Effect.Effect<LcmMapStartResult | LcmToolErrorResult>
 
 export const AgenticMapTool = Tool.define(
   "agentic_map",
@@ -103,7 +110,7 @@ export const AgenticMapTool = Tool.define(
   }),
 )
 
-function renderResult(result: LcmMapResult | LcmToolErrorResult) {
+function renderResult(result: LcmMapStartResult | LcmToolErrorResult) {
   return {
     title: "Agentic Map",
     metadata: {
@@ -111,6 +118,7 @@ function renderResult(result: LcmMapResult | LcmToolErrorResult) {
       ...(result.ok
         ? {
             mapID: result.mapID,
+            runDisposition: result.runDisposition,
             status: result.status,
             executionState: result.executionState,
             totalItems: result.totalItems,

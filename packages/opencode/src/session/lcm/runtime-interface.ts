@@ -29,6 +29,7 @@ import type {
   LcmManualMaintenanceInput,
   LcmMapCancelInput,
   LcmMapResult,
+  LcmMapStartResult,
   LcmMapStatusInput,
   LcmPathBackedAdmissionInput,
   LcmPreflightResult,
@@ -118,6 +119,7 @@ export interface Interface {
   readonly handleSessionDeleted: (input: { sessionID: string; recursive: boolean }) => Effect.Effect<void, LcmSafeError>
   readonly recordUsage: (input: unknown) => Effect.Effect<LcmUsageRecord, LcmSafeError>
   readonly getConversationScope: (input: { sessionID: string }) => Effect.Effect<LcmConversationScope, LcmSafeError>
+  readonly isMapChildSession: (input: { sessionID: string }) => Effect.Effect<boolean, LcmSafeError>
   readonly grep: (
     input: { sessionID: string; abortSignal?: AbortSignal } & LcmGrepInput,
   ) => Effect.Effect<LcmGrepResult | LcmToolErrorResult>
@@ -155,7 +157,7 @@ export interface Interface {
       providerID?: string
       modelID?: string
     } & LlmMapInput,
-  ) => Effect.Effect<LcmMapResult | LcmToolErrorResult>
+  ) => Effect.Effect<LcmMapStartResult | LcmToolErrorResult>
   readonly agenticMap: (
     input: {
       sessionID: string
@@ -167,7 +169,7 @@ export interface Interface {
       submittingAgent: string
       parentDirectory: string
     } & AgenticMapInput,
-  ) => Effect.Effect<LcmMapResult | LcmToolErrorResult>
+  ) => Effect.Effect<LcmMapStartResult | LcmToolErrorResult>
   readonly setMapChildProviderPhase: (input: {
     sessionID: string
     phase: "waiting_capacity" | "running"

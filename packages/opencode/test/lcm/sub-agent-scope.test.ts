@@ -199,6 +199,101 @@ test("lcm:sub-agent-scope links task/explore/map children to root lineage", asyn
   })
 })
 
+test("runtime preserves cancellation only for fully proven map-child capability", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const sessions = await createSessionTree(tmp.path)
+  const previous = process.env.KILO_LCM_TEST_DATA_DIR
+  process.env.KILO_LCM_TEST_DATA_DIR = path.join(tmp.path, "kilo-data")
+  try {
+    await runLcm(
+      Effect.gen(function* () {
+        const rootID = yield* getOrCreateConversation({ sessionID: sessions.root.id })
+        yield* dbExec(
+          `
+            INSERT INTO lcm_large_files (
+              file_id, conversation_id, source_kind, mime_type, created_at_ms, updated_at_ms
+            )
+            VALUES ('file_m20_runtime_map_input', $1, 'map_input', 'application/jsonl', $2, $2)
+          `,
+          [rootID, Date.now()],
+        )
+        yield* dbExec(
+          `
+            INSERT INTO lcm_map_runs (
+              map_id, conversation_id, tool_kind, status, request_fingerprint, input_file_id,
+              worker_count, max_retries, prompt_text, prompt_sha256, model_selection_json,
+              agentic_mode, schema_json, schema_sha256, created_at_ms, updated_at_ms
+            )
+            VALUES (
+              'map_m20_runtime_identity', $1, 'agentic_map', 'running', 'fingerprint_m20_runtime_identity',
+              'file_m20_runtime_map_input', 1, 2, 'prompt', 'prompt_sha',
+              '{"selector":"default","providerID":"p","modelID":"m"}'::jsonb, 'read_only',
+              '{"type":"object"}'::jsonb, 'schema_sha', $2, $2
+            )
+          `,
+          [rootID, Date.now()],
+        )
+        yield* dbExec(
+          `
+            INSERT INTO lcm_map_items (map_id, item_index, status, attempts, created_at_ms, updated_at_ms)
+            VALUES ('map_m20_runtime_identity', 0, 'running', 1, $1, $1)
+          `,
+          [Date.now()],
+        )
+        yield* getOrCreateChildConversation({
+          sessionID: sessions.map.id,
+          parentSessionID: sessions.root.id,
+          capabilityClass: "map_child",
+          source: "lcm_map",
+          operationID: operationID("runtime_map_identity"),
+          mapID: "map_m20_runtime_identity",
+          mapItemID: "item_0",
+        })
+        yield* getOrCreateChildConversation({
+          sessionID: sessions.task.id,
+          parentSessionID: sessions.root.id,
+          capabilityClass: "task_child",
+          source: "kilo_task",
+          sourceMessageID: "msg_m20_runtime_identity",
+          sourceToolCallID: "toolu_m20_runtime_identity",
+        })
+        yield* getOrCreateChildConversation({
+          sessionID: sessions.sibling.id,
+          parentSessionID: sessions.root.id,
+          capabilityClass: "task_child",
+          source: "kilo_task",
+          sourceMessageID: "msg_m20_runtime_unproven",
+          sourceToolCallID: "toolu_m20_runtime_unproven",
+        })
+        yield* dbExec("UPDATE lcm_conversations SET capability_class = 'map_child' WHERE source_session_id = $1", [
+          sessions.sibling.id,
+        ])
+      }),
+    )
+
+    const result = await provideTestInstance({
+      directory: tmp.path,
+      fn: () =>
+        runRuntime(
+          LcmRuntime.Service.use((svc) => {
+            const preserved = (sessionID: string) =>
+              svc.isMapChildSession({ sessionID }).pipe(Effect.catch(() => Effect.succeed(false)))
+            return Effect.all({
+              map: preserved(sessions.map.id),
+              task: preserved(sessions.task.id),
+              unproven: preserved(sessions.sibling.id),
+              root: preserved(sessions.root.id),
+            })
+          }),
+        ),
+    })
+    expect(result).toEqual({ map: true, task: false, unproven: false, root: false })
+  } finally {
+    if (previous === undefined) delete process.env.KILO_LCM_TEST_DATA_DIR
+    else process.env.KILO_LCM_TEST_DATA_DIR = previous
+  }
+})
+
 test("lcm:sub-agent-scope rejects recursive child creation and unprovable restart metadata", async () => {
   await using tmp = await tmpdir({ git: true })
   const dataDir = path.join(tmp.path, "lcm")

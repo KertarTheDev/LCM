@@ -136,12 +136,21 @@ export namespace KiloSessionPrompt {
     sessionID: SessionID
     sessions: Pick<Session.Interface, "children">
     cancel: (sessionID: SessionID) => Effect.Effect<void>
+    skipDescendant?: (sessionID: SessionID) => Effect.Effect<boolean>
   }) {
     function descendants(sessionID: SessionID): Effect.Effect<SessionID[]> {
       return Effect.gen(function* () {
         const children = yield* input.sessions.children(sessionID)
-        const nested = yield* Effect.forEach(children, (child) => descendants(child.id), { concurrency: "unbounded" })
-        return [...children.map((child) => child.id), ...nested.flat()]
+        const nested = yield* Effect.forEach(
+          children,
+          (child) =>
+            Effect.gen(function* () {
+              if (input.skipDescendant && (yield* input.skipDescendant(child.id))) return []
+              return [child.id, ...(yield* descendants(child.id))]
+            }),
+          { concurrency: "unbounded" },
+        )
+        return nested.flat()
       })
     }
 

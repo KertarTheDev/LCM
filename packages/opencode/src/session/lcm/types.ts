@@ -1304,6 +1304,10 @@ export interface LcmGrepResult {
   scopeWarning?: LcmGrepScopeWarning
   results: Array<{
     resultID: LcmGrepResultID
+    matchKind: "summary" | "message_part" | "large_file"
+    sourceTimestampMs: number
+    toolName?: string
+    isLcmToolEcho: boolean
     summaryID?: SummaryID
     fileID?: LcmFileID
     messageRowID?: MessageRowID
@@ -1565,6 +1569,12 @@ export interface LcmMapResult {
   lastProgressAtMs: number
   safeError?: LcmSafeError
   retryAfterMs?: number
+}
+
+export type LcmMapStartDisposition = "created" | "resumed"
+
+export interface LcmMapStartResult extends LcmMapResult {
+  runDisposition: LcmMapStartDisposition
 }
 
 export const LCM_SAFE_MESSAGE_TEMPLATES = {

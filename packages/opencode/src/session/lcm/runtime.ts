@@ -274,6 +274,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
+    const coreDatabase = Option.getOrUndefined(yield* Effect.serviceOption(CoreDatabase.Service))
     const lcmDb = yield* LcmDb.Service
     const lcmContext = Option.getOrUndefined(yield* Effect.serviceOption(LcmContext.Service))
     const provider = Option.getOrUndefined(yield* Effect.serviceOption(Provider.Service))
@@ -285,6 +286,8 @@ export const layer = Layer.effect(
     const aggregateStorageBytes = createAggregateLcmStorageBytesSampler({
       resolveKiloDataDir: () => resolveKiloDataDirForLcm(),
     })
+    const provideCoreDatabase = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      coreDatabase ? effect.pipe(Effect.provideService(CoreDatabase.Service, coreDatabase)) : effect
     const laneLatches = new Map<string, LcmLaneLatchState>()
 
     const applyLaneLatches = (threshold: LcmThresholdDecision) => {
@@ -376,6 +379,7 @@ export const layer = Layer.effect(
       }
       if (input.sessionID) {
         const ready = yield* ensureLcmDbReady({ sessionID: input.sessionID }).pipe(
+          provideCoreDatabase,
           Effect.provideService(LcmDb.Service, lcmDb),
           Effect.match({
             onFailure: (safeError) => ({ ok: false as const, safeError }),
@@ -399,6 +403,7 @@ export const layer = Layer.effect(
       sessionID: string
     }) {
       const ready = yield* ensureLcmDbReady({ sessionID: input.sessionID }).pipe(
+        provideCoreDatabase,
         Effect.provideService(LcmDb.Service, lcmDb),
       )
       return {
@@ -520,6 +525,7 @@ export const layer = Layer.effect(
     }) {
       const cfg = yield* getResolved()
       const ready = yield* ensureLcmDbReady({ sessionID: input.sessionID }).pipe(
+        provideCoreDatabase,
         Effect.provideService(LcmDb.Service, lcmDb),
       )
       const scopedDb = LcmDb.scoped(lcmDb, ready.target)
@@ -754,7 +760,7 @@ export const layer = Layer.effect(
       const capabilities = yield* getLifecycleCapabilities({
         sessionID: input.sessionID,
         strategy: settings?.state.strategy ?? cfg.strategy,
-      }).pipe(Effect.provideService(LcmDb.Service, lcmDb))
+      }).pipe(provideCoreDatabase, Effect.provideService(LcmDb.Service, lcmDb))
       yield* publishDbStatus({ capabilities })
       if (capabilities.lifecycleState === "lcm_active") {
         yield* resumeDeferredSoftMaintenanceRetries({ sessionID: input.sessionID }).pipe(Effect.ignore)
@@ -785,13 +791,19 @@ export const layer = Layer.effect(
       sessionID: string
       parentSessionID?: string
     }) {
-      return yield* getOrCreateLifecycleConversation(input).pipe(Effect.provideService(LcmDb.Service, lcmDb))
+      return yield* getOrCreateLifecycleConversation(input).pipe(
+        provideCoreDatabase,
+        Effect.provideService(LcmDb.Service, lcmDb),
+      )
     })
 
     const getOrCreateChildConversation = Effect.fn("LcmRuntime.getOrCreateChildConversation")(function* (
       input: Omit<LcmChildConversationInput, "dataDir">,
     ) {
-      return yield* getOrCreateLifecycleChildConversation(input).pipe(Effect.provideService(LcmDb.Service, lcmDb))
+      return yield* getOrCreateLifecycleChildConversation(input).pipe(
+        provideCoreDatabase,
+        Effect.provideService(LcmDb.Service, lcmDb),
+      )
     })
 
     function childSlotCounts(rootConversationID: ConversationID, workspaceKey: string) {
@@ -975,9 +987,18 @@ export const layer = Layer.effect(
     })
 
     const getConversationScope = Effect.fn("LcmRuntime.getConversationScope")(function* (input: { sessionID: string }) {
-      const scope = yield* getLifecycleConversationScope(input).pipe(Effect.provideService(LcmDb.Service, lcmDb))
-      yield* resumeSessionMapWork({ sessionID: input.sessionID, scope }).pipe(Effect.catch(() => Effect.void))
-      return scope
+      return yield* getLifecycleConversationScope(input).pipe(
+        provideCoreDatabase,
+        Effect.provideService(LcmDb.Service, lcmDb),
+      )
+    })
+
+    const isMapChildSession = Effect.fn("LcmRuntime.isMapChildSession")(function* (input: { sessionID: string }) {
+      const scope = yield* getLifecycleConversationScope(input).pipe(
+        provideCoreDatabase,
+        Effect.provideService(LcmDb.Service, lcmDb),
+      )
+      return scope.capabilityClass === "map_child" && scope.capabilityProven
     })
 
     const getStatus = Effect.fn("LcmRuntime.getStatus")(function* (input: { sessionID: string }) {
@@ -1243,6 +1264,7 @@ export const layer = Layer.effect(
           strategy: settings.state.strategy,
           abortSignal: internal.abortSignal,
         }).pipe(
+          provideCoreDatabase,
           Effect.provideService(LcmDb.Service, lcmDb),
           Effect.map((result) => ({ ok: true as const, result })),
           Effect.catch((safeError) => Effect.succeed({ ok: false as const, safeError })),
@@ -1627,6 +1649,10 @@ export const layer = Layer.effect(
           if (capabilities.lifecycleState === "passive_synced") {
             yield* markConversationActive({ sessionID: input.sessionID, conversationID })
           }
+          const mapScope = yield* getConversationScope({ sessionID: input.sessionID })
+          yield* resumeSessionMapWork({ sessionID: input.sessionID, scope: mapScope }).pipe(
+            Effect.catch(() => Effect.void),
+          )
 
           yield* publishMetrics({
             sessionID: input.sessionID,
@@ -1788,7 +1814,7 @@ export const layer = Layer.effect(
                 return { text: generated.text, usage, providerDiagnostics: generated.providerDiagnostics }
               }
             : undefined,
-      }).pipe(Effect.provideService(LcmDb.Service, lcmDb))
+      }).pipe(provideCoreDatabase, Effect.provideService(LcmDb.Service, lcmDb))
       const result = yield* releaseChildSlot ? runExpandQuery.pipe(Effect.ensuring(releaseChildSlot)) : runExpandQuery
       if (result.ok && usage) {
         const scope =
@@ -2636,26 +2662,13 @@ export const layer = Layer.effect(
       )
       if (!scopeResult.ok) return { ok: false, error: scopeResult.error } satisfies LcmToolErrorResult
       const scope = scopeResult.scope
-      const statusEffect = provider
-        ? LcmMap.resumeMap({
-            mapID: input.mapID,
-            sessionID: input.sessionID,
-            dataDir: dbResult.db.dataDir,
-            operationID,
-            scope,
-            scheduler: mapScheduler,
-            processor: persistedLlmMapProcessor(input.sessionID, operationID, familyDb),
-            childRunner: runtimeAgenticMapChild,
-            recordUsage: recordLlmMapUsage,
-          })
-        : LcmMap.mapStatus({
-            mapID: input.mapID,
-            sessionID: input.sessionID,
-            dataDir: dbResult.db.dataDir,
-            operationID,
-            scope,
-          })
-      return yield* statusEffect.pipe(
+      return yield* LcmMap.mapStatus({
+        mapID: input.mapID,
+        sessionID: input.sessionID,
+        dataDir: dbResult.db.dataDir,
+        operationID,
+        scope,
+      }).pipe(
         Effect.provideService(LcmDb.Service, familyDb),
         Effect.catch((error) =>
           Effect.succeed({
@@ -2758,6 +2771,7 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const settings = yield* effectiveSettings({ sessionID: input.sessionID })
           return yield* syncFinalizedSourceMessages({ ...input, strategy: settings.state.strategy }).pipe(
+            provideCoreDatabase,
             Effect.provideService(LcmDb.Service, lcmDb),
           )
         }),
@@ -2820,15 +2834,21 @@ export const layer = Layer.effect(
       handleSessionDeleted,
       recordUsage: writeUsageRecord,
       getConversationScope,
+      isMapChildSession,
       getStatus,
       getActivity,
-      grep: (input) => LcmRetrieval.grep(input).pipe(Effect.provideService(LcmDb.Service, lcmDb)),
-      describe: (input) => LcmRetrieval.describe(input).pipe(Effect.provideService(LcmDb.Service, lcmDb)),
-      expand: (input) => LcmRetrieval.expand(input).pipe(Effect.provideService(LcmDb.Service, lcmDb)),
+      grep: (input) => LcmRetrieval.grep(input).pipe(provideCoreDatabase, Effect.provideService(LcmDb.Service, lcmDb)),
+      describe: (input) =>
+        LcmRetrieval.describe(input).pipe(provideCoreDatabase, Effect.provideService(LcmDb.Service, lcmDb)),
+      expand: (input) =>
+        LcmRetrieval.expand(input).pipe(provideCoreDatabase, Effect.provideService(LcmDb.Service, lcmDb)),
       expandQuery,
       read: (input) =>
         Effect.gen(function* () {
-          const result = yield* LcmRetrieval.read(input).pipe(Effect.provideService(LcmDb.Service, lcmDb))
+          const result = yield* LcmRetrieval.read(input).pipe(
+            provideCoreDatabase,
+            Effect.provideService(LcmDb.Service, lcmDb),
+          )
           yield* publishReadFileStatus({ sessionID: input.sessionID, result })
           return result
         }),

@@ -290,7 +290,15 @@ export const layer = Layer.effect(
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* Effect.logInfo("cancel", { "session.id": sessionID })
-      yield* KiloSessionPrompt.cancelTree({ sessionID, sessions, cancel: state.cancel }) // kilocode_change - stop queued work and subagents
+      // kilocode_change start - stop queued work and ordinary subagents without canceling durable map workers
+      yield* KiloSessionPrompt.cancelTree({
+        sessionID,
+        sessions,
+        cancel: state.cancel,
+        skipDescendant: (childSessionID) =>
+          lcmRuntime.isMapChildSession({ sessionID: childSessionID }).pipe(Effect.catch(() => Effect.succeed(false))),
+      })
+      // kilocode_change end
     })
 
     // kilocode_change start - preserve configured reference mentions on the Core reference architecture

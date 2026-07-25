@@ -101,6 +101,13 @@ jobs:
           bun run lcm:retrieval-tools
           bun run lcm:path-provenance
 
+      - name: Durable map contracts and agentic runtime
+        working-directory: packages/opencode
+        run: |
+          bun run lcm:map
+          bun run lcm:sub-agent-scope
+          bun run lcm:agentic-map-runtime
+
       - name: Hard-limit and cutover boundary
         working-directory: packages/opencode
         run: |

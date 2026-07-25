@@ -42,7 +42,7 @@ import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { Service as LcmRuntimeService } from "../../src/session/lcm/runtime-interface" // kilocode_change
-import type { ConversationID } from "../../src/session/lcm/types" // kilocode_change
+import type { ConversationID, LcmMapResult } from "../../src/session/lcm/types" // kilocode_change
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
 import { KiloSession } from "../../src/kilocode/session" // kilocode_change
@@ -180,6 +180,17 @@ const lcm = Layer.mock(LcmRuntimeService)({
       canAssemble: false,
       canMaintain: false,
       canRetrieve: false,
+    }),
+  syncFinalizedMessages: ({ sessionID }) =>
+    Effect.succeed({
+      sessionID: SessionID.make(sessionID),
+      conversationID: "conv_prompt_agentic_child" as ConversationID,
+      insertedMessages: 0,
+      insertedParts: 0,
+      skippedUnsealedMessages: 0,
+      skippedUnsealedParts: 0,
+      idempotent: true,
+      lifecycleState: "lcm_active",
     }),
 })
 // kilocode_change end
@@ -857,6 +868,123 @@ it.instance("static loop returns assistant text through local provider", () =>
     expect(result.info.role).toBe("assistant")
     expect(result.parts.some((part) => part.type === "text" && part.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
+    expect(yield* llm.pending).toBe(0)
+  }),
+)
+
+it.instance("agentic map child runner completes a local provider StructuredOutput tool call", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const { directory } = yield* TestInstance
+    const previousDataDir = process.env.KILO_LCM_TEST_DATA_DIR
+    process.env.KILO_LCM_TEST_DATA_DIR = path.join(directory, "lcm-data")
+    yield* llm.text("Root session ready.")
+    yield* llm.tool("StructuredOutput", { output: { reversed: "olleh" } })
+
+    const result = yield* Effect.promise(async () => {
+      const [{ AppRuntime }, KiloInstance, SessionModule, { LcmRuntime }] = await Promise.all([
+        import("../../src/effect/app-runtime"),
+        import("../../src/kilocode/instance"),
+        import("../../src/session/session"),
+        import("../../src/session/lcm/runtime"),
+      ])
+      return KiloInstance.provide({
+        directory,
+        fn: async () => {
+          const parent = await AppRuntime.runPromise(
+            SessionModule.Service.use((sessions) =>
+              sessions.create({
+                title: "Agentic map parent",
+                permission: [{ permission: "*", pattern: "*", action: "allow" }],
+              }),
+            ),
+          )
+          await AppRuntime.runPromise(
+            SessionPrompt.Service.use((prompts) =>
+              prompts.prompt({
+                sessionID: parent.id,
+                agent: "build",
+                model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+                parts: [{ type: "text", text: "Initialize the root conversation." }],
+              }),
+            ),
+          )
+          const started = await AppRuntime.runPromise(
+            LcmRuntime.Service.use((runtime) =>
+              runtime.agenticMap({
+                sessionID: parent.id,
+                submittingAgent: "build",
+                parentDirectory: directory,
+                providerID: "test",
+                modelID: "test-model",
+                mode: "read_only",
+                inputJsonl: '{"word":"hello"}',
+                itemSchema: {
+                  type: "object",
+                  required: ["reversed"],
+                  additionalProperties: false,
+                  properties: { reversed: { type: "string" } },
+                },
+                prompt: 'Return a JSON object with key "reversed" containing the reversed input word.',
+                maxRetries: 0,
+              }),
+            ),
+          )
+          if (!started.ok) throw new Error(`${started.error.diagnosticCode}: ${started.error.safeMessage}`)
+
+          let status: LcmMapResult = started
+          for (let poll = 0; poll < 240 && status.status !== "completed" && status.status !== "failed"; poll++) {
+            await new Promise((resolve) => setTimeout(resolve, 250))
+            const next = await AppRuntime.runPromise(
+              LcmRuntime.Service.use((runtime) => runtime.mapStatus({ sessionID: parent.id, mapID: started.mapID })),
+            )
+            if (!next.ok) throw new Error(`${next.error.diagnosticCode}: ${next.error.safeMessage}`)
+            status = next
+          }
+          const children = await AppRuntime.runPromise(
+            SessionModule.Service.use((sessions) => sessions.children(parent.id)),
+          )
+          const childMessages = await Promise.all(
+            children.map((child) =>
+              AppRuntime.runPromise(
+                SessionModule.Service.use((sessions) => sessions.messages({ sessionID: child.id })),
+              ),
+            ),
+          )
+          return { parent, started, status, children, childMessages }
+        },
+      })
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (previousDataDir === undefined) delete process.env.KILO_LCM_TEST_DATA_DIR
+          else process.env.KILO_LCM_TEST_DATA_DIR = previousDataDir
+        }),
+      ),
+    )
+
+    expect(result.started.runDisposition).toBe("created")
+    if (result.status.status !== "completed") {
+      throw new Error(JSON.stringify({ status: result.status, childMessages: result.childMessages }, null, 2))
+    }
+    expect(result.status).toMatchObject({
+      ok: true,
+      status: "completed",
+      completedItems: 1,
+      failedItems: 0,
+      outputFileID: expect.stringMatching(/^file_/),
+    })
+    expect(result.children).toHaveLength(1)
+    expect(result.children[0]?.permission).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ permission: "bash", pattern: "*", action: "deny" }),
+        expect.objectContaining({ permission: "write", pattern: "*", action: "deny" }),
+        expect.objectContaining({ permission: "task", pattern: "*", action: "deny" }),
+      ]),
+    )
+    const inputs = yield* llm.inputs
+    expect(JSON.stringify(inputs)).toContain("StructuredOutput")
+    expect(JSON.stringify(inputs)).toContain('\\"word\\":\\"hello\\"')
     expect(yield* llm.pending).toBe(0)
   }),
 )
