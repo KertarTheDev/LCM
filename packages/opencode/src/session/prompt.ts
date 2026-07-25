@@ -85,6 +85,8 @@ import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache" // kilocode_change
+import { ConversationMemory } from "@/kilocode/session/lcm/service" // kilocode_change
+import { usable as usableContext } from "./overflow" // kilocode_change
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -164,6 +166,7 @@ export const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const cache = Option.getOrUndefined(yield* Effect.serviceOption(RepositoryCache.Service)) // kilocode_change
+    const conversationMemory = yield* ConversationMemory.Service // kilocode_change
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
@@ -1595,24 +1598,39 @@ export const layer = Layer.effect(
           lastFinished.summary !== true &&
           (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
         ) {
-          // kilocode_change start
-          const guard = KiloSessionPrompt.guardCompactionAttempt({
+          // kilocode_change start - give Conversation Memory one bounded opportunity before preserving upstream compaction
+          const cfg = yield* config.get()
+          const transcript = yield* MessageV2.stream(sessionID).pipe(Effect.provideService(Database.Service, database))
+          const lcmReady = yield* conversationMemory.ensureReady({
             sessionID,
-            attempts: compactionAttempts,
-            closeReasons,
-            message: lastFinished,
+            transcript,
+            usableInputTokens: usableContext({ cfg, model, outputTokenMax: flags.outputTokenMax }),
+            protectedTailTurns: cfg.compaction?.tail_turns,
+            model,
           })
-          if (guard.exhausted) {
-            // lastFinished is a prior turn's assistant — record exhaustion on the
-            // message whose size tipped us past the compaction cap.
-            yield* sessions.updateMessage(lastFinished)
-            yield* events.publish(Session.Event.Error, { sessionID, error: guard.error })
-            break
-          }
-          compactionAttempts++
-          // kilocode_change end
-          yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
-          continue
+          if (lcmReady) {
+            yield* Effect.logInfo("conversation memory ready before compaction", { "session.id": sessionID })
+          } else {
+            // kilocode_change end
+            // kilocode_change start
+            const guard = KiloSessionPrompt.guardCompactionAttempt({
+              sessionID,
+              attempts: compactionAttempts,
+              closeReasons,
+              message: lastFinished,
+            })
+            if (guard.exhausted) {
+              // lastFinished is a prior turn's assistant — record exhaustion on the
+              // message whose size tipped us past the compaction cap.
+              yield* sessions.updateMessage(lastFinished)
+              yield* events.publish(Session.Event.Error, { sessionID, error: guard.error })
+              break
+            }
+            compactionAttempts++
+            // kilocode_change end
+            yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+            continue
+          } // kilocode_change - preserve exact upstream fallback when LCM cannot prepare
         }
 
         const agent = yield* agents.get(lastUser.agent)
@@ -1770,6 +1788,52 @@ export const layer = Layer.effect(
           const system = [...env, ...mem, ...instructions, ...(skills ? [skills] : [])] // kilocode_change
           const format = lastUser.format ?? { type: "text" as const }
           if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+          // kilocode_change start - project only the eligible historical prefix after upstream finalized the request
+          const requestMessages = [
+            ...modelMsgs,
+            ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : []),
+          ]
+          const cfg = yield* config.get()
+          const measure = (messages: typeof requestMessages) =>
+            KiloSessionOverflow.measure({
+              messages: [{ role: "system" as const, content: system.join("\n") }, ...messages],
+              tools,
+            }).normalized
+          const usableInputTokens = usableContext({ cfg, model, outputTokenMax: flags.outputTokenMax })
+          const thresholdRatio =
+            typeof cfg.compaction?.threshold_percent === "number" ? cfg.compaction.threshold_percent / 100 : 0.6
+          const rawTokens = measure(requestMessages)
+          yield* conversationMemory.capture({
+            sessionID,
+            requestID: msg.id,
+            system,
+            messages: requestMessages,
+            tools,
+            rawTokens,
+            usableInputTokens,
+          })
+          let projectedMessages = requestMessages
+          if (usableInputTokens > 0 && rawTokens / usableInputTokens >= thresholdRatio) {
+            const transcript = yield* MessageV2.stream(sessionID).pipe(
+              Effect.provideService(Database.Service, database),
+            )
+            const projection = yield* conversationMemory.project({
+              sessionID,
+              transcript,
+              messages: requestMessages,
+              system,
+              tools,
+              usableInputTokens,
+              thresholdRatio,
+              protectedTailTurns: cfg.compaction?.tail_turns,
+              requestID: msg.id,
+              continuationID: lastUser.id,
+              measure,
+              model,
+            })
+            projectedMessages = projection.messages
+          }
+          // kilocode_change end
           const result = yield* handle.process({
             // kilocode_change start - keep Ask/Plan tool filtering hardened against session allows
             user: lastUser,
@@ -1779,7 +1843,7 @@ export const layer = Layer.effect(
             sessionID,
             parentSessionID: session.parentID,
             system,
-            messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
+            messages: projectedMessages, // kilocode_change - unchanged upstream input or a verified LCM projection
             tools,
             model,
             toolChoice: format.type === "json_schema" ? "required" : undefined,
@@ -2171,6 +2235,7 @@ export const defaultLayer: Layer.Layer<Service> = Layer.suspend(() =>
       Layer.provide(ToolRegistry.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
       Layer.provide(RepositoryCache.defaultLayer), // kilocode_change
+      Layer.provide(ConversationMemory.defaultLayer), // kilocode_change
     )
     .pipe(
       Layer.provide(Provider.defaultLayer),
@@ -2363,6 +2428,7 @@ export const node = LayerNode.make(layer, [
   Database.node,
   Question.node, // kilocode_change
   repositoryCacheNode, // kilocode_change
+  ConversationMemory.node, // kilocode_change
 ])
 
 export * as SessionPrompt from "./prompt"

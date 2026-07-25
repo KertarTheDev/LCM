@@ -149,7 +149,7 @@ export interface ContextFrame {
 
 export interface NormalizedModelInput {
   system: string[]
-  messages: ModelMessage[]
+  messages: unknown[]
   tools: Record<string, unknown>
 }
 
@@ -176,13 +176,13 @@ export interface ProjectionInput {
   system: string[]
   messages: ModelMessage[]
   tools: Record<string, unknown>
-  contextTokens?: number
-  outputTokens: number
+  usableInputTokens: number
   thresholdRatio: number
-  protectedTailMessages: number
+  protectedTailTurns: number
   requestID?: string
   continuationID?: string
   reason: "soft" | "hard"
+  measure(messages: ModelMessage[]): number
   signal?: AbortSignal
 }
 
@@ -210,6 +210,7 @@ export interface ConversationMemoryStore {
   listSummaries(sessionID: string): Promise<SummaryNode[]>
   listChildren(sessionID: string, summaryID: string): Promise<SummaryChild[]>
   commitRevision(revision: FrontierRevision): Promise<void>
+  getRevision(sessionID: string, revisionID: string): Promise<FrontierRevision | undefined>
   activeRevision(sessionID: string, lineageDigest: string): Promise<FrontierRevision | undefined>
   appendActivity(record: ActivityRecord): Promise<ActivityRecord>
   listActivity(sessionID: string, input?: { before?: number; limit?: number }): Promise<ActivityRecord[]>

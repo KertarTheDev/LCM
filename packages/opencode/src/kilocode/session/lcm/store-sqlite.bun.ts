@@ -14,7 +14,17 @@ export const open: LcmSqliteModule["open"] = (path) => {
     },
     get: <T>(sql: string, input?: readonly SqlValue[]) => db.query(sql).get(...values(input)) as T | undefined,
     all: <T>(sql: string, input?: readonly SqlValue[]) => db.query(sql).all(...values(input)) as T[],
-    transaction: <T>(fn: () => T) => db.transaction(fn, "immediate")(),
+    transaction: <T>(fn: () => T) => {
+      db.exec("BEGIN IMMEDIATE")
+      try {
+        const result = fn()
+        db.exec("COMMIT")
+        return result
+      } catch (error) {
+        db.exec("ROLLBACK")
+        throw error
+      }
+    },
     close: () => db.close(),
   }
   return client

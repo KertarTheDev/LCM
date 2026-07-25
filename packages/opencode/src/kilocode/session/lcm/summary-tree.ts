@@ -169,23 +169,24 @@ export class SummaryTree {
       const values = input.items.map((item) => item.source ?? item.summary).filter(Boolean) as Array<
         FinalSource | SummaryNode
       >
-      candidate = await this.generator.generate({
-        sessionID: input.sessionID,
-        children: values,
-        targetTokens: target,
-        usableInputTokens: input.usableInputTokens,
-        mode: "normal",
-        signal: input.signal,
-      })
+      const generate = async (mode: "normal" | "aggressive") => {
+        try {
+          return await this.generator!.generate({
+            sessionID: input.sessionID,
+            children: values,
+            targetTokens: target,
+            usableInputTokens: input.usableInputTokens,
+            mode,
+            signal: input.signal,
+          })
+        } catch (error) {
+          if (input.signal?.aborted) throw error
+          return
+        }
+      }
+      candidate = await generate("normal")
       if (!candidate || !valid(candidate.text, sourceTokens, sourceBytes, target)) {
-        candidate = await this.generator.generate({
-          sessionID: input.sessionID,
-          children: values,
-          targetTokens: target,
-          usableInputTokens: input.usableInputTokens,
-          mode: "aggressive",
-          signal: input.signal,
-        })
+        candidate = await generate("aggressive")
       }
     }
     if (!candidate || !valid(candidate.text, sourceTokens, sourceBytes, target)) {
@@ -209,7 +210,15 @@ export class SummaryTree {
       generationMode: candidate.mode,
       createdAt: Date.now(),
     }
-    await this.store.commitSummary({ summary, children, ...(candidate.attempt ? { attempt: candidate.attempt } : {}) })
+    const attempt = candidate.attempt
+      ? {
+          ...candidate.attempt,
+          nodeKey: key,
+          sessionID: input.sessionID,
+          mode: candidate.mode,
+        }
+      : undefined
+    await this.store.commitSummary({ summary, children, ...(attempt ? { attempt } : {}) })
     return summary
   }
 

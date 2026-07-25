@@ -579,6 +579,25 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
     }
   }
 
+  async getRevision(sessionID: string, revisionID: string): Promise<FrontierRevision | undefined> {
+    const row = this.client.get<RevisionRow>(
+      "SELECT * FROM lcm_frontier_revision WHERE session_id = ? AND revision_id = ?",
+      [sessionID, revisionID],
+    )
+    if (!row) return
+    const items = this.client
+      .all<FrontierRow>("SELECT * FROM lcm_frontier_item WHERE revision_id = ? ORDER BY ordinal", [row.revision_id])
+      .map((item) => ({ kind: item.item_kind, id: item.item_id, ordinal: item.ordinal }))
+    return {
+      id: row.revision_id,
+      sessionID: row.session_id,
+      lineageDigest: row.lineage_digest,
+      reason: row.reason,
+      items,
+      createdAt: row.created_at,
+    }
+  }
+
   async appendActivity(record: ActivityRecord): Promise<ActivityRecord> {
     return this.client.transaction(() => {
       const row = this.client.get<{ sequence: number }>(
@@ -626,6 +645,11 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
 
   async recordFrame(frame: ContextFrame): Promise<void> {
     this.client.transaction(() => {
+      if (frame.reason === "latest") {
+        this.client.run("DELETE FROM lcm_context_frame WHERE session_id = ? AND reason = 'latest'", [
+          frame.sessionID,
+        ])
+      }
       if (frame.active) {
         this.client.run("UPDATE lcm_context_frame SET active = 0 WHERE session_id = ?", [frame.sessionID])
       }
