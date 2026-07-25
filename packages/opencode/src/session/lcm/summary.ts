@@ -84,6 +84,7 @@ export interface LcmLeafSummaryGeneratorInput {
 export interface LcmLeafSummaryGeneratorOutput {
   text: string
   usage?: LcmLeafSummaryUsage
+  summaryReasoningPolicy?: LcmSummaryReasoningPolicy
 }
 
 export type LcmLeafSummaryGenerator = (
@@ -107,6 +108,7 @@ export interface LcmSummaryCondenseGeneratorInput {
 export interface LcmSummaryCondenseGeneratorOutput {
   text: string
   usage?: LcmLeafSummaryUsage
+  summaryReasoningPolicy?: LcmSummaryReasoningPolicy
 }
 
 export type LcmSummaryCondenseGenerator = (
@@ -807,7 +809,7 @@ export async function runCondenseSummaryGeneration(input: {
           ...(objectiveStatus === "provider_accepted" ? { acceptedSummaryTokens: summaryTokenCount } : {}),
           summaryObjectiveStatus: objectiveStatus,
           summaryFallbackMode: "none",
-          summaryReasoningPolicy,
+          summaryReasoningPolicy: output.summaryReasoningPolicy ?? summaryReasoningPolicy,
           summaryRetryAttempt,
         })
         if (objectiveStatus === "provider_accepted") {
@@ -970,7 +972,7 @@ export async function runLeafSummaryGeneration(input: {
           ...(objectiveStatus === "provider_accepted" ? { acceptedSummaryTokens: summaryTokenCount } : {}),
           summaryObjectiveStatus: objectiveStatus,
           summaryFallbackMode: "none",
-          summaryReasoningPolicy,
+          summaryReasoningPolicy: output.summaryReasoningPolicy ?? summaryReasoningPolicy,
           summaryRetryAttempt,
         })
         if (objectiveStatus === "provider_accepted") {

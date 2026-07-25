@@ -1803,7 +1803,12 @@ export const layer = Layer.effect(
                   prompt,
                   request,
                   maxOutputTokens: maxAnswerTokens,
-                  reserveReasoningTokens: true,
+                  reasoningPolicy: "no_reasoning",
+                  structuredOutput: {
+                    schema: LcmRetrieval.LCM_EXPAND_QUERY_OUTPUT_SCHEMA,
+                    name: "lcm_expand_query_answer",
+                    description: "A cited answer over the supplied authorized memory excerpts.",
+                  },
                   abortSignal: input.abortSignal,
                 })
                 usage = providerUsageFromGeneration({
@@ -1811,7 +1816,12 @@ export const layer = Layer.effect(
                   providerID,
                   modelID,
                 })
-                return { text: generated.text, usage, providerDiagnostics: generated.providerDiagnostics }
+                return {
+                  text: generated.text,
+                  ...(generated.structuredOutput !== undefined ? { structuredOutput: generated.structuredOutput } : {}),
+                  usage,
+                  providerDiagnostics: generated.providerDiagnostics,
+                }
               }
             : undefined,
       }).pipe(provideCoreDatabase, Effect.provideService(LcmDb.Service, lcmDb))
@@ -1843,8 +1853,12 @@ export const layer = Layer.effect(
         ...(publicResult.noAnswerReason ? { noAnswerReason: publicResult.noAnswerReason } : {}),
         ...(publicResult.answerSource ? { answerSource: publicResult.answerSource } : {}),
         ...(publicResult.fallbackReason ? { fallbackReason: publicResult.fallbackReason } : {}),
+        ...(publicResult.providerFailureReason ? { providerFailureReason: publicResult.providerFailureReason } : {}),
         ...(publicResult.searchedExcerptCount !== undefined
           ? { searchedExcerptCount: publicResult.searchedExcerptCount }
+          : {}),
+        ...(publicResult.relevantExcerptCount !== undefined
+          ? { relevantExcerptCount: publicResult.relevantExcerptCount }
           : {}),
         ...(publicResult.rejectedCitationCount !== undefined
           ? { rejectedCitationCount: publicResult.rejectedCitationCount }
@@ -2138,6 +2152,7 @@ export const layer = Layer.effect(
                       prompt,
                       request,
                       maxOutputTokens: cfg.largePayloads.explorationMaxOutputTokens,
+                      reasoningPolicy: "no_reasoning",
                       abortSignal: abortSignal ?? input.abortSignal,
                     })
                     return {
@@ -2282,6 +2297,7 @@ export const layer = Layer.effect(
             resolveLcmModelLimits(model).output ?? ProviderTransform.maxOutputTokens(model),
             4096,
           ),
+          reasoningPolicy: "no_reasoning",
           abortSignal,
         })
         return {
@@ -2437,6 +2453,7 @@ export const layer = Layer.effect(
             prompt,
             request,
             maxOutputTokens: Math.min(modelLimits.output ?? ProviderTransform.maxOutputTokens(resolved.model), 4096),
+            reasoningPolicy: "no_reasoning",
             abortSignal,
           })
           return {

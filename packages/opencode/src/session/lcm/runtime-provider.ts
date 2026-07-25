@@ -3,7 +3,7 @@ import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "./provider-ids"
 import { ProviderTransform } from "@/provider/transform"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { generateText, type ModelMessage } from "ai"
+import { generateText, jsonSchema, Output, type ModelMessage } from "ai"
 import { Effect } from "effect"
 import * as LcmConfig from "./config"
 import type { LcmLeafCompactionRuntimeInput } from "./context"
@@ -11,6 +11,7 @@ import { resolveLcmMapWorkerCount, type LcmMapModelSelection } from "./map"
 import { resolveLcmModelLimits } from "./model-limits"
 import {
   defaultLcmProviderCapacityRegistry,
+  classifyLcmProviderCapacity,
   lcmProviderBaseURLFromOptions,
   lcmProviderCapacityInputFromModel,
   runWithLcmProviderCapacity,
@@ -26,22 +27,34 @@ import {
   mergeLcmProviderOptions,
   pending,
   providerUsageFromGeneration,
+  resolveLcmGenerationReasoning,
   type LcmGenerationMessage,
 } from "./runtime-support"
-import type { ConversationID, LcmPreflightInput, LlmMapInput, OperationID } from "./types"
+import type { ConversationID, LcmPreflightInput, LcmSummaryReasoningPolicy, LlmMapInput, OperationID } from "./types"
 
 export type RuntimeSummaryGenerator = (input: {
   prompt: string
   request?: { readonly messages: readonly LcmGenerationMessage[] }
   operationID?: OperationID
   maxOutputTokens?: number
+  summaryReasoningPolicy?: LcmSummaryReasoningPolicy
   abortSignal?: AbortSignal
-}) => Promise<{ text: string; usage: ReturnType<typeof providerUsageFromGeneration> }>
+}) => Promise<{
+  text: string
+  usage: ReturnType<typeof providerUsageFromGeneration>
+  summaryReasoningPolicy: LcmSummaryReasoningPolicy
+}>
 
 export interface LcmRuntimeMapExecutionPlan {
   readonly requestedWorkers?: number
   readonly effectiveWorkers: number
   readonly providerCapacityClass: LcmProviderCapacityClass
+}
+
+function supportsLcmStructuredOutput(model: Provider.Model, providerCapacityClass: LcmProviderCapacityClass) {
+  return (
+    providerCapacityClass === "local_ollama" || model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure"
+  )
 }
 
 export function resolveLcmRuntimeMapExecutionPlan(input: {
@@ -129,7 +142,12 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
     readonly prompt: string
     readonly request?: { readonly messages: readonly LcmGenerationMessage[] }
     readonly maxOutputTokens?: number
-    readonly reserveReasoningTokens?: boolean
+    readonly reasoningPolicy?: LcmSummaryReasoningPolicy
+    readonly structuredOutput?: {
+      readonly schema: Parameters<typeof jsonSchema>[0]
+      readonly name: string
+      readonly description: string
+    }
     readonly abortSignal?: AbortSignal
   }) => {
     const providerInfo = provider
@@ -137,10 +155,23 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
           provider.getProvider(input.model.providerID).pipe(Effect.catch(() => Effect.succeed(undefined))),
         )
       : undefined
+    const capacityClass = classifyLcmProviderCapacity(
+      lcmProviderCapacityInputFromModel({
+        model: input.model,
+        priority: input.priority,
+        ...(providerInfo ? { provider: providerInfo } : {}),
+      }),
+    )
+    const reasoning = resolveLcmGenerationReasoning({
+      model: input.model,
+      requested: input.reasoningPolicy ?? "provider_default",
+      providerCapacityClass: capacityClass,
+    })
     const options = mergeLcmProviderOptions({
       model: input.model,
       sessionID: input.sessionID,
       ...(providerInfo ? { providerOptions: providerInfo.options } : {}),
+      operationOptions: reasoning.operationOptions,
     })
     const messages = ProviderTransform.message(
       lcmGenerationMessages({
@@ -150,6 +181,14 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
       input.model,
       options,
     )
+    const structuredOutput =
+      input.structuredOutput && supportsLcmStructuredOutput(input.model, capacityClass)
+        ? Output.object<Record<string, unknown>>({
+            schema: jsonSchema<Record<string, unknown>>(input.structuredOutput.schema),
+            name: input.structuredOutput.name,
+            description: input.structuredOutput.description,
+          })
+        : undefined
     const generated = await runProviderGeneration(
       input.model,
       input.priority,
@@ -164,11 +203,12 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
           maxOutputTokens: lcmMaxOutputTokens({
             model: input.model,
             maxOutputTokens: input.maxOutputTokens,
-            reserveReasoningTokens: input.reserveReasoningTokens,
+            reserveReasoningTokens: reasoning.reserveReasoningTokens,
           }),
           maxRetries: 0,
           abortSignal: input.abortSignal,
           messages,
+          ...(structuredOutput ? { output: structuredOutput } : {}),
         }),
       {
         sessionID: input.sessionID,
@@ -180,6 +220,12 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
     return {
       text: generated.text,
       usage: generated.usage,
+      reasoningPolicy: reasoning.effective,
+      structuredOutput:
+        structuredOutput === undefined
+          ? undefined
+          : (generated as typeof generated & { readonly output?: unknown }).output,
+      structuredOutputMode: structuredOutput ? ("native_schema" as const) : ("prompt_json" as const),
       providerDiagnostics: lcmProviderDiagnostics({ generation: generated, text: generated.text }),
     }
   }
@@ -197,12 +243,14 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
       request,
       operationID,
       maxOutputTokens,
+      summaryReasoningPolicy,
       abortSignal,
     }: {
       prompt: string
       request?: { readonly messages: readonly LcmGenerationMessage[] }
       operationID?: OperationID
       maxOutputTokens?: number
+      summaryReasoningPolicy?: LcmSummaryReasoningPolicy
       abortSignal?: AbortSignal
     }) => {
       if (!provider) throw pending("lcm_preflight_provider_missing")
@@ -216,6 +264,7 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
         prompt,
         request,
         maxOutputTokens: maxOutputTokens ?? defaultMaxOutputTokens,
+        reasoningPolicy: summaryReasoningPolicy ?? "no_reasoning",
         abortSignal,
       })
       return {
@@ -225,6 +274,7 @@ export function createRuntimeProvider(input: { provider?: Provider.Interface }) 
           providerID: renderOptions.providerID,
           modelID: renderOptions.modelID,
         }),
+        summaryReasoningPolicy: result.reasoningPolicy,
       }
     }
   }

@@ -5,9 +5,8 @@ import { Agent } from "@/agent/agent"
 import { provide as provideInstance } from "@/kilocode/instance"
 import { SessionPrompt } from "@/session/prompt"
 import { Session } from "@/session/session"
-import { MessageID } from "@/session/schema"
+import { MessageID, SessionID } from "@/session/schema"
 import { ModelID, ProviderID } from "./provider-ids"
-import { canonicalJson } from "./validators"
 import type { AgenticMapChildRunner } from "./map"
 
 const READ_ONLY_DENIED_TOOLS = ["edit", "write", "apply_patch", "multiedit", "bash", "task", "todowrite"] as const
@@ -30,7 +29,7 @@ export const AGENTIC_MAP_OUTPUT_FORMAT = new SessionV1.OutputFormatJsonSchema({
 export const AGENTIC_MAP_FINALIZER_SYSTEM_INSTRUCTION = [
   "This is an agentic map item. Use authorized tools as needed before finalizing.",
   'When the item is complete, call StructuredOutput exactly once with the final schema-conforming JSON value in the "output" property.',
-  "Do not emit the final result as assistant prose unless the provider cannot submit the StructuredOutput call.",
+  "If the provider cannot submit StructuredOutput, emit only the unwrapped schema-conforming JSON value as assistant text; never print the StructuredOutput envelope.",
 ].join("\n")
 
 export function agenticMapChildPromptBoundary(request: { readonly system: string; readonly user: string }) {
@@ -50,9 +49,10 @@ export class AgenticMapChildOutputError extends Error {
 }
 
 function visibleChildText(result: SessionV1.WithParts) {
-  return result.parts.findLast(
+  const part = result.parts.findLast(
     (item) => item.type === "text" && !item.ignored && !item.synthetic && item.text.trim().length > 0,
-  )?.text
+  )
+  return part?.type === "text" ? part.text : undefined
 }
 
 function structuredOutputError(error: unknown) {
@@ -82,13 +82,13 @@ export function agenticMapChildOutput(result: SessionV1.WithParts) {
       Object.keys(structured).every((key) => key === "output") &&
       (structured as { output?: unknown }).output !== undefined
     if (!validEnvelope) {
-      if (fallback) return { text: fallback }
+      if (fallback) return { kind: "assistant_text" as const, text: fallback }
       throw new AgenticMapChildOutputError("lcm_map_item_output_wrapper_invalid")
     }
-    return { text: canonicalJson((structured as { output: unknown }).output) }
+    return { kind: "structured_value" as const, value: (structured as { output: unknown }).output }
   }
 
-  if (fallback) return { text: fallback }
+  if (fallback) return { kind: "assistant_text" as const, text: fallback }
   throw new AgenticMapChildOutputError("lcm_map_item_structured_output_missing")
 }
 
@@ -100,10 +100,11 @@ export const runAgenticMapChildEffect = Effect.fn("AgenticMapRunner.runChild")(f
   const prompts = yield* SessionPrompt.Service
   const { LcmRuntime } = yield* Effect.promise(() => import("./runtime"))
   const lcmRuntime = yield* LcmRuntime.Service
-  const parentSession = yield* sessions.get(input.parentSessionID)
+  const parentSessionID = SessionID.make(input.parentSessionID)
+  const parentSession = yield* sessions.get(parentSessionID)
   const caller = yield* agents.get(input.submittingAgent)
   const title = `LCM map ${input.mapID} item ${input.itemIndex}`
-  const existing = (yield* sessions.children(input.parentSessionID)).find((child) => child.title === title)
+  const existing = (yield* sessions.children(parentSessionID)).find((child) => child.title === title)
   const childPermission = [
     ...(parentSession.permission ?? []),
     ...(input.mode === "read_only"
@@ -117,7 +118,7 @@ export const runAgenticMapChildEffect = Effect.fn("AgenticMapRunner.runChild")(f
   const childSession =
     existing ??
     (yield* sessions.create({
-      parentID: input.parentSessionID,
+      parentID: parentSessionID,
       title,
       permission: childPermission,
     }))
@@ -127,7 +128,7 @@ export const runAgenticMapChildEffect = Effect.fn("AgenticMapRunner.runChild")(f
 
   const childScope = yield* lcmRuntime.getOrCreateChildConversation({
     sessionID: childSession.id,
-    parentSessionID: input.parentSessionID,
+    parentSessionID,
     capabilityClass: "map_child",
     source: "lcm_map",
     ...(input.sourceToolCallID ? { sourceToolCallID: input.sourceToolCallID } : {}),
@@ -174,8 +175,8 @@ export const runAgenticMapChildEffect = Effect.fn("AgenticMapRunner.runChild")(f
   }
 })
 
-export const runAgenticMapChild: AgenticMapChildRunner = (input) =>
-  provideInstance({
+export const runAgenticMapChild: AgenticMapChildRunner = async (input) =>
+  await provideInstance({
     directory: input.parentDirectory,
     fn: async () => {
       const { AppRuntime } = await import("@/effect/app-runtime")

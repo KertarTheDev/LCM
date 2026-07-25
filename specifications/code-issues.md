@@ -1,6 +1,6 @@
 # LCM Current-Code Issues
 
-Status date: 2026-07-24.
+Status date: 2026-07-25.
 
 This file records current engineering or evidence gaps for the v7.4.15 integration.
 
@@ -16,6 +16,9 @@ This file records current engineering or evidence gaps for the v7.4.15 integrati
 - The final provider request now enforces the output reserve admitted by LCM, closing the path where a long session could grow from roughly 75K input toward a 131K context ceiling through a recomputed output allowance.
 - CLI, TUI, and VSCode now expose hard/raw/backlog plus bounded paid-token LCM activity; VSCode restores prompt export and debug backend logging and merges paid LCM requests into the task timeline.
 - Map execution planning now separates requested and effective workers, and both map kinds use the same fair local-provider wait lane. Local contention and map-child slot pressure are observable queue states rather than worker-validation or provider-capacity failures; typed item failures no longer fall through to caller `invalid_request`.
+- Retrieval hits now expose stored source/part provenance and rank original evidence ahead of assistant discussion and direct tool echoes. `lcm_expand_query` globally ranks derived-query candidates, loads covered source for explicit summaries, and returns an honest no-answer when provider synthesis fails without sufficiently relevant fallback evidence instead of concatenating arbitrary lexical hits.
+- Runtime-owned non-agentic LCM generation now shares one reasoning/output policy. Reasoning-capable local Ollama calls receive a final operation-level no-reasoning override, supported retrieval synthesis uses a fixed native structured-output schema, and usage records report the effective policy rather than the caller's requested default.
+- Agentic-map protocol v5 preserves typed structured values through durable JSONB/output publication, confines wrapper/string compatibility to one schema-gated boundary, gives diagnostic-specific durable retries, and describes `provider_invalid_response` as finalization rejection rather than child-launch proof.
 
 ## Engineering Concern
 

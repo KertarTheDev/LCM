@@ -1297,6 +1297,27 @@ export interface LcmGrepInput extends LcmPageInput {
 }
 
 export type LcmGrepScopeWarning = "summary_not_found" | "summary_outside_scope" | "summary_invalid"
+export type LcmGrepSourceClass =
+  | "summary"
+  | "large_file"
+  | "user_content"
+  | "assistant_content"
+  | "tool_record"
+  | "system_content"
+  | "runtime_record"
+export type LcmGrepPartKind =
+  | "text"
+  | "reasoning"
+  | "file"
+  | "tool"
+  | "step-start"
+  | "step-finish"
+  | "snapshot"
+  | "patch"
+  | "agent"
+  | "retry"
+  | "compaction"
+  | "subtask"
 
 export interface LcmGrepResult {
   ok: true
@@ -1305,6 +1326,8 @@ export interface LcmGrepResult {
   results: Array<{
     resultID: LcmGrepResultID
     matchKind: "summary" | "message_part" | "large_file"
+    sourceClass: LcmGrepSourceClass
+    partKind?: LcmGrepPartKind
     sourceTimestampMs: number
     toolName?: string
     isLcmToolEcho: boolean
@@ -1376,6 +1399,12 @@ export interface LcmExpandQueryInput {
 
 export type LcmExpandQueryNoAnswerReason =
   | "no_excerpts"
+  | "insufficient_relevance"
+  | "provider_empty"
+  | "provider_malformed_json"
+  | "provider_citation_rejected"
+  | "provider_declined"
+export type LcmExpandQueryProviderFailureReason =
   | "provider_empty"
   | "provider_malformed_json"
   | "provider_citation_rejected"
@@ -1397,8 +1426,10 @@ export interface LcmExpandQueryResult {
   truncated?: boolean
   noAnswerReason?: LcmExpandQueryNoAnswerReason
   answerSource?: "extractive_fallback"
-  fallbackReason?: LcmExpandQueryNoAnswerReason
+  fallbackReason?: LcmExpandQueryProviderFailureReason
+  providerFailureReason?: LcmExpandQueryProviderFailureReason
   searchedExcerptCount?: number
+  relevantExcerptCount?: number
   rejectedCitationCount?: number
   providerDiagnostics?: LcmExpandQueryProviderDiagnostics
 }

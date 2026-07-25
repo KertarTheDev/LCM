@@ -85,6 +85,7 @@ import type {
   LcmSafeError,
   LcmSettingsState,
   LcmSoftMaintenanceAfterTurnInput,
+  LcmSummaryReasoningPolicy,
   LcmStrategy,
   LcmThresholdDecision,
   MessageRowID,
@@ -157,9 +158,9 @@ type RuntimeMaintenanceDependencies = {
     readonly prompt: string
     readonly request?: { readonly messages: readonly LcmGenerationMessage[] }
     readonly maxOutputTokens?: number
-    readonly reserveReasoningTokens?: boolean
+    readonly reasoningPolicy?: LcmSummaryReasoningPolicy
     readonly abortSignal?: AbortSignal
-  }) => Promise<{ text: string; usage: unknown }>
+  }) => Promise<{ text: string; usage: unknown; reasoningPolicy: LcmSummaryReasoningPolicy }>
   readonly makeSummaryGenerator: (
     model: Provider.Model,
     sessionID: string,
@@ -371,11 +372,13 @@ export function createRuntimeMaintenance(deps: RuntimeMaintenanceDependencies) {
         request,
         operationID,
         maxOutputTokens,
+        summaryReasoningPolicy,
       }: {
         prompt: string
         request?: { readonly messages: readonly LcmGenerationMessage[] }
         operationID?: OperationID
         maxOutputTokens?: number
+        summaryReasoningPolicy?: LcmSummaryReasoningPolicy
       }) => {
         const language = await (languagePromise ??= Effect.runPromise(provider.getLanguage(model)))
         const result = await runLcmTextGeneration({
@@ -387,6 +390,7 @@ export function createRuntimeMaintenance(deps: RuntimeMaintenanceDependencies) {
           prompt,
           request,
           maxOutputTokens: maxOutputTokens ?? summaryGenerationMaxOutputTokens,
+          reasoningPolicy: summaryReasoningPolicy ?? "no_reasoning",
         })
         return {
           text: result.text,
@@ -395,6 +399,7 @@ export function createRuntimeMaintenance(deps: RuntimeMaintenanceDependencies) {
             providerID: renderOptions.providerID,
             modelID: renderOptions.modelID,
           }),
+          summaryReasoningPolicy: result.reasoningPolicy,
         }
       }
     }
@@ -569,6 +574,8 @@ export function createRuntimeMaintenance(deps: RuntimeMaintenanceDependencies) {
           providerID: input.renderOptions.providerID,
           modelID: input.renderOptions.modelID,
           generator,
+          summaryReasoningPolicy: "no_reasoning",
+          retrySummaryReasoningPolicy: "no_reasoning",
         } satisfies LcmLeafCompactionRuntimeInput)
         .pipe(
           Effect.catch((error: unknown) => {

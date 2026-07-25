@@ -26,6 +26,7 @@ import {
   type LcmSafeAction,
   type LcmSafeError,
   type LcmSoftMaintenanceAfterTurnInput,
+  type LcmSummaryReasoningPolicy,
   type LcmTargetCurrentUserInput,
   type LcmThresholdDecision,
   type MessageRowID,
@@ -325,13 +326,95 @@ export function mergeLcmProviderOptions(input: {
   readonly model: Provider.Model
   readonly sessionID: string
   readonly providerOptions?: Record<string, unknown>
+  readonly operationOptions?: Record<string, unknown>
 }) {
   const base = ProviderTransform.options({
     model: input.model,
     sessionID: input.sessionID,
     ...(input.providerOptions ? { providerOptions: input.providerOptions } : {}),
   })
-  return mergeDeep(base, input.model.options ?? {}) as Record<string, unknown>
+  const configured = mergeDeep(base, input.model.options ?? {})
+  return mergeDeep(configured, input.operationOptions ?? {}) as Record<string, unknown>
+}
+
+export function resolveLcmGenerationReasoning(input: {
+  readonly model: Provider.Model
+  readonly requested: LcmSummaryReasoningPolicy
+  readonly providerCapacityClass: "remote_or_unknown" | "local_ollama" | "local_openai_compatible"
+}) {
+  const variants = input.model.variants ?? {}
+  if (input.providerCapacityClass === "local_ollama") {
+    if (!input.model.capabilities.reasoning) {
+      return {
+        effective: "no_reasoning" as const,
+        operationOptions: {},
+        reserveReasoningTokens: false,
+      }
+    }
+    const disabled = variants.none ?? variants.instant
+    if (disabled) {
+      return {
+        effective: "no_reasoning" as const,
+        operationOptions: disabled,
+        reserveReasoningTokens: false,
+      }
+    }
+    if (input.model.api.npm === "@ai-sdk/openai-compatible") {
+      return {
+        effective: "no_reasoning" as const,
+        operationOptions: { reasoningEffort: "none" },
+        reserveReasoningTokens: false,
+      }
+    }
+    return {
+      effective: "not_supported" as const,
+      operationOptions: {},
+      reserveReasoningTokens: true,
+    }
+  }
+  if (input.requested === "not_supported") {
+    return {
+      effective: "not_supported" as const,
+      operationOptions: {},
+      reserveReasoningTokens: input.model.capabilities.reasoning,
+    }
+  }
+  if (!input.model.capabilities.reasoning) {
+    return {
+      effective:
+        input.requested === "provider_default" || input.requested === "no_reasoning"
+          ? input.requested
+          : ("not_supported" as const),
+      operationOptions: {},
+      reserveReasoningTokens: false,
+    }
+  }
+
+  if (input.requested === "provider_default") {
+    return {
+      effective: "provider_default" as const,
+      operationOptions: {},
+      reserveReasoningTokens: true,
+    }
+  }
+  const variant =
+    input.requested === "no_reasoning"
+      ? (variants.none ?? variants.instant)
+      : input.requested === "minimal_reasoning"
+        ? (variants.minimal ?? variants.low)
+        : variants.low
+  if (variant) {
+    return {
+      effective: input.requested,
+      operationOptions: variant,
+      reserveReasoningTokens: input.requested !== "no_reasoning",
+    }
+  }
+  return {
+    effective: "not_supported" as const,
+    operationOptions: {},
+    reserveReasoningTokens: true,
+  }
 }
 
 export function shouldOmitLcmMaxOutputTokens(model: Provider.Model) {
