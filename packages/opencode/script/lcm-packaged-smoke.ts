@@ -38,7 +38,7 @@ async function run(binary: string, args: string[], root: string) {
     proc.exited,
   ])
   if (code !== 0) throw new Error(`Packaged CLI failed (${args.join(" ")}): ${stderr || stdout}`)
-  return stdout
+  return stdout + stderr
 }
 
 const cliOption = option("cli") ?? process.env.LCM_PACKAGED_CLI
