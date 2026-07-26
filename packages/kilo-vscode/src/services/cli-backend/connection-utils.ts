@@ -21,6 +21,8 @@ export function resolveEventSessionId(
 
   void lookupMessageSessionId
   if (event.type === "sandbox.status.changed") return event.properties.sessionID
+  if (event.type === "session.lcm.status") return event.properties.sessionID
+  if (event.type === "session.lcm.activity") return event.properties.sessionID
   return resolveTransientSessionId(event)
 }
 
@@ -41,8 +43,6 @@ function resolveTransientSessionId(event: TransientPayload): string | undefined 
     case "session.turn.close":
     case "session.idle":
     case "session.error":
-    case "session.lcm.status":
-    case "session.lcm.activity":
     case "todo.updated":
     case "message.part.delta":
     case "permission.asked":
