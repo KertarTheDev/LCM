@@ -40,6 +40,7 @@ import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
+import { ConversationMemory } from "../../src/kilocode/session/lcm/service" // kilocode_change
 import { SessionRunState } from "../../src/session/run-state"
 import { KiloSession } from "../../src/kilocode/session"
 import { KiloSessions } from "../../src/kilo-sessions/kilo-sessions"
@@ -215,6 +216,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Bus.layer,
     MemoryService.layer,
   ).pipe(Layer.provideMerge(infra))
+  const conversationMemory = ConversationMemory.layer.pipe(Layer.provideMerge(deps)) // kilocode_change
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
   const registry = ToolRegistry.layer.pipe(
@@ -260,6 +262,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(SystemPrompt.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provideMerge(conversationMemory), // kilocode_change
     Layer.provideMerge(deps),
     Layer.provide(summary),
   )

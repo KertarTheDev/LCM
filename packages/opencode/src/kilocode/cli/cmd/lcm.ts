@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import path from "node:path"
-import { effectCmd, fail } from "@/cli/effect-cmd"
+import { CliError, effectCmd, fail } from "@/cli/effect-cmd"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { ConversationMemory } from "@/kilocode/session/lcm/service"
@@ -51,8 +51,10 @@ export const LcmCommand = effectCmd({
       try: () => writePrivateFileExclusive(target, output.bytes),
       catch: (error) =>
         error instanceof Error && "code" in error && error.code === "EEXIST"
-          ? new Error(`Refusing to overwrite existing file: ${target}`)
-          : error,
+          ? new CliError({ message: `Refusing to overwrite existing file: ${target}` })
+          : new CliError({
+              message: error instanceof Error ? error.message : "Failed to write Conversation Memory export.",
+            }),
     })
     process.stdout.write(`${target}\n`)
   }),

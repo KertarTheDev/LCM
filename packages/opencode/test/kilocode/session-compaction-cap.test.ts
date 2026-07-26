@@ -43,6 +43,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
+import { ConversationMemory } from "../../src/kilocode/session/lcm/service"
 import { SessionRunState } from "../../src/session/run-state"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
@@ -157,6 +158,7 @@ function makeHttp() {
     status,
     MemoryService.layer,
   ).pipe(Layer.provideMerge(infra))
+  const conversationMemory = ConversationMemory.layer.pipe(Layer.provideMerge(deps))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
   const registry = ToolRegistry.layer.pipe(
@@ -195,6 +197,7 @@ function makeHttp() {
       Layer.provideMerge(question),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(SystemPrompt.defaultLayer),
+      Layer.provideMerge(conversationMemory),
       Layer.provideMerge(deps),
     ),
   ).pipe(

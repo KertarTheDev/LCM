@@ -469,7 +469,7 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
       const state = this.client.get<SessionRow>("SELECT * FROM lcm_session WHERE session_id = ?", [
         input.summary.sessionID,
       ])
-      if (!state) throw new Error("lcm_not_ready")
+      if (!state) throw new Error("lcm_session_missing")
       for (const child of input.children) {
         const table = child.kind === "source" ? "lcm_source" : "lcm_summary"
         const id = child.kind === "source" ? "source_id" : "summary_id"

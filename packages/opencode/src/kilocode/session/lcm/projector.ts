@@ -111,7 +111,7 @@ export class Projector {
     for (const item of revision.items) {
       if (item.kind !== "summary") continue
       const summary = await this.store.getSummary(input.sessionID, item.id)
-      if (!summary) return { type: "unavailable", messages: input.messages, pressure, code: "lcm_not_ready" }
+      if (!summary) return { type: "unavailable", messages: input.messages, pressure, code: "lcm_unavailable" }
       roots.push({ kind: "summary", summary })
     }
     if (roots.length === 0) return { type: "unchanged", messages: input.messages, pressure }
