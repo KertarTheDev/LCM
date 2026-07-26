@@ -76,7 +76,7 @@ function markdown(input: {
           .map((item) => `- ${new Date(item.createdAt).toISOString()} — ${item.kind}: ${item.message}`)
           .join("\n"),
     "",
-    "## Active summary nodes",
+    "## Retained summary nodes",
     "",
     input.summaries.length === 0
       ? "No summary nodes were active at export time."

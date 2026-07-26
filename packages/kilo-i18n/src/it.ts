@@ -1,9 +1,6 @@
 // Kilo-specific translations and overrides
 // Keys here will override any matching keys from upstream translations
-import { conversationMemory } from "./conversation-memory"
-
 export const dict = {
-  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.line1":
     "Kilo Gateway ti offre una selezione curata di modelli affidabili e ottimizzati per agenti di coding.",

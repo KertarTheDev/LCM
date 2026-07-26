@@ -139,11 +139,23 @@ export const layer: Layer.Layer<
     const bridge = yield* EffectBridge.make()
     let store: SqliteConversationMemoryStore | undefined
     let projector: Projector | undefined
-    const background = new Map<string, Promise<void>>()
+    const background = new Map<string, { promise: Promise<void>; controller: AbortController }>()
     const rebuildRecorded = new Set<string>()
     const shutdown = new AbortController()
     let modelQueue: Promise<void> = Promise.resolve()
     let readStatus: Interface["status"] | undefined
+    const publishCurrentStatus = async (sessionID: string) => {
+      if (!readStatus) return
+      await bridge
+        .promise(
+          readStatus(sessionID).pipe(
+            Effect.flatMap((current) =>
+              events.publish(LcmEvent.Status, { sessionID: sessionID as SessionID, status: current }),
+            ),
+          ),
+        )
+        .catch(() => undefined)
+    }
 
     const abortable = <T>(promise: Promise<T>, signal: AbortSignal) => {
       if (signal.aborted)
@@ -185,7 +197,10 @@ export const layer: Layer.Layer<
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
         shutdown.abort(new DOMException("Conversation Memory is shutting down", "AbortError"))
-        await Promise.allSettled(background.values())
+        for (const item of background.values()) {
+          item.controller.abort(new DOMException("Conversation Memory is shutting down", "AbortError"))
+        }
+        await Promise.allSettled([...background.values()].map((item) => item.promise))
         close()
       }),
     )
@@ -199,7 +214,13 @@ export const layer: Layer.Layer<
 
     yield* events.subscribe(SessionV1.Event.Deleted).pipe(
       Stream.runForEach((event) =>
-        Effect.tryPromise(() => open().deleteSession(event.data.sessionID)).pipe(Effect.catch(() => Effect.void)),
+        Effect.tryPromise(async () => {
+          const active = background.get(event.data.sessionID)
+          active?.controller.abort(new DOMException("Conversation Memory session was deleted", "AbortError"))
+          await active?.promise.catch(() => undefined)
+          projector?.clearSession(event.data.sessionID)
+          await open().deleteSession(event.data.sessionID)
+        }).pipe(Effect.catch(() => Effect.void)),
       ),
       Effect.forkScoped,
     )
@@ -511,15 +532,22 @@ export const layer: Layer.Layer<
           .promise(events.publish(LcmEvent.Activity, { sessionID: sessionID as SessionID, activity }))
           .catch(() => undefined)
       }
+      await publishCurrentStatus(sessionID)
     }
     const schedule = (synced: Synced, usableInputTokens: number, model: ProviderType.Model) => {
       if (background.has(synced.lineage.sessionID)) return
-      const job = build(synced, { usableInputTokens, reason: "background", model, signal: shutdown.signal })
+      const sessionID = synced.lineage.sessionID
+      const controller = new AbortController()
+      const job = (async () => {
+        await synced.store.bumpStatus(sessionID)
+        await publishCurrentStatus(sessionID)
+        return build(synced, { usableInputTokens, reason: "background", model, signal: controller.signal })
+      })()
         .then(async (revision) => {
           if (!revision) return
           const activity = await synced.store.appendActivity({
             id: sortableID("activity"),
-            sessionID: synced.lineage.sessionID,
+            sessionID,
             kind: "frontier_advanced",
             summaryIDs: revision.items.filter((item) => item.kind === "summary").map((item) => item.id),
             message: "Conversation Memory prepared an earlier-history summary.",
@@ -528,7 +556,7 @@ export const layer: Layer.Layer<
           await bridge
             .promise(
               events.publish(LcmEvent.Activity, {
-                sessionID: synced.lineage.sessionID as SessionID,
+                sessionID: sessionID as SessionID,
                 activity,
               }),
             )
@@ -544,10 +572,14 @@ export const layer: Layer.Layer<
           log.warn("background summary unavailable", {
             code: error instanceof Error ? error.name : "unknown",
           })
-          await publishFallback(synced.lineage.sessionID, "lcm_summary_unavailable")
+          await publishFallback(sessionID, "lcm_summary_unavailable")
         })
-        .finally(() => background.delete(synced.lineage.sessionID))
-      background.set(synced.lineage.sessionID, job)
+        .finally(async () => {
+          background.delete(sessionID)
+          await synced.store.bumpStatus(sessionID).catch(() => undefined)
+          await publishCurrentStatus(sessionID)
+        })
+      background.set(sessionID, { promise: job, controller })
     }
 
     const projectUnsafe: (input: HostProjectionInput) => Effect.Effect<ProjectionResult> = Effect.fn(
@@ -678,13 +710,6 @@ export const layer: Layer.Layer<
               yield* Effect.promise(() => publishFallback(input.sessionID, "lcm_unavailable")).pipe(
                 Effect.catch(() => Effect.void),
               )
-              if (readStatus)
-                yield* readStatus(input.sessionID).pipe(
-                  Effect.flatMap((current) =>
-                    events.publish(LcmEvent.Status, { sessionID: input.sessionID as SessionID, status: current }),
-                  ),
-                  Effect.catch(() => Effect.void),
-                )
             }
             return {
               type: "unavailable",
@@ -746,8 +771,8 @@ export const layer: Layer.Layer<
             ? Effect.promise(() => target.inspect(sessionID))
             : Effect.succeed({
                 sessionID,
+                sequence: 0,
                 sourceCount: 0,
-                pendingSources: 0,
                 state: "raw" as const,
                 health: "degraded" as const,
                 issue: {
@@ -761,8 +786,8 @@ export const layer: Layer.Layer<
         Effect.catch(() =>
           Effect.succeed({
             sessionID,
+            sequence: 0,
             sourceCount: 0,
-            pendingSources: 0,
             state: "raw" as const,
             health: "degraded" as const,
           }),
@@ -817,7 +842,7 @@ export const layer: Layer.Layer<
         const lastInterventionAt = activities.find((item) => item.kind === "intervention")?.createdAt
         return {
           sessionID,
-          sequence: metrics.sequence,
+          sequence: state.sequence,
           mode: state.state,
           health: state.health,
           capacity: {
@@ -843,10 +868,7 @@ export const layer: Layer.Layer<
             rawItems,
             summaryItems,
           },
-          background: {
-            pendingSources: state.pendingSources,
-            summarizing: background.has(sessionID),
-          },
+          background: { summarizing: background.has(sessionID) },
           memoryWork: metrics.work,
           ...(lastInterventionAt ? { lastInterventionAt } : {}),
           ...(state.issue ? { issue: state.issue } : {}),
@@ -860,7 +882,7 @@ export const layer: Layer.Layer<
             health: "degraded" as const,
             capacity: { known: false },
             composition: { rawTokens: 0, summaryTokens: 0, rawItems: 0, summaryItems: 0 },
-            background: { pendingSources: 0, summarizing: false },
+            background: { summarizing: false },
             memoryWork: emptyWork,
             issue: {
               code: "lcm_unavailable",

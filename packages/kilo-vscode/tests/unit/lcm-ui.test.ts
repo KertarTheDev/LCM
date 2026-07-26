@@ -10,7 +10,7 @@ function status(sessionID: string, sequence: number): LcmStatus {
     health: "ok",
     capacity: { known: false },
     composition: { rawTokens: 0, summaryTokens: 0, rawItems: 0, summaryItems: 0 },
-    background: { pendingSources: 0, summarizing: false },
+    background: { summarizing: false },
     memoryWork: {
       attempts: 0,
       inputTokens: 0,
@@ -43,6 +43,14 @@ describe("Conversation Memory webview state", () => {
         messageSessionID: "ses_active",
         current,
         next: status("ses_active", 3),
+      }),
+    ).toBe(current)
+    expect(
+      updateLcmStatus({
+        activeSessionID: "ses_active",
+        messageSessionID: "ses_active",
+        current,
+        next: status("ses_active", 4),
       }),
     ).toBe(current)
     expect(

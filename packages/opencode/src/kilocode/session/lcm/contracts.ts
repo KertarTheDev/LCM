@@ -41,7 +41,6 @@ export const Status = Schema.Struct({
     summaryItems: NonNegativeInt,
   }),
   background: Schema.Struct({
-    pendingSources: NonNegativeInt,
     summarizing: Schema.Boolean,
   }),
   memoryWork: MemoryWork,
@@ -53,7 +52,7 @@ export const Activity = Schema.Struct({
   id: Schema.String,
   sessionID: Schema.String,
   sequence: NonNegativeInt,
-  kind: Schema.Literals(["summary_created", "frontier_advanced", "intervention", "fallback", "rebuild"]),
+  kind: Schema.Literals(["frontier_advanced", "intervention", "fallback", "rebuild"]),
   pressureBefore: Schema.optional(Schema.Finite),
   pressureAfter: Schema.optional(Schema.Finite),
   rawTokens: Schema.optional(NonNegativeInt),

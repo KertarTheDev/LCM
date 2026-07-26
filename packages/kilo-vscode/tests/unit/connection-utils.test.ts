@@ -114,6 +114,36 @@ describe("resolveEventSessionId", () => {
     expect(resolveEventSessionId(event, noLookup)).toBe("s3")
   })
 
+  it("routes Conversation Memory session events", () => {
+    const event = {
+      id: "e-lcm",
+      type: "session.lcm.status",
+      properties: {
+        sessionID: "s-lcm",
+        status: {
+          sessionID: "s-lcm",
+          sequence: 1,
+          mode: "raw",
+          health: "ok",
+          capacity: { known: false },
+          composition: { rawTokens: 0, summaryTokens: 0, rawItems: 0, summaryItems: 0 },
+          background: { summarizing: false },
+          memoryWork: {
+            attempts: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            reasoningTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            cost: 0,
+          },
+        },
+      },
+    } as Payload
+
+    expect(resolveEventSessionId(event, noLookup)).toBe("s-lcm")
+  })
+
   it("routes transient message deltas", () => {
     const event = {
       id: "e7",

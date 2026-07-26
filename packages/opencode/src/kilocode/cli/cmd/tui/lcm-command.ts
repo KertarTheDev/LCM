@@ -42,7 +42,7 @@ export function formatLcmStatus(value: {
     usableInputTokens?: number
   }
   composition: { rawItems: number; summaryItems: number; rawTokens: number; summaryTokens: number }
-  background: { summarizing: boolean; pendingSources: number }
+  background: { summarizing: boolean }
   memoryWork: { attempts: number; inputTokens: number; outputTokens: number; cost: number }
   issue?: { message: string }
 }) {
@@ -57,7 +57,7 @@ export function formatLcmStatus(value: {
     `Composition: ${value.composition.rawItems} raw (${value.composition.rawTokens.toLocaleString()} tokens) · ${
       value.composition.summaryItems
     } summaries (${value.composition.summaryTokens.toLocaleString()} tokens)`,
-    `Background: ${value.background.summarizing ? "summarizing" : "idle"} · ${value.background.pendingSources} pending`,
+    `Background: ${value.background.summarizing ? "summarizing" : "idle"}`,
     `Memory work: ${value.memoryWork.attempts} attempts · ${value.memoryWork.inputTokens.toLocaleString()} in · ${value.memoryWork.outputTokens.toLocaleString()} out · $${value.memoryWork.cost.toFixed(4)}`,
     ...(value.issue ? [`Issue: ${value.issue.message}`] : []),
   ].join("\n")

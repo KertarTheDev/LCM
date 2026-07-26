@@ -2,7 +2,8 @@ interface Request {
   pattern: string
   flags: string
   values: Array<{ id: string; text: string }>
-  limit: number
+  recordLimit: number
+  rangeLimit: number
 }
 
 interface Match {
@@ -18,19 +19,17 @@ self.onmessage = (event: MessageEvent<Request>) => {
       event.data.flags.includes("g") ? event.data.flags : `${event.data.flags}g`,
     )
     const matches: Match[] = []
-    let count = 0
     for (const value of event.data.values) {
       expression.lastIndex = 0
       const ranges: Match["ranges"] = []
-      while (count < event.data.limit) {
+      while (ranges.length < event.data.rangeLimit) {
         const match = expression.exec(value.text)
         if (!match) break
         ranges.push({ start: match.index, end: match.index + match[0].length })
-        count++
         if (match[0].length === 0) expression.lastIndex++
       }
       if (ranges.length > 0) matches.push({ id: value.id, ranges })
-      if (count >= event.data.limit) break
+      if (matches.length >= event.data.recordLimit) break
     }
     self.postMessage({ matches })
   } catch {

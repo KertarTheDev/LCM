@@ -1,7 +1,4 @@
-import { conversationMemory } from "./conversation-memory"
-
 export const dict = {
-  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.line1":
     "Kilo Gateway, kodlama ajanları için optimize edilmiş güvenilir modellere erişim sağlar.",
@@ -47,12 +44,12 @@ export const dict = {
   "marketplace.install.scope.global": "Genel",
   "marketplace.install.scope.project.description":
     "Yalnızca bu proje. Yüklenen dosyalar sürüm kontrolüne eklenebilir ve ekibinizle paylaşılabilir.",
-  "marketplace.install.scope.global.description": "Bu makinedeki tüm projeler. Kullanıcı yapılandırmanızda saklanır.",
+  "marketplace.install.scope.global.description":
+    "Bu makinedeki tüm projeler. Kullanıcı yapılandırmanızda saklanır.",
   "marketplace.install.destination": "Yükleme hedefi",
   "marketplace.install.about.mcp":
     "Bir MCP sunucusu, harici hizmetler veya yerel programlarla çalışmak için Kilo'ya ek araçlar sağlar.",
-  "marketplace.install.about.agent":
-    "Bir ajan, kendi talimatları ve izinleri olan yeniden kullanılabilir bir rol ekler.",
+  "marketplace.install.about.agent": "Bir ajan, kendi talimatları ve izinleri olan yeniden kullanılabilir bir rol ekler.",
   "marketplace.install.about.skill":
     "Bir yetenek, Kilo'nun gerektiğinde yükleyebileceği göreve özel talimatlar ve kaynaklar ekler.",
   "marketplace.install.mcp.warning":

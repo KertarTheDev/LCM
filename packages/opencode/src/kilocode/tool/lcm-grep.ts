@@ -35,6 +35,7 @@ function descendants(summaryID: string, children: Map<string, SummaryChild[]>) {
   const ids = new Set<string>()
   const visit = (id: string) => {
     for (const child of children.get(id) ?? []) {
+      if (ids.has(child.id)) continue
       ids.add(child.id)
       if (child.kind === "summary") visit(child.id)
     }
@@ -103,7 +104,8 @@ export const LcmGrepTool = Tool.define(
                     pattern: params.pattern,
                     caseSensitive: params.caseSensitive ?? false,
                     values,
-                    limit: offset + limit + 1,
+                    recordLimit: offset + limit + 1,
+                    rangeLimit: offset + limit + 1,
                     signal: ctx.abort,
                   }),
                 ).pipe(

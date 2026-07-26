@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
-import { KiloTranscriptSource, extractFinalSources } from "@/kilocode/session/lcm/transcript-source"
+import { extractFinalSources } from "@/kilocode/session/lcm/transcript-source"
 import { sha256 } from "@/kilocode/session/lcm/ids"
 
 const sessionID = "ses_source"
@@ -126,14 +126,10 @@ describe("LCM transcript source", () => {
     expect(items[3]?.content).toBe("The binding answer is beta.")
   })
 
-  test("returns digest-verified immutable persisted media", async () => {
-    const source = new KiloTranscriptSource(async () => messages())
-    const page = await source.listFinalSources({ sessionID, limit: 10 })
-    const media = page.items.find((item) => item.kind === "media")
+  test("extracts digest-verified immutable persisted media", () => {
+    const media = extractFinalSources(sessionID, messages()).find((item) => item.metadata.kind === "media")
     expect(media).toBeDefined()
-    const read = await source.readSource({ sessionID, sourceID: media!.id })
-    expect(read?.immutableMedia?.bytes).toEqual(new Uint8Array([1, 2, 3, 4]))
-    expect(read?.digest).toBe(sha256(new Uint8Array([1, 2, 3, 4])))
-    expect((await source.computeLineage({ sessionID })).digest).toBe(page.lineage.digest)
+    expect(media?.immutableMedia?.bytes).toEqual(new Uint8Array([1, 2, 3, 4]))
+    expect(media?.metadata.digest).toBe(sha256(new Uint8Array([1, 2, 3, 4])))
   })
 })

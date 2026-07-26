@@ -1,7 +1,4 @@
-import { conversationMemory } from "./conversation-memory"
-
 export const dict = {
-  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.line1":
     "يمنحك Kilo Gateway الوصول إلى مجموعة مختارة من النماذج الموثوقة والمحسّنة لوكلاء البرمجة.",
@@ -47,9 +44,11 @@ export const dict = {
   "marketplace.install.scope.global": "عالمي",
   "marketplace.install.scope.project.description":
     "هذا المشروع فقط. يمكن إضافة الملفات المثبتة إلى نظام التحكم في الإصدارات ومشاركتها مع فريقك.",
-  "marketplace.install.scope.global.description": "جميع المشاريع على هذا الجهاز. تُحفظ في إعدادات المستخدم الخاصة بك.",
+  "marketplace.install.scope.global.description":
+    "جميع المشاريع على هذا الجهاز. تُحفظ في إعدادات المستخدم الخاصة بك.",
   "marketplace.install.destination": "وجهة التثبيت",
-  "marketplace.install.about.mcp": "يمنح خادم MCP منصة Kilo أدوات إضافية للعمل مع الخدمات الخارجية أو البرامج المحلية.",
+  "marketplace.install.about.mcp":
+    "يمنح خادم MCP منصة Kilo أدوات إضافية للعمل مع الخدمات الخارجية أو البرامج المحلية.",
   "marketplace.install.about.agent": "يضيف الوكيل دورًا قابلاً لإعادة الاستخدام بتعليماته وأذوناته الخاصة.",
   "marketplace.install.about.skill": "تضيف المهارة تعليمات وموارد خاصة بمهام معينة يمكن لـ Kilo تحميلها عند الحاجة.",
   "marketplace.install.mcp.warning":

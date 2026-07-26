@@ -50,9 +50,7 @@ for (const symbol of ["LcmGrepTool", "LcmDescribeTool", "LcmExpandTool", "LcmRea
 
 const common = await read("packages/opencode/src/kilocode/tool/lcm-common.ts")
 for (const code of [
-  "lcm_not_ready",
   "lcm_not_found",
-  "lcm_wrong_session",
   "lcm_stale_lineage",
   "lcm_invalid_cursor",
   "lcm_invalid_regex",

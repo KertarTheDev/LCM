@@ -7,7 +7,7 @@ export function updateLcmStatus(input: {
   next?: LcmStatus
 }) {
   if (input.messageSessionID !== input.activeSessionID || !input.next) return input.current
-  if (input.current && input.next.sequence < input.current.sequence) return input.current
+  if (input.current && input.next.sequence <= input.current.sequence) return input.current
   return input.next
 }
 

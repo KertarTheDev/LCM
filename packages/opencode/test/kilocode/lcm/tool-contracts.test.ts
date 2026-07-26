@@ -20,7 +20,8 @@ describe("LCM tool contracts", () => {
         { id: "src_a", text: "Alpha and BETA" },
         { id: "src_b", text: "gamma" },
       ],
-      limit: 10,
+      recordLimit: 10,
+      rangeLimit: 10,
     })
     expect(matches).toEqual([
       {
@@ -36,9 +37,49 @@ describe("LCM tool contracts", () => {
         pattern: "(",
         caseSensitive: true,
         values: [{ id: "src_a", text: "text" }],
-        limit: 10,
+        recordLimit: 10,
+        rangeLimit: 10,
       }),
     ).rejects.toThrow("lcm_invalid_regex")
+  })
+
+  test("limits matching records independently from ranges within each record", async () => {
+    const matches = await regexSearch({
+      pattern: "hit",
+      caseSensitive: true,
+      values: [
+        { id: "src_many", text: "hit hit hit hit" },
+        { id: "src_next", text: "hit" },
+        { id: "src_later", text: "hit" },
+      ],
+      recordLimit: 2,
+      rangeLimit: 2,
+    })
+    expect(matches).toEqual([
+      {
+        id: "src_many",
+        ranges: [
+          { start: 0, end: 3 },
+          { start: 4, end: 7 },
+        ],
+      },
+      { id: "src_next", ranges: [{ start: 0, end: 3 }] },
+    ])
+  })
+
+  test("advances zero-width regular expressions without hanging", async () => {
+    const matches = await regexSearch({
+      pattern: "(?=a)",
+      caseSensitive: true,
+      values: [{ id: "src_a", text: "aaa" }],
+      recordLimit: 1,
+      rangeLimit: 3,
+    })
+    expect(matches[0]?.ranges).toEqual([
+      { start: 0, end: 0 },
+      { start: 1, end: 1 },
+      { start: 2, end: 2 },
+    ])
   })
 
   test("cancels regex work with the public cancellation code", async () => {
@@ -49,7 +90,8 @@ describe("LCM tool contracts", () => {
         pattern: "detail",
         caseSensitive: false,
         values: [{ id: "src_a", text: "detail" }],
-        limit: 10,
+        recordLimit: 10,
+        rangeLimit: 10,
         signal: controller.signal,
       }),
     ).rejects.toThrow("lcm_cancelled")
@@ -61,7 +103,8 @@ describe("LCM tool contracts", () => {
         pattern: "binding",
         caseSensitive: false,
         values: [{ id: "src_large", text: "x".repeat(1_000_001) }],
-        limit: 20,
+        recordLimit: 20,
+        rangeLimit: 20,
       }),
     ).rejects.toThrow("lcm_invalid_regex")
   })

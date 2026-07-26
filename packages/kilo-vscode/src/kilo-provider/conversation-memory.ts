@@ -86,16 +86,18 @@ export async function exportConversationMemoryContext(client: KiloClient, sessio
   // The SDK's generated `File` model collides with the web `File` name in the
   // binary response union. The HTTP client returns this response as a Blob.
   const payload = response.data as Blob
-  await vscode.workspace.fs.writeFile(temporary, new Uint8Array(await payload.arrayBuffer()))
-  if (temporary.scheme === "file") await chmod(temporary.fsPath, 0o600)
+  let published = false
   try {
+    await vscode.workspace.fs.writeFile(temporary, new Uint8Array(await payload.arrayBuffer()))
+    if (temporary.scheme === "file") await chmod(temporary.fsPath, 0o600)
     await vscode.workspace.fs.rename(temporary, uri, { overwrite: false })
-  } catch (error) {
-    await vscode.workspace.fs.delete(temporary).then(
-      () => undefined,
-      () => undefined,
-    )
-    throw error
+    published = true
+  } finally {
+    if (!published)
+      await vscode.workspace.fs.delete(temporary).then(
+        () => undefined,
+        () => undefined,
+      )
   }
   return uri
 }

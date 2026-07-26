@@ -3,7 +3,7 @@ import { lineageDigest, nodeKey, sha256, sourceID, summaryID } from "@/kilocode/
 import { sidecarPath, SqliteConversationMemoryStore } from "@/kilocode/session/lcm/store"
 import type { FinalSource, SummaryChild, SummaryNode } from "@/kilocode/session/lcm/types"
 import { Database } from "bun:sqlite"
-import { mkdtempSync, readdirSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
 function makeSource(ordinal: number): FinalSource {
@@ -88,6 +88,85 @@ describe("LCM SQLite store", () => {
     expect((await store.activeRevision("ses_test", digest))?.items).toEqual([{ kind: "summary", id, ordinal: 0 }])
     expect((await store.inspect("ses_test")).state).toBe("summarized")
     store.close()
+  })
+
+  test("persists a monotonic status sequence across reopen", async () => {
+    const root = mkdtempSync(path.join(process.env.TMPDIR ?? "/tmp", "lcm-store-sequence-"))
+    const target = path.join(root, "kilo.lcm.db")
+    const source = makeSource(0)
+    const lineage = {
+      sessionID: "ses_test",
+      digest: lineageDigest([source]),
+      sourceCount: 1,
+      lastSourceID: source.id,
+    }
+    const first = SqliteConversationMemoryStore.open({ databasePath: path.join(root, "kilo.db"), derivedPath: target })
+    expect((await first.inspect("ses_test")).sequence).toBe(0)
+    await first.replaceSources({ sessionID: "ses_test", lineage, sources: [source] })
+    const afterSources = (await first.inspect("ses_test")).sequence
+    await first.bumpStatus("ses_test")
+    expect((await first.inspect("ses_test")).sequence).toBe(afterSources + 1)
+    first.close()
+
+    const reopened = SqliteConversationMemoryStore.open({
+      databasePath: path.join(root, "kilo.db"),
+      derivedPath: target,
+    })
+    expect((await reopened.inspect("ses_test")).sequence).toBe(afterSources + 1)
+    reopened.close()
+    rmSync(root, { recursive: true })
+  })
+
+  test("stores source metadata without duplicating raw source bodies", async () => {
+    const root = mkdtempSync(path.join(process.env.TMPDIR ?? "/tmp", "lcm-store-schema-"))
+    const target = path.join(root, "kilo.lcm.db")
+    const store = SqliteConversationMemoryStore.open({ databasePath: path.join(root, "kilo.db"), derivedPath: target })
+    const source = makeSource(0)
+    await store.replaceSources({
+      sessionID: "ses_test",
+      sources: [source],
+      lineage: { sessionID: "ses_test", digest: lineageDigest([source]), sourceCount: 1, lastSourceID: source.id },
+    })
+    const database = new Database(store.path)
+    const columns = database
+      .query<{ name: string }, []>("PRAGMA table_info(lcm_source)")
+      .all()
+      .map((column) => column.name)
+    expect(columns).toEqual([
+      "source_id",
+      "session_id",
+      "message_id",
+      "part_id",
+      "ordinal",
+      "kind",
+      "digest",
+      "token_count",
+      "byte_count",
+      "excerpt",
+      "media_type",
+      "filename",
+    ])
+    database.close()
+    store.close()
+    rmSync(root, { recursive: true })
+  })
+
+  test("keeps the derived database and live SQLite sidecars private", async () => {
+    if (process.platform === "win32") return
+    const root = mkdtempSync(path.join(process.env.TMPDIR ?? "/tmp", "lcm-store-mode-"))
+    const target = path.join(root, "kilo.lcm.db")
+    const store = SqliteConversationMemoryStore.open({ databasePath: path.join(root, "kilo.db"), derivedPath: target })
+    const source = makeSource(0)
+    await store.replaceSources({
+      sessionID: "ses_test",
+      sources: [source],
+      lineage: { sessionID: "ses_test", digest: lineageDigest([source]), sourceCount: 1, lastSourceID: source.id },
+    })
+    for (const file of [target, `${target}-wal`, `${target}-shm`].filter(existsSync)) {
+      expect(statSync(file).mode & 0o777).toBe(0o600)
+    }
+    store.close()
+    rmSync(root, { recursive: true })
   })
 
   test("rejects stale frontier activation atomically", async () => {
@@ -241,5 +320,54 @@ describe("LCM SQLite store", () => {
     store.close()
     expect(readdirSync(root).some((name) => name.startsWith("kilo.lcm.db.incompatible-"))).toBe(true)
     rmSync(root, { recursive: true })
+  })
+
+  test("quarantines a corrupt derived cache and starts from empty state", async () => {
+    const root = mkdtempSync(path.join(process.env.TMPDIR ?? "/tmp", "lcm-store-corrupt-"))
+    const target = path.join(root, "kilo.lcm.db")
+    writeFileSync(target, "not a sqlite database")
+
+    const store = SqliteConversationMemoryStore.open({ databasePath: path.join(root, "kilo.db"), derivedPath: target })
+    expect(await store.inspect("ses_test")).toEqual({
+      sessionID: "ses_test",
+      sequence: 0,
+      sourceCount: 0,
+      state: "raw",
+      health: "ok",
+    })
+    expect(store.recovered).toBe(true)
+    store.close()
+    expect(readdirSync(root).some((name) => name.startsWith("kilo.lcm.db.incompatible-"))).toBe(true)
+    rmSync(root, { recursive: true })
+  })
+
+  test("deletes only the selected session and its derived records", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const source = makeSource(0)
+    const other = { ...makeSource(1), id: "src_other", sessionID: "ses_other" }
+    await store.replaceSources({
+      sessionID: "ses_test",
+      sources: [source],
+      lineage: { sessionID: "ses_test", digest: lineageDigest([source]), sourceCount: 1 },
+    })
+    await store.replaceSources({
+      sessionID: "ses_other",
+      sources: [other],
+      lineage: { sessionID: "ses_other", digest: lineageDigest([other]), sourceCount: 1 },
+    })
+    await store.appendActivity({
+      id: "activity_test",
+      sessionID: "ses_test",
+      kind: "rebuild",
+      message: "Derived state rebuilt.",
+      createdAt: 1,
+    })
+
+    await store.deleteSession("ses_test")
+    expect(await store.listSources("ses_test")).toEqual([])
+    expect(await store.listActivity("ses_test")).toEqual([])
+    expect((await store.inspect("ses_test")).sourceCount).toBe(0)
+    expect(await store.listSources("ses_other")).toEqual([other])
+    store.close()
   })
 })

@@ -1,7 +1,4 @@
-import { conversationMemory } from "./conversation-memory"
-
 export const dict = {
-  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.line1":
     "O Kilo Gateway oferece acesso a um conjunto selecionado de modelos confiáveis e otimizados para agentes de codificação.",
@@ -62,8 +59,7 @@ export const dict = {
   "marketplace.install.learnMore": "Saiba como funcionam as instalações do Marketplace",
   "marketplace.install.learnMcp": "Saiba mais sobre MCP",
   "marketplace.install.installedAt": "Instalado em {{path}}",
-  "marketplace.intro":
-    "Instale agentes, habilidades e ferramentas MCP reutilizáveis em um projeto ou em todos os projetos.",
+  "marketplace.intro": "Instale agentes, habilidades e ferramentas MCP reutilizáveis em um projeto ou em todos os projetos.",
   "marketplace.intro.learnMore": "Sobre o Marketplace",
   "marketplace.install.prerequisites": "Pré-requisitos",
   "marketplace.install.installing": "Instalando...",

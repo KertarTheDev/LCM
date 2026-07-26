@@ -1,7 +1,4 @@
-import { conversationMemory } from "./conversation-memory"
-
 export const dict = {
-  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.line1":
     "Kilo Gateway te da acceso a un conjunto seleccionado de modelos optimizados y confiables para agentes de codificación.",
@@ -52,7 +49,8 @@ export const dict = {
   "marketplace.install.destination": "Destino de la instalación",
   "marketplace.install.about.mcp":
     "Un servidor MCP proporciona a Kilo herramientas adicionales para trabajar con servicios externos o programas locales.",
-  "marketplace.install.about.agent": "Un agente añade un rol reutilizable con sus propias instrucciones y permisos.",
+  "marketplace.install.about.agent":
+    "Un agente añade un rol reutilizable con sus propias instrucciones y permisos.",
   "marketplace.install.about.skill":
     "Una habilidad añade instrucciones y recursos específicos para tareas que Kilo puede cargar cuando sea necesario.",
   "marketplace.install.mcp.warning":

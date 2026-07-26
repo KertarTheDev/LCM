@@ -1,13 +1,6 @@
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
-import { lineageDigest, sha256, sourceID } from "./ids"
-import type {
-  FinalSource,
-  FinalSourcePage,
-  ReadableSource,
-  SourceKind,
-  TranscriptLineage,
-  TranscriptSource,
-} from "./types"
+import { sha256, sourceID } from "./ids"
+import type { FinalSource, SourceKind } from "./types"
 
 const LCM_TOOLS = new Set(["lcm_grep", "lcm_describe", "lcm_expand", "lcm_read"])
 const EXCERPT_BYTES = 320
@@ -18,11 +11,13 @@ type Part = SessionV1.Part
 interface ExtractedSource {
   metadata: FinalSource
   content: string
-  immutableMedia?: ReadableSource["immutableMedia"]
+  immutableMedia?: ImmutableMedia
 }
 
-function abort(signal?: AbortSignal) {
-  if (signal?.aborted) throw signal.reason ?? new DOMException("The operation was aborted", "AbortError")
+interface ImmutableMedia {
+  bytes: Uint8Array
+  mediaType: string
+  filename?: string
 }
 
 function bytes(value: string) {
@@ -88,7 +83,7 @@ function partContent(part: Part):
       content: string
       mediaType?: string
       filename?: string
-      immutableMedia?: ReadableSource["immutableMedia"]
+      immutableMedia?: ImmutableMedia
     }
   | undefined {
   if (part.type === "text") {
@@ -168,57 +163,4 @@ export function extractFinalSources(sessionID: string, messages: WithParts[]) {
     }
   }
   return result
-}
-
-export class KiloTranscriptSource implements TranscriptSource {
-  constructor(private readonly load: (sessionID: string, signal?: AbortSignal) => Promise<WithParts[]>) {}
-
-  private async snapshot(sessionID: string, signal?: AbortSignal) {
-    abort(signal)
-    const items = extractFinalSources(sessionID, await this.load(sessionID, signal))
-    abort(signal)
-    const metadata = items.map((item) => item.metadata)
-    const lineage: TranscriptLineage = {
-      sessionID,
-      digest: lineageDigest(metadata),
-      sourceCount: metadata.length,
-      ...(metadata.at(-1) ? { lastSourceID: metadata.at(-1)!.id } : {}),
-    }
-    return { items, metadata, lineage }
-  }
-
-  async listFinalSources(input: {
-    sessionID: string
-    after?: number
-    limit: number
-    signal?: AbortSignal
-  }): Promise<FinalSourcePage> {
-    const snapshot = await this.snapshot(input.sessionID, input.signal)
-    const start = Math.max(0, (input.after ?? -1) + 1)
-    const limit = Math.min(500, Math.max(1, input.limit))
-    const items = snapshot.metadata.slice(start, start + limit)
-    const next = start + items.length < snapshot.metadata.length ? start + items.length - 1 : undefined
-    return { items, ...(next === undefined ? {} : { next }), lineage: snapshot.lineage }
-  }
-
-  async readSource(input: {
-    sessionID: string
-    sourceID: string
-    signal?: AbortSignal
-  }): Promise<ReadableSource | undefined> {
-    const snapshot = await this.snapshot(input.sessionID, input.signal)
-    const item = snapshot.items.find((candidate) => candidate.metadata.id === input.sourceID)
-    if (!item) return
-    const digest = sha256(item.immutableMedia?.bytes ?? item.content)
-    if (digest !== item.metadata.digest) throw new Error("lcm_stale_lineage")
-    return {
-      ...item.metadata,
-      content: item.content,
-      ...(item.immutableMedia ? { immutableMedia: item.immutableMedia } : {}),
-    }
-  }
-
-  async computeLineage(input: { sessionID: string; signal?: AbortSignal }): Promise<TranscriptLineage> {
-    return (await this.snapshot(input.sessionID, input.signal)).lineage
-  }
 }

@@ -9,14 +9,16 @@ The instance API exposes:
 - `POST /session/:sessionID/lcm/context/export`
 
 Every route uses the normal instance/workspace authorization middleware and first verifies the Kilo session exists.
-Status returns mode, health, monotonically increasing sequence, context capacity, raw/summary composition, background
-state, separate memory-work usage, last intervention, and a safe issue when degraded.
+Status returns mode, health, a durable monotonically increasing sequence, context capacity, raw/summary composition,
+whether summarization is running, separate memory-work usage, last intervention, and a safe issue when degraded. The
+sequence survives process reopen and advances for every status-visible transition, including background start/finish.
 
 Activity returns newest-first records with maximum page size 100. Its opaque signed cursor binds session and page size.
-Activity kinds are `summary_created`, `frontier_advanced`, `intervention`, `fallback`, and `rebuild`.
+Activity kinds are `frontier_advanced`, `intervention`, `fallback`, and `rebuild`.
 
-`session.lcm.status` and `session.lcm.activity` use the ordinary EventV2 stream. VS Code ignores foreign-session and
-out-of-order status updates, deduplicates activity by ID, sorts by sequence, and clears both when switching sessions.
+`session.lcm.status` and `session.lcm.activity` use the ordinary EventV2 stream. VS Code accepts events only from the
+tracked session directory, ignores foreign-session and non-increasing status updates, deduplicates activity by ID,
+sorts it by sequence, and clears both when switching sessions.
 
 VS Code shows passive pressure/composition in the existing context area, adds intervention markers to the existing
 task timeline, and provides timeline inspection and export from the Context preferences tab. It does not expose
@@ -31,6 +33,6 @@ Normalized pre/post frames preserve model-visible system, message, and tool-sche
 credentials, headers, provider metadata/options, provider wire bodies, and raw inline binary bytes are excluded.
 Secret-looking text that was actually model-visible is intentionally preserved; the UI warns before export.
 
-CLI/TUI export writes a complete mode-`0600` file atomically and refuses overwrite. VS Code uses a no-overwrite
-workspace rename and applies restrictive permissions for local files. Partial failures leave no apparently complete
-target.
+CLI/TUI export first verifies the session exists, writes a complete mode-`0600` file atomically, and refuses overwrite.
+VS Code uses a no-overwrite workspace rename, applies restrictive permissions for local files, and removes its
+temporary file after any write, permission, or rename failure. Partial failures leave no apparently complete target.

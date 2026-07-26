@@ -2,7 +2,7 @@
  * Conversation Memory copy shared by the extension host and webview.
  *
  * Locales deliberately inherit this complete English bundle until translated;
- * keeping one keyed source preserves fallback behavior and locale completeness.
+ * keeping one keyed source preserves fallback behavior without locale-file churn.
  */
 export const conversationMemory = {
   "conversationMemory.title": "Conversation Memory",

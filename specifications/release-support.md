@@ -11,7 +11,8 @@ Before a prerelease candidate:
 1. Run every focused LCM gate and deterministic fixture.
 2. Regenerate OpenAPI/SDK output and prove a second generation is clean.
 3. Run affected type checks, extension compile, marker/annotation checks, and formatting checks.
-4. Build a clean CLI and VSIX from the exact product SHA.
+4. Reconstruct the narrow prerelease overlay on the verified product SHA, then build the CLI and VSIX from that exact
+   candidate SHA.
 5. Run `lcm:packaged-smoke` against the extracted artifacts.
 6. Exercise runtime rebuild, four-tool recovery, events/routes, export verification, failure fallback, and manual
    compaction.

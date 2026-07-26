@@ -10,9 +10,9 @@ lineage, and authorizes only current-lineage sources and summaries.
 
 Search retained current-session source excerpts and summary text. Inputs are `pattern`, optional `mode` (`literal` or
 `regex`), `caseSensitive`, `summaryID`, `limit`, and opaque `cursor`. Default limit is 20; maximum is 50. A summary
-scope searches its descendant closure. Regex work runs in a cancellable isolated worker with bounded per-source and
-aggregate input, matches, and elapsed time. Oversized scopes fail explicitly instead of silently omitting sources, so
-the caller can narrow the search to a summary or use literal mode.
+scope searches its cycle-safe descendant closure. Regex work runs in a cancellable isolated worker with bounded
+per-source and aggregate input, matching records, ranges per record, and elapsed time. Oversized scopes fail
+explicitly instead of silently omitting sources, so the caller can narrow the search to a summary or use literal mode.
 
 ## `lcm_describe`
 
@@ -36,9 +36,7 @@ consume Kilo's cancellation signal and run through ordinary permission requests.
 
 Safe error codes are:
 
-- `lcm_not_ready`
 - `lcm_not_found`
-- `lcm_wrong_session`
 - `lcm_stale_lineage`
 - `lcm_invalid_cursor`
 - `lcm_invalid_regex`

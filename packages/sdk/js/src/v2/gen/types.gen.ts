@@ -5005,7 +5005,6 @@ export type EventSessionLcmStatus = {
         summaryItems: number
       }
       background: {
-        pendingSources: number
         summarizing: boolean
       }
       memoryWork: {
@@ -5038,7 +5037,7 @@ export type EventSessionLcmActivity = {
       id: string
       sessionID: string
       sequence: number
-      kind: "summary_created" | "frontier_advanced" | "intervention" | "fallback" | "rebuild"
+      kind: "frontier_advanced" | "intervention" | "fallback" | "rebuild"
       pressureBefore?: number
       pressureAfter?: number
       rawTokens?: number
@@ -11289,7 +11288,6 @@ export type ConversationMemoryStatusResponses = {
       summaryItems: number
     }
     background: {
-      pendingSources: number
       summarizing: boolean
     }
     memoryWork: {
@@ -11351,7 +11349,7 @@ export type ConversationMemoryActivityResponses = {
       id: string
       sessionID: string
       sequence: number
-      kind: "summary_created" | "frontier_advanced" | "intervention" | "fallback" | "rebuild"
+      kind: "frontier_advanced" | "intervention" | "fallback" | "rebuild"
       pressureBefore?: number
       pressureAfter?: number
       rawTokens?: number

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto"
+import { createHash } from "node:crypto"
 import { ulid } from "ulid"
 import type { FinalSource, SummaryChild } from "./types"
 
@@ -41,8 +41,4 @@ export function lineageDigest(sources: Array<Pick<FinalSource, "id" | "digest" |
 
 export function sortableID(prefix: "rev" | "frame" | "activity" | "attempt" | "export" | "lease") {
   return `${prefix}_${ulid()}`
-}
-
-export function cursorSecret() {
-  return randomBytes(32).toString("base64url")
 }

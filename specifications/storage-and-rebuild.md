@@ -6,16 +6,18 @@ The Kilo SQLite transcript is the sole source of raw conversation truth. Convers
 rebuildable SQLite sidecar for derived state so the feature does not change Kilo's core schema.
 
 `sidecarPath` places the file adjacent to the selected Kilo database. A `.db` suffix becomes `.lcm.db`; a suffixless
-path gains `.lcm`; tests may use an independent `:memory:` database. A newly created file is mode `0600`.
+path gains `.lcm`; tests may use an independent `:memory:` database. On POSIX, the database and any live WAL/shared
+memory companions are kept at mode `0600` on first open, reopen, and writes.
 
 The runtime uses Bun SQLite in Bun builds and Node's SQLite adapter in Node builds through the `#lcm-db` package import.
 Connections enable foreign keys, WAL, synchronous `NORMAL`, and a 250 ms busy timeout.
 
-Schema version 2 contains:
+Schema version 3 contains:
 
-- `lcm_meta` and `lcm_session` for version, lineage, state, health, and issue state;
+- `lcm_meta` and `lcm_session` for version, lineage, durable status sequence, state, health, and issue state;
 - `lcm_source` for stable source references, digests, sizes, and bounded excerpts;
-- `lcm_summary`, `lcm_summary_edge`, and `lcm_summary_attempt` for immutable tree nodes and model-work provenance;
+- `lcm_summary`, `lcm_summary_edge`, and `lcm_summary_attempt` for immutable tree nodes and content-safe model-work
+  provenance;
 - `lcm_frontier_revision` and `lcm_frontier_item` for atomic active cuts;
 - `lcm_activity` for ordered user-visible events;
 - `lcm_context_frame` and `lcm_blob` for normalized pre/post request evidence;

@@ -33,8 +33,9 @@ A projection is accepted only when it lowers measured pressure, references a com
 keeps protected content unchanged. Starting from the coarsest revision roots, the projector expands child summaries
 and then exact source content while the measured request retains a 10% capacity reserve and remains smaller than the
 raw request. This per-request cut restores more detail for larger contexts without mutating the durable tree. A
-revision is pinned for an assistant/tool continuation ID. If no fitting revision exists or any validation/storage
-step fails, the original messages are returned.
+revision is pinned for an assistant/tool continuation ID. A new continuation, changed lineage, or deleted session
+discards the old pin. If no fitting revision exists or any validation/storage step fails, the original messages are
+returned.
 
 The deterministic `binding-state.json` fixture proves multi-level construction, stable authorization relationships,
 and exact recovery. Binding facts must remain visible in active memory or be recoverable by search plus source read

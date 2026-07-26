@@ -26,9 +26,7 @@ export interface MemoryView {
 export class LcmToolError extends Error {
   constructor(
     readonly code:
-      | "lcm_not_ready"
       | "lcm_not_found"
-      | "lcm_wrong_session"
       | "lcm_stale_lineage"
       | "lcm_invalid_cursor"
       | "lcm_invalid_regex"
@@ -49,9 +47,7 @@ function safe(error: unknown): never {
     const code = error.message as LcmToolError["code"]
     if (
       [
-        "lcm_not_ready",
         "lcm_not_found",
-        "lcm_wrong_session",
         "lcm_stale_lineage",
         "lcm_invalid_cursor",
         "lcm_invalid_regex",
@@ -70,8 +66,7 @@ export const loadMemory = Effect.fn("LcmTool.loadMemory")(function* (input: {
   memory: ConversationMemory.Interface
   database: Database.Interface
 }) {
-  if (input.signal.aborted)
-    throw new LcmToolError("lcm_cancelled", "The Conversation Memory operation was cancelled.")
+  if (input.signal.aborted) throw new LcmToolError("lcm_cancelled", "The Conversation Memory operation was cancelled.")
   const transcript = yield* MessageV2.stream(input.sessionID).pipe(
     Effect.provideService(Database.Service, input.database),
   )
@@ -80,8 +75,7 @@ export const loadMemory = Effect.fn("LcmTool.loadMemory")(function* (input: {
     transcript,
     signal: input.signal,
   })
-  if (input.signal.aborted)
-    throw new LcmToolError("lcm_cancelled", "The Conversation Memory operation was cancelled.")
+  if (input.signal.aborted) throw new LcmToolError("lcm_cancelled", "The Conversation Memory operation was cancelled.")
   if (!indexed) return safe(new Error("lcm_unavailable"))
   const state = yield* Effect.promise(() => indexed.store.inspect(input.sessionID))
   if (state.lineageDigest !== indexed.lineage.digest) return safe(new Error("lcm_stale_lineage"))

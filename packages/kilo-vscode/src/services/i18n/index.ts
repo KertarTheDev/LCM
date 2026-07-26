@@ -19,7 +19,6 @@ import { dict as tr } from "./tr"
 import { dict as uk } from "./uk"
 import { dict as zh } from "./zh"
 import { dict as zht } from "./zht"
-import { conversationMemory } from "@kilocode/kilo-i18n/conversation-memory"
 
 const bundles: Record<string, Record<string, string>> = {
   ar,
@@ -79,11 +78,7 @@ export function translate(
   key: keyof typeof enDict | string,
   vars?: Record<string, string | number>,
 ): string {
-  const translations: Record<string, string> = {
-    ...conversationMemory,
-    ...en,
-    ...(bundles[resolveLocale(locale)] ?? {}),
-  }
+  const translations: Record<string, string> = { ...en, ...(bundles[resolveLocale(locale)] ?? {}) }
   let text = translations[key] ?? key
   if (vars) {
     for (const [k, v] of Object.entries(vars)) {

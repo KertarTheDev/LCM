@@ -11524,15 +11524,11 @@
                     "background": {
                       "type": "object",
                       "properties": {
-                        "pendingSources": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
                         "summarizing": {
                           "type": "boolean"
                         }
                       },
-                      "required": ["pendingSources", "summarizing"],
+                      "required": ["summarizing"],
                       "additionalProperties": false
                     },
                     "memoryWork": {
@@ -11726,7 +11722,7 @@
                           },
                           "kind": {
                             "type": "string",
-                            "enum": ["summary_created", "frontier_advanced", "intervention", "fallback", "rebuild"]
+                            "enum": ["frontier_advanced", "intervention", "fallback", "rebuild"]
                           },
                           "pressureBefore": {
                             "type": "number"
@@ -40281,15 +40277,11 @@
                   "background": {
                     "type": "object",
                     "properties": {
-                      "pendingSources": {
-                        "type": "integer",
-                        "minimum": 0
-                      },
                       "summarizing": {
                         "type": "boolean"
                       }
                     },
-                    "required": ["pendingSources", "summarizing"],
+                    "required": ["summarizing"],
                     "additionalProperties": false
                   },
                   "memoryWork": {
@@ -40416,7 +40408,7 @@
                   },
                   "kind": {
                     "type": "string",
-                    "enum": ["summary_created", "frontier_advanced", "intervention", "fallback", "rebuild"]
+                    "enum": ["frontier_advanced", "intervention", "fallback", "rebuild"]
                   },
                   "pressureBefore": {
                     "type": "number"

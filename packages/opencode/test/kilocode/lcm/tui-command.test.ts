@@ -23,7 +23,7 @@ describe("LCM TUI command", () => {
         usableInputTokens: 8_000,
       },
       composition: { rawItems: 2, summaryItems: 1, rawTokens: 1_000, summaryTokens: 400 },
-      background: { summarizing: false, pendingSources: 0 },
+      background: { summarizing: false },
       memoryWork: { attempts: 1, inputTokens: 2_000, outputTokens: 400, cost: 0.01 },
     })
     expect(value).toContain("Context pressure: 50%")

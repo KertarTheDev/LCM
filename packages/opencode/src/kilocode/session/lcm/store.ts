@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS lcm_session (
   lineage_digest TEXT NOT NULL,
   indexed_through INTEGER NOT NULL,
   source_count INTEGER NOT NULL,
+  status_sequence INTEGER NOT NULL,
   state TEXT NOT NULL,
   health TEXT NOT NULL,
   issue_json TEXT,
@@ -92,8 +93,6 @@ CREATE TABLE IF NOT EXISTS lcm_summary_attempt (
   cost REAL NOT NULL,
   finish TEXT,
   error_code TEXT,
-  request_id TEXT,
-  generation_id TEXT,
   duration_ms INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );
@@ -165,6 +164,7 @@ type SessionRow = {
   lineage_digest: string
   indexed_through: number
   source_count: number
+  status_sequence: number
   state: MemoryState["state"]
   health: MemoryState["health"]
   issue_json: string | null
@@ -313,6 +313,13 @@ function activity(row: ActivityRow): ActivityRecord {
   }
 }
 
+function secureSidecarFiles(target: string) {
+  if (target === ":memory:" || process.platform === "win32") return
+  for (const file of [target, `${target}-wal`, `${target}-shm`]) {
+    if (existsSync(file)) chmodSync(file, 0o600)
+  }
+}
+
 export class SqliteConversationMemoryStore implements ConversationMemoryStore {
   private constructor(
     private readonly client: ReturnType<typeof open>,
@@ -343,7 +350,6 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
   }
 
   private static openTarget(target: string, recovered = false) {
-    const existed = target === ":memory:" || existsSync(target)
     const client = open(target)
     try {
       client.exec("PRAGMA journal_mode = WAL")
@@ -356,7 +362,7 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
       client.run("INSERT OR IGNORE INTO lcm_meta(key, value) VALUES ('schema_version', ?)", [
         String(LCM_SCHEMA_VERSION),
       ])
-      if (target !== ":memory:" && !existed) chmodSync(target, 0o600)
+      secureSidecarFiles(target)
       return new SqliteConversationMemoryStore(client, target, recovered)
     } catch (error) {
       client.close()
@@ -369,17 +375,17 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
     if (!row)
       return {
         sessionID,
+        sequence: 0,
         sourceCount: 0,
-        pendingSources: 0,
         state: "raw",
         health: "ok",
       }
     return {
       sessionID,
-      lineageDigest: row.lineage_digest,
+      sequence: row.status_sequence,
+      ...(row.lineage_digest ? { lineageDigest: row.lineage_digest } : {}),
       indexedThrough: row.indexed_through,
       sourceCount: row.source_count,
-      pendingSources: 0,
       state: row.state,
       health: row.health,
       ...(row.issue_json ? { issue: JSON.parse(row.issue_json) as NonNullable<MemoryState["issue"]> } : {}),
@@ -423,12 +429,14 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
       }
       this.client.run(
         `INSERT INTO lcm_session(
-          session_id, lineage_digest, indexed_through, source_count, state, health, issue_json, updated_at
-        ) VALUES (?, ?, ?, ?, 'raw', 'ok', NULL, ?)
+          session_id, lineage_digest, indexed_through, source_count, status_sequence, state, health, issue_json,
+          updated_at
+        ) VALUES (?, ?, ?, ?, 1, 'raw', 'ok', NULL, ?)
         ON CONFLICT(session_id) DO UPDATE SET
           lineage_digest = excluded.lineage_digest,
           indexed_through = excluded.indexed_through,
           source_count = excluded.source_count,
+          status_sequence = lcm_session.status_sequence + 1,
           state = CASE WHEN lcm_session.lineage_digest = excluded.lineage_digest THEN lcm_session.state ELSE 'raw' END,
           health = 'ok',
           issue_json = NULL,
@@ -499,10 +507,12 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
         )
       }
       if (input.attempt) this.insertAttempt(input.attempt)
-      this.client.run("UPDATE lcm_session SET state = 'preparing', updated_at = ? WHERE session_id = ?", [
-        Date.now(),
-        input.summary.sessionID,
-      ])
+      this.client.run(
+        `UPDATE lcm_session
+         SET state = 'preparing', status_sequence = status_sequence + 1, updated_at = ?
+         WHERE session_id = ?`,
+        [Date.now(), input.summary.sessionID],
+      )
     })
   }
 
@@ -510,9 +520,8 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
     this.client.run(
       `INSERT OR IGNORE INTO lcm_summary_attempt(
         attempt_id, node_key, session_id, provider_id, model_id, variant, mode, input_tokens, output_tokens,
-        reasoning_tokens, cache_read_tokens, cache_write_tokens, cost, finish, error_code, request_id,
-        generation_id, duration_ms, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        reasoning_tokens, cache_read_tokens, cache_write_tokens, cost, finish, error_code, duration_ms, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         attempt.id,
         attempt.nodeKey,
@@ -529,8 +538,6 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
         attempt.cost,
         attempt.finish ?? null,
         attempt.errorCode ?? null,
-        attempt.requestID ?? null,
-        attempt.generationID ?? null,
         attempt.durationMs,
         attempt.createdAt,
       ],
@@ -538,7 +545,10 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
   }
 
   async recordAttempt(attempt: SummaryAttempt): Promise<void> {
-    this.client.transaction(() => this.insertAttempt(attempt))
+    this.client.transaction(() => {
+      this.insertAttempt(attempt)
+      this.touchStatus(attempt.sessionID)
+    })
   }
 
   async getSummary(sessionID: string, summaryID: string): Promise<SummaryNode | undefined> {
@@ -607,10 +617,12 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
           item.id,
         ])
       }
-      this.client.run("UPDATE lcm_session SET state = 'summarized', updated_at = ? WHERE session_id = ?", [
-        Date.now(),
-        revision.sessionID,
-      ])
+      this.client.run(
+        `UPDATE lcm_session
+         SET state = 'summarized', status_sequence = status_sequence + 1, updated_at = ?
+         WHERE session_id = ?`,
+        [Date.now(), revision.sessionID],
+      )
     })
   }
 
@@ -680,6 +692,7 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
           record.createdAt,
         ],
       )
+      this.touchStatus(record.sessionID)
       return { ...record, sequence }
     })
   }
@@ -702,12 +715,16 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
   }
 
   async setIssue(sessionID: string, issue?: NonNullable<MemoryState["issue"]>): Promise<void> {
-    this.client.run("UPDATE lcm_session SET health = ?, issue_json = ?, updated_at = ? WHERE session_id = ?", [
-      issue ? "degraded" : "ok",
-      issue ? JSON.stringify(issue) : null,
-      Date.now(),
-      sessionID,
-    ])
+    this.client.run(
+      `UPDATE lcm_session
+       SET health = ?, issue_json = ?, status_sequence = status_sequence + 1, updated_at = ?
+       WHERE session_id = ?`,
+      [issue ? "degraded" : "ok", issue ? JSON.stringify(issue) : null, Date.now(), sessionID],
+    )
+  }
+
+  async bumpStatus(sessionID: string): Promise<void> {
+    this.client.transaction(() => this.touchStatus(sessionID))
   }
 
   async metrics(sessionID: string): Promise<MemoryStoreMetrics> {
@@ -731,12 +748,7 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
        FROM lcm_summary_attempt WHERE session_id = ?`,
       [sessionID],
     )
-    const activity = this.client.get<{ sequence: number }>(
-      "SELECT COALESCE(MAX(sequence), 0) AS sequence FROM lcm_activity WHERE session_id = ?",
-      [sessionID],
-    )
     return {
-      sequence: activity?.sequence ?? 0,
       work: {
         attempts: row?.attempts ?? 0,
         inputTokens: row?.input_tokens ?? 0,
@@ -751,6 +763,7 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
 
   async recordFrame(frame: ContextFrame): Promise<void> {
     this.client.transaction(() => {
+      this.ensureSession(frame.sessionID)
       const pre = Buffer.from(JSON.stringify(frame.pre))
       const post = Buffer.from(JSON.stringify(frame.post))
       const preID = sha256(pre)
@@ -796,6 +809,7 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
         ],
       )
       this.deleteOrphanBlobs()
+      this.touchStatus(frame.sessionID)
     })
   }
 
@@ -838,6 +852,26 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
          SELECT post_blob_id FROM lcm_context_frame
        )`,
     )
+  }
+
+  private ensureSession(sessionID: string) {
+    this.client.run(
+      `INSERT OR IGNORE INTO lcm_session(
+        session_id, lineage_digest, indexed_through, source_count, status_sequence, state, health, issue_json,
+        updated_at
+      ) VALUES (?, '', -1, 0, 0, 'raw', 'ok', NULL, ?)`,
+      [sessionID, Date.now()],
+    )
+  }
+
+  private touchStatus(sessionID: string) {
+    this.client.run(
+      `UPDATE lcm_session
+       SET status_sequence = status_sequence + 1, updated_at = ?
+       WHERE session_id = ?`,
+      [Date.now(), sessionID],
+    )
+    secureSidecarFiles(this.path)
   }
 
   async acquireLease(input: { key: string; owner: string; now: number; expiresAt: number }): Promise<boolean> {

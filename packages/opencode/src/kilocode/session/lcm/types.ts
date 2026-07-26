@@ -1,12 +1,12 @@
 import type { ModelMessage } from "ai"
 
-export const LCM_SCHEMA_VERSION = 2
+export const LCM_SCHEMA_VERSION = 3
 
 export type SourceKind = "user_text" | "assistant_text" | "reasoning" | "tool" | "media" | "attachment"
 export type GenerationMode = "normal" | "aggressive" | "deterministic"
 export type MemoryHealth = "ok" | "degraded"
 export type MemoryMode = "raw" | "preparing" | "summarized"
-export type ActivityKind = "summary_created" | "frontier_advanced" | "intervention" | "fallback" | "rebuild"
+export type ActivityKind = "frontier_advanced" | "intervention" | "fallback" | "rebuild"
 
 export interface FinalSource {
   id: string
@@ -23,37 +23,11 @@ export interface FinalSource {
   filename?: string
 }
 
-export interface ReadableSource extends FinalSource {
-  content: string
-  immutableMedia?: {
-    bytes: Uint8Array
-    mediaType: string
-    filename?: string
-  }
-}
-
 export interface TranscriptLineage {
   sessionID: string
   digest: string
   sourceCount: number
   lastSourceID?: string
-}
-
-export interface FinalSourcePage {
-  items: FinalSource[]
-  next?: number
-  lineage: TranscriptLineage
-}
-
-export interface TranscriptSource {
-  listFinalSources(input: {
-    sessionID: string
-    after?: number
-    limit: number
-    signal?: AbortSignal
-  }): Promise<FinalSourcePage>
-  readSource(input: { sessionID: string; sourceID: string; signal?: AbortSignal }): Promise<ReadableSource | undefined>
-  computeLineage(input: { sessionID: string; signal?: AbortSignal }): Promise<TranscriptLineage>
 }
 
 export interface SummaryNode {
@@ -95,8 +69,6 @@ export interface SummaryAttempt {
   cost: number
   finish?: string
   errorCode?: string
-  requestID?: string
-  generationID?: string
   durationMs: number
   createdAt: number
 }
@@ -111,7 +83,7 @@ export interface FrontierRevision {
   id: string
   sessionID: string
   lineageDigest: string
-  reason: "background" | "append" | "hard_ready" | "hard_built" | "rebuild"
+  reason: "background" | "append" | "hard_built"
   items: FrontierItem[]
   createdAt: number
 }
@@ -157,10 +129,10 @@ export interface NormalizedModelInput {
 
 export interface MemoryState {
   sessionID: string
+  sequence: number
   lineageDigest?: string
   indexedThrough?: number
   sourceCount: number
-  pendingSources: number
   state: MemoryMode
   health: MemoryHealth
   issue?: {
@@ -183,7 +155,6 @@ export interface MemoryWork {
 }
 
 export interface MemoryStoreMetrics {
-  sequence: number
   work: MemoryWork
 }
 
@@ -209,7 +180,6 @@ export interface LcmStatus {
     summaryItems: number
   }
   background: {
-    pendingSources: number
     summarizing: boolean
   }
   memoryWork: MemoryWork
@@ -264,6 +234,7 @@ export interface ConversationMemoryStore {
   appendActivity(record: Omit<ActivityRecord, "sequence"> & { sequence?: number }): Promise<ActivityRecord>
   listActivity(sessionID: string, input?: { before?: number; limit?: number }): Promise<ActivityRecord[]>
   setIssue(sessionID: string, issue?: NonNullable<MemoryState["issue"]>): Promise<void>
+  bumpStatus(sessionID: string): Promise<void>
   metrics(sessionID: string): Promise<MemoryStoreMetrics>
   recordFrame(frame: ContextFrame): Promise<void>
   listFrames(sessionID: string): Promise<ContextFrame[]>

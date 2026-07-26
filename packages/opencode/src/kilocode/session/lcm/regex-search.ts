@@ -11,7 +11,8 @@ export async function regexSearch(input: {
   pattern: string
   caseSensitive: boolean
   values: Array<{ id: string; text: string }>
-  limit: number
+  recordLimit: number
+  rangeLimit: number
   signal?: AbortSignal
 }) {
   if (input.signal?.aborted) throw new Error("lcm_cancelled")
@@ -54,7 +55,8 @@ export async function regexSearch(input: {
       pattern: input.pattern,
       flags: input.caseSensitive ? "gu" : "giu",
       values: input.values,
-      limit: input.limit,
+      recordLimit: input.recordLimit,
+      rangeLimit: input.rangeLimit,
     })
   })
 }

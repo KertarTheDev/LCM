@@ -34,6 +34,7 @@ export const LcmCommand = effectCmd({
       ? SessionID.make(args.sessionID)
       : (yield* sessions.list()).toSorted((a, b) => b.time.updated - a.time.updated)[0]?.id
     if (!sessionID) return yield* fail("No sessions found.")
+    yield* sessions.get(sessionID)
     if (args.action === "status") {
       process.stdout.write(`${JSON.stringify(yield* memory.status(sessionID), null, 2)}\n`)
       return

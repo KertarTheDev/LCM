@@ -1,7 +1,4 @@
-import { conversationMemory } from "./conversation-memory"
-
 export const dict = {
-  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.line1":
     "Kilo Gateway надає доступ до добірки надійних оптимізованих моделей для агентів кодування.",
@@ -52,7 +49,8 @@ export const dict = {
   "marketplace.install.destination": "Місце встановлення",
   "marketplace.install.about.mcp":
     "MCP-сервер надає Kilo додаткові інструменти для роботи із зовнішніми сервісами або локальними програмами.",
-  "marketplace.install.about.agent": "Агент додає багаторазову роль із власними інструкціями та дозволами.",
+  "marketplace.install.about.agent":
+    "Агент додає багаторазову роль із власними інструкціями та дозволами.",
   "marketplace.install.about.skill":
     "Навичка додає інструкції та ресурси для певних завдань, які Kilo може завантажити за потреби.",
   "marketplace.install.mcp.warning":
@@ -62,7 +60,8 @@ export const dict = {
   "marketplace.install.learnMore": "Дізнайтеся, як працює встановлення з Marketplace",
   "marketplace.install.learnMcp": "Докладніше про MCP",
   "marketplace.install.installedAt": "Встановлено в {{path}}",
-  "marketplace.intro": "Встановлюйте багаторазових агентів, навички та інструменти MCP для одного або всіх проєктів.",
+  "marketplace.intro":
+    "Встановлюйте багаторазових агентів, навички та інструменти MCP для одного або всіх проєктів.",
   "marketplace.intro.learnMore": "Про Marketplace",
   "marketplace.install.prerequisites": "Передумови",
   "marketplace.install.installing": "Встановлення...",

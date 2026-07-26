@@ -101,6 +101,44 @@ describe("LCM projector", () => {
       measure,
     })
     expect(pinned.type === "projected" && pinned.revision.id).toBe(revision!.id)
+
+    const nextContinuation = await projector.project({
+      sessionID: "ses_project",
+      lineage,
+      system: [],
+      messages,
+      tools: {},
+      usableInputTokens: 4_000,
+      thresholdRatio: 0.6,
+      protectedTailTurns: 2,
+      sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
+      continuationID: "msg_next",
+      reason: "soft",
+      measure,
+    })
+    expect(nextContinuation.type === "projected" && nextContinuation.revision.id).toBe("rev_newer")
+
+    await store.commitRevision({
+      ...revision!,
+      id: "rev_after_clear",
+      createdAt: revision!.createdAt + 2,
+    })
+    projector.clearSession("ses_project")
+    const afterClear = await projector.project({
+      sessionID: "ses_project",
+      lineage,
+      system: [],
+      messages,
+      tools: {},
+      usableInputTokens: 4_000,
+      thresholdRatio: 0.6,
+      protectedTailTurns: 2,
+      sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
+      continuationID: "msg_next",
+      reason: "soft",
+      measure,
+    })
+    expect(afterClear.type === "projected" && afterClear.revision.id).toBe("rev_after_clear")
     store.close()
   })
 

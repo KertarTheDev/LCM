@@ -23,9 +23,7 @@ function protectedStart(messages: ModelMessage[], turns: number) {
   return 0
 }
 
-type MemoryItem =
-  | { kind: "summary"; summary: SummaryNode }
-  | { kind: "source"; source: FinalSource; content: string }
+type MemoryItem = { kind: "summary"; summary: SummaryNode } | { kind: "source"; source: FinalSource; content: string }
 
 function render(items: MemoryItem[]) {
   const body = items
@@ -47,20 +45,37 @@ function render(items: MemoryItem[]) {
 }
 
 export class Projector {
-  private readonly pins = new Map<string, string>()
+  private readonly pins = new Map<
+    string,
+    {
+      continuationID: string
+      revisionID: string
+      lineageDigest: string
+    }
+  >()
 
   constructor(private readonly store: ConversationMemoryStore) {}
 
-  clearPin(continuationID: string) {
-    this.pins.delete(continuationID)
+  clearSession(sessionID: string) {
+    this.pins.delete(sessionID)
   }
 
   private async revision(input: ProjectionInput) {
-    const pin = input.continuationID ? this.pins.get(input.continuationID) : undefined
-    const pinned = pin ? await this.store.getRevision(input.sessionID, pin) : undefined
-    if (pinned?.lineageDigest === input.lineage.digest) return pinned
+    const pin = input.continuationID ? this.pins.get(input.sessionID) : undefined
+    if (pin && pin.continuationID === input.continuationID && pin.lineageDigest === input.lineage.digest) {
+      const pinned = await this.store.getRevision(input.sessionID, pin.revisionID)
+      if (pinned?.lineageDigest === input.lineage.digest) return pinned
+    }
     const active = await this.store.activeRevision(input.sessionID, input.lineage.digest)
-    if (active && input.continuationID) this.pins.set(input.continuationID, active.id)
+    if (active && input.continuationID) {
+      this.pins.set(input.sessionID, {
+        continuationID: input.continuationID,
+        revisionID: active.id,
+        lineageDigest: input.lineage.digest,
+      })
+    } else if (input.continuationID) {
+      this.pins.delete(input.sessionID)
+    }
     return active
   }
 

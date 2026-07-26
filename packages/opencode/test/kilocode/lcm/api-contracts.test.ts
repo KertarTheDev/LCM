@@ -30,7 +30,7 @@ describe("LCM public contracts", () => {
         thresholdRatio: 0.6,
       },
       composition: { revisionID: "rev_test", rawTokens: 1_000, summaryTokens: 500, rawItems: 2, summaryItems: 1 },
-      background: { pendingSources: 0, summarizing: false },
+      background: { summarizing: false },
       memoryWork: {
         attempts: 1,
         inputTokens: 2_000,
