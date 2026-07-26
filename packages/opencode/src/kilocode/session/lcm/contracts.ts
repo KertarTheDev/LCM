@@ -1,0 +1,72 @@
+import { Schema } from "effect"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
+
+export const Issue = Schema.Struct({
+  code: Schema.String,
+  message: Schema.String,
+  since: NonNegativeInt,
+  lastAt: NonNegativeInt,
+  nextRetryAt: Schema.optional(NonNegativeInt),
+})
+
+export const MemoryWork = Schema.Struct({
+  attempts: NonNegativeInt,
+  inputTokens: NonNegativeInt,
+  outputTokens: NonNegativeInt,
+  reasoningTokens: NonNegativeInt,
+  cacheReadTokens: NonNegativeInt,
+  cacheWriteTokens: NonNegativeInt,
+  cost: Schema.Finite,
+})
+
+export const Status = Schema.Struct({
+  sessionID: Schema.String,
+  sequence: NonNegativeInt,
+  mode: Schema.Literals(["raw", "preparing", "summarized"]),
+  health: Schema.Literals(["ok", "degraded"]),
+  capacity: Schema.Struct({
+    known: Schema.Boolean,
+    usableInputTokens: Schema.optional(NonNegativeInt),
+    rawInputTokens: Schema.optional(NonNegativeInt),
+    activeInputTokens: Schema.optional(NonNegativeInt),
+    freeTokens: Schema.optional(NonNegativeInt),
+    pressureRatio: Schema.optional(Schema.Finite),
+    thresholdRatio: Schema.optional(Schema.Finite),
+  }),
+  composition: Schema.Struct({
+    revisionID: Schema.optional(Schema.String),
+    rawTokens: NonNegativeInt,
+    summaryTokens: NonNegativeInt,
+    rawItems: NonNegativeInt,
+    summaryItems: NonNegativeInt,
+  }),
+  background: Schema.Struct({
+    pendingSources: NonNegativeInt,
+    summarizing: Schema.Boolean,
+  }),
+  memoryWork: MemoryWork,
+  lastInterventionAt: Schema.optional(NonNegativeInt),
+  issue: Schema.optional(Issue),
+})
+
+export const Activity = Schema.Struct({
+  id: Schema.String,
+  sessionID: Schema.String,
+  sequence: NonNegativeInt,
+  kind: Schema.Literals(["summary_created", "frontier_advanced", "intervention", "fallback", "rebuild"]),
+  pressureBefore: Schema.optional(Schema.Finite),
+  pressureAfter: Schema.optional(Schema.Finite),
+  rawTokens: Schema.optional(NonNegativeInt),
+  summaryTokens: Schema.optional(NonNegativeInt),
+  summaryIDs: Schema.optional(Schema.Array(Schema.String)),
+  message: Schema.String,
+  createdAt: NonNegativeInt,
+})
+
+export const ActivityPage = Schema.Struct({
+  items: Schema.Array(Activity),
+  nextCursor: Schema.optional(Schema.String),
+})
+
+export type Status = typeof Status.Type
+export type Activity = typeof Activity.Type

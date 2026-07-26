@@ -20,7 +20,6 @@ self.onmessage = (event: MessageEvent<Request>) => {
     const matches: Match[] = []
     let count = 0
     for (const value of event.data.values) {
-      if (value.text.length > 1_000_000) continue
       expression.lastIndex = 0
       const ranges: Match["ranges"] = []
       while (count < event.data.limit) {

@@ -1,4 +1,7 @@
+import { conversationMemory } from "./conversation-memory"
+
 export const dict = {
+  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.line1":
     "Kilo Gatewayは、コーディングエージェント向けに厳選された信頼性の高い最適化モデルへのアクセスを提供します。",
@@ -43,14 +46,12 @@ export const dict = {
   "marketplace.install.scope.global": "グローバル",
   "marketplace.install.scope.project.description":
     "このプロジェクトのみ。インストールしたファイルはバージョン管理に追加し、チームと共有できます。",
-  "marketplace.install.scope.global.description":
-    "このマシン上のすべてのプロジェクト。ユーザー設定に保存されます。",
+  "marketplace.install.scope.global.description": "このマシン上のすべてのプロジェクト。ユーザー設定に保存されます。",
   "marketplace.install.destination": "インストール先",
   "marketplace.install.about.mcp":
     "MCPサーバーは、外部サービスやローカルプログラムを操作するための追加ツールをKiloに提供します。",
   "marketplace.install.about.agent": "エージェントは、独自の指示と権限を持つ再利用可能な役割を追加します。",
-  "marketplace.install.about.skill":
-    "スキルは、必要に応じてKiloが読み込めるタスク固有の指示とリソースを追加します。",
+  "marketplace.install.about.skill": "スキルは、必要に応じてKiloが読み込めるタスク固有の指示とリソースを追加します。",
   "marketplace.install.mcp.warning":
     "MCPサーバーはローカルコマンドを実行したり、外部サービスに接続したりできます。権限で自動的に許可されていない限り、Kiloはツールを使用する前に許可を求めます。",
   "marketplace.install.project.warning":

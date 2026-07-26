@@ -41,6 +41,31 @@ describe("LCM tool contracts", () => {
     ).rejects.toThrow("lcm_invalid_regex")
   })
 
+  test("cancels regex work with the public cancellation code", async () => {
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      regexSearch({
+        pattern: "detail",
+        caseSensitive: false,
+        values: [{ id: "src_a", text: "detail" }],
+        limit: 10,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow("lcm_cancelled")
+  })
+
+  test("rejects oversized regex input instead of silently skipping sources", async () => {
+    await expect(
+      regexSearch({
+        pattern: "binding",
+        caseSensitive: false,
+        values: [{ id: "src_large", text: "x".repeat(1_000_001) }],
+        limit: 20,
+      }),
+    ).rejects.toThrow("lcm_invalid_regex")
+  })
+
   test("paginates text on valid UTF-8 byte boundaries", () => {
     const value = "abαβcd"
     const first = textChunk(value, 0, 3)

@@ -2,6 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { lineageDigest, nodeKey, sha256, sourceID, summaryID } from "@/kilocode/session/lcm/ids"
 import { sidecarPath, SqliteConversationMemoryStore } from "@/kilocode/session/lcm/store"
 import type { FinalSource, SummaryChild, SummaryNode } from "@/kilocode/session/lcm/types"
+import { Database } from "bun:sqlite"
+import { mkdtempSync, readdirSync, rmSync } from "node:fs"
+import path from "node:path"
 
 function makeSource(ordinal: number): FinalSource {
   const content = `source ${ordinal}`
@@ -118,5 +121,125 @@ describe("LCM SQLite store", () => {
     await store.releaseLease({ key: "summary", owner: "b" })
     expect(await store.acquireLease({ key: "summary", owner: "a", now: 22, expiresAt: 32 })).toBe(true)
     store.close()
+  })
+
+  test("retains inactive export evidence across a lineage rewrite", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = [makeSource(0), makeSource(1)]
+    const digest = lineageDigest(sources)
+    await store.replaceSources({
+      sessionID: "ses_test",
+      sources,
+      lineage: { sessionID: "ses_test", digest, sourceCount: sources.length },
+    })
+    const children: SummaryChild[] = sources.map((item, ordinal) => ({
+      summaryID: "",
+      kind: "source",
+      id: item.id,
+      ordinal,
+    }))
+    const key = nodeKey(children, digest, "history-test")
+    const text = "Retained historical summary"
+    const id = summaryID({ nodeKey: key, text })
+    children.forEach((child) => (child.summaryID = id))
+    await store.commitSummary({
+      summary: {
+        id,
+        nodeKey: key,
+        sessionID: "ses_test",
+        level: 0,
+        text,
+        digest: sha256(text),
+        sourceDigest: digest,
+        tokens: 4,
+        bytes: Buffer.byteLength(text),
+        firstOrdinal: 0,
+        lastOrdinal: 1,
+        generationMode: "deterministic",
+        createdAt: 1,
+      },
+      children,
+    })
+    await store.commitRevision({
+      id: "rev_history",
+      sessionID: "ses_test",
+      lineageDigest: digest,
+      reason: "background",
+      items: [{ kind: "summary", id, ordinal: 0 }],
+      createdAt: 2,
+    })
+    await store.recordFrame({
+      id: "frame_history",
+      sessionID: "ses_test",
+      revisionID: "rev_history",
+      lineageDigest: digest,
+      active: true,
+      reason: "soft_ready",
+      pre: { system: [], messages: [], tools: {} },
+      post: { system: [], messages: [], tools: {} },
+      usableInputTokens: 8_000,
+      thresholdRatio: 0.6,
+      rawTokens: 6_000,
+      summaryTokens: 4,
+      createdAt: 3,
+    })
+
+    const rewritten = [{ ...makeSource(0), id: "src_rewritten", digest: sha256("rewritten") }]
+    const nextDigest = lineageDigest(rewritten)
+    await store.replaceSources({
+      sessionID: "ses_test",
+      sources: rewritten,
+      lineage: { sessionID: "ses_test", digest: nextDigest, sourceCount: 1 },
+    })
+
+    expect(await store.getSummary("ses_test", id)).toBeDefined()
+    expect(await store.getRevision("ses_test", "rev_history")).toBeDefined()
+    expect((await store.listFrames("ses_test"))[0]?.active).toBe(false)
+    expect(await store.activeRevision("ses_test", nextDigest)).toBeUndefined()
+    store.close()
+  })
+
+  test("persists and clears a content-safe degraded issue", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = [makeSource(0)]
+    const digest = lineageDigest(sources)
+    await store.replaceSources({
+      sessionID: "ses_test",
+      sources,
+      lineage: { sessionID: "ses_test", digest, sourceCount: 1 },
+    })
+    await store.setIssue("ses_test", {
+      code: "lcm_unavailable",
+      message: "Normal Kilo context behavior is active.",
+      since: 1,
+      lastAt: 2,
+    })
+    expect(await store.inspect("ses_test")).toEqual(
+      expect.objectContaining({
+        health: "degraded",
+        issue: expect.objectContaining({ code: "lcm_unavailable" }),
+      }),
+    )
+    await store.setIssue("ses_test")
+    const current = await store.inspect("ses_test")
+    expect(current.health).toBe("ok")
+    expect(current.issue).toBeUndefined()
+    store.close()
+  })
+
+  test("quarantines an incompatible derived cache and starts from empty state", async () => {
+    const root = mkdtempSync(path.join(process.env.TMPDIR ?? "/tmp", "lcm-store-"))
+    const target = path.join(root, "kilo.lcm.db")
+    const old = new Database(target)
+    old.exec("CREATE TABLE lcm_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    old.query("INSERT INTO lcm_meta(key, value) VALUES ('schema_version', '1')").run()
+    old.close()
+
+    const store = SqliteConversationMemoryStore.open({ databasePath: path.join(root, "kilo.db"), derivedPath: target })
+    expect((await store.inspect("ses_test")).sourceCount).toBe(0)
+    expect(store.recovered).toBe(true)
+    store.close()
+    expect(readdirSync(root).some((name) => name.startsWith("kilo.lcm.db.incompatible-"))).toBe(true)
+    rmSync(root, { recursive: true })
   })
 })

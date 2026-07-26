@@ -8,12 +8,16 @@ import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { useConfig } from "../../context/config"
 import { useLanguage } from "../../context/language"
 import { useMemory } from "../../context/memory"
+import { useSession } from "../../context/session"
+import { useVSCode } from "../../context/vscode"
 import SettingsRow from "./SettingsRow"
 
 const ContextTab: Component = () => {
   const { config, updateConfig } = useConfig()
   const memory = useMemory()
   const language = useLanguage()
+  const session = useSession()
+  const vscode = useVSCode()
   const [newPattern, setNewPattern] = createSignal("")
 
   const patterns = () => config().watcher?.ignore ?? []
@@ -59,6 +63,21 @@ const ContextTab: Component = () => {
     if (status.index.estimatedTokens === 0) return language.t("chat.memory.project.empty")
     const tokens = status.index.estimatedTokens.toLocaleString(language.locale())
     return language.t("settings.context.memory.status.enabledTokens", { tokens })
+  }
+
+  const conversationMemoryStats = () => {
+    const status = session.lcmStatus()
+    if (!status) return language.t("conversationMemory.status.unavailable")
+    const pressure =
+      status.capacity.pressureRatio === undefined
+        ? language.t("conversationMemory.status.unmeasured")
+        : `${Math.round(status.capacity.pressureRatio * 100)}%`
+    return language.t("conversationMemory.status.summary", {
+      mode: status.mode,
+      pressure,
+      summaries: status.composition.summaryItems,
+      health: status.health,
+    })
   }
 
   return (
@@ -120,6 +139,35 @@ const ContextTab: Component = () => {
             </div>
           )}
         </Show>
+      </Card>
+
+      <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>{language.t("conversationMemory.title")}</h4>
+      <Card>
+        <SettingsRow
+          title={language.t("conversationMemory.activeSession")}
+          description={conversationMemoryStats()}
+          last
+        >
+          <div style={{ display: "flex", gap: "6px" }}>
+            <Button
+              variant="secondary"
+              size="small"
+              icon="eye"
+              disabled={!session.currentSessionID() || !session.lcmStatus()}
+              onClick={() => vscode.postMessage({ type: "showLcmTimeline", sessionID: session.currentSessionID()! })}
+            >
+              {language.t("conversationMemory.action.timeline")}
+            </Button>
+            <Button
+              variant="secondary"
+              size="small"
+              disabled={!session.currentSessionID()}
+              onClick={() => vscode.postMessage({ type: "exportLcmContext", sessionID: session.currentSessionID()! })}
+            >
+              {language.t("conversationMemory.action.export")}
+            </Button>
+          </div>
+        </SettingsRow>
       </Card>
 
       {/* Compaction settings */}

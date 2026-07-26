@@ -4032,6 +4032,19 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       return
     }
 
+    if (event.type === "session.lcm.status") {
+      const sid = event.properties.sessionID
+      if (!this.trackedSessionIds.has(sid)) return
+      this.postMessage({ type: "lcmStatus", sessionID: sid, status: event.properties.status })
+      return
+    }
+    if (event.type === "session.lcm.activity") {
+      const sid = event.properties.sessionID
+      if (!this.trackedSessionIds.has(sid)) return
+      this.postMessage({ type: "lcmActivity", sessionID: sid, items: [event.properties.activity] })
+      return
+    }
+
     // Drop session events from other projects before any tracking logic.
     // This must come first: the trackedSessionIds guard below would otherwise
     // let a foreign session through if it was accidentally tracked.

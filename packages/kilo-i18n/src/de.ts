@@ -1,4 +1,7 @@
+import { conversationMemory } from "./conversation-memory"
+
 export const dict = {
+  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.line1":
     "Kilo Gateway bietet Ihnen Zugang zu einer kuratierten Auswahl zuverlässiger, optimierter Modelle für Coding-Agenten.",

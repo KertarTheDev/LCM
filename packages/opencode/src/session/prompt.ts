@@ -1811,8 +1811,10 @@ export const layer = Layer.effect(
             tools,
             rawTokens,
             usableInputTokens,
+            thresholdRatio,
           })
           let projectedMessages = requestMessages
+          let forceUpstreamCompaction = false
           if (usableInputTokens > 0 && rawTokens / usableInputTokens >= thresholdRatio) {
             const transcript = yield* MessageV2.stream(sessionID).pipe(
               Effect.provideService(Database.Service, database),
@@ -1832,32 +1834,39 @@ export const layer = Layer.effect(
               model,
             })
             projectedMessages = projection.messages
+            // A prepared tree can still become unavailable or prove ineffective
+            // while assembling this exact request. At hard pressure, enter Kilo's
+            // existing compaction path instead of sending the oversized raw input.
+            forceUpstreamCompaction =
+              cfg.compaction?.auto !== false && rawTokens >= usableInputTokens && projection.type !== "projected"
           }
           // kilocode_change end
-          const result = yield* handle.process({
-            // kilocode_change start - keep Ask/Plan tool filtering hardened against session allows
-            user: lastUser,
-            agent,
-            permission: KiloSessionPrompt.guardPermissions({ agent, session }),
-            // kilocode_change end
-            sessionID,
-            parentSessionID: session.parentID,
-            system,
-            messages: projectedMessages, // kilocode_change - unchanged upstream input or a verified LCM projection
-            tools,
-            model,
-            toolChoice: format.type === "json_schema" ? "required" : undefined,
-            // kilocode_change start - feed the provider-reported context size from the last finished
-            // turn into the output-token cap, so image/vision input is measured by the provider
-            // rather than by encoded payload bytes (see KiloLLM.capOutputTokens). Summary messages
-            // are skipped like in the isOverflow check above: their reported input reflects the
-            // pre-compaction history, not the trimmed context of the next request.
-            reportedContextTokens:
-              lastFinished && lastFinished.summary !== true
-                ? KiloSessionOverflow.count(lastFinished.tokens)
-                : undefined,
-            // kilocode_change end
-          })
+          const result = forceUpstreamCompaction
+            ? ("compact" as const)
+            : yield* handle.process({
+                // kilocode_change start - keep Ask/Plan tool filtering hardened against session allows
+                user: lastUser,
+                agent,
+                permission: KiloSessionPrompt.guardPermissions({ agent, session }),
+                // kilocode_change end
+                sessionID,
+                parentSessionID: session.parentID,
+                system,
+                messages: projectedMessages, // kilocode_change - unchanged upstream input or a verified LCM projection
+                tools,
+                model,
+                toolChoice: format.type === "json_schema" ? "required" : undefined,
+                // kilocode_change start - feed the provider-reported context size from the last finished
+                // turn into the output-token cap, so image/vision input is measured by the provider
+                // rather than by encoded payload bytes (see KiloLLM.capOutputTokens). Summary messages
+                // are skipped like in the isOverflow check above: their reported input reflects the
+                // pre-compaction history, not the trimmed context of the next request.
+                reportedContextTokens:
+                  lastFinished && lastFinished.summary !== true
+                    ? KiloSessionOverflow.count(lastFinished.tokens)
+                    : undefined,
+                // kilocode_change end
+              })
 
           // kilocode_change start - persist a lightweight marker when this assistant step had memory context
           const marker = KiloSessionPrompt.memoryPart({ sessionID, message: handle.message, cache: memoryCache })

@@ -70,6 +70,8 @@ export const loadMemory = Effect.fn("LcmTool.loadMemory")(function* (input: {
   memory: ConversationMemory.Interface
   database: Database.Interface
 }) {
+  if (input.signal.aborted)
+    throw new LcmToolError("lcm_cancelled", "The Conversation Memory operation was cancelled.")
   const transcript = yield* MessageV2.stream(input.sessionID).pipe(
     Effect.provideService(Database.Service, input.database),
   )
@@ -78,6 +80,8 @@ export const loadMemory = Effect.fn("LcmTool.loadMemory")(function* (input: {
     transcript,
     signal: input.signal,
   })
+  if (input.signal.aborted)
+    throw new LcmToolError("lcm_cancelled", "The Conversation Memory operation was cancelled.")
   if (!indexed) return safe(new Error("lcm_unavailable"))
   const state = yield* Effect.promise(() => indexed.store.inspect(input.sessionID))
   if (state.lineageDigest !== indexed.lineage.digest) return safe(new Error("lcm_stale_lineage"))

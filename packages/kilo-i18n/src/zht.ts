@@ -1,4 +1,7 @@
+import { conversationMemory } from "./conversation-memory"
+
 export const dict = {
+  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.line1": "Kilo Gateway 為您提供一組精選的可靠優化模型，專為編碼代理設計。",
   "provider.connect.kiloGateway.line2": "只需一個 API 金鑰，您就可以使用 Claude、GPT、Gemini、GLM 等模型。",
@@ -40,18 +43,15 @@ export const dict = {
   "marketplace.install.scope": "作用域",
   "marketplace.install.scope.project": "專案",
   "marketplace.install.scope.global": "全域",
-  "marketplace.install.scope.project.description":
-    "僅限此專案。安裝的檔案可以提交至版本控制並與你的團隊分享。",
+  "marketplace.install.scope.project.description": "僅限此專案。安裝的檔案可以提交至版本控制並與你的團隊分享。",
   "marketplace.install.scope.global.description": "此電腦上的所有專案。儲存在你的使用者設定中。",
   "marketplace.install.destination": "安裝位置",
-  "marketplace.install.about.mcp":
-    "MCP 伺服器為 Kilo 提供用於處理外部服務或本機程式的額外工具。",
+  "marketplace.install.about.mcp": "MCP 伺服器為 Kilo 提供用於處理外部服務或本機程式的額外工具。",
   "marketplace.install.about.agent": "智能體會新增一個具有專屬指示和權限的可重複使用角色。",
   "marketplace.install.about.skill": "技能會新增特定任務的指示和資源，Kilo 可在需要時載入它們。",
   "marketplace.install.mcp.warning":
     "MCP 伺服器可以執行本機命令或連線至外部服務。除非你的權限允許自動使用，否則 Kilo 會在使用其工具前請求許可。",
-  "marketplace.install.project.warning":
-    "專案檔案可能會提交至版本控制。除非設定引用了環境變數，否則請勿在此儲存密鑰。",
+  "marketplace.install.project.warning": "專案檔案可能會提交至版本控制。除非設定引用了環境變數，否則請勿在此儲存密鑰。",
   "marketplace.install.learnMore": "瞭解 Marketplace 安裝的運作方式",
   "marketplace.install.learnMcp": "深入瞭解 MCP",
   "marketplace.install.installedAt": "已安裝至 {{path}}",

@@ -79,6 +79,7 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
   })
 
   const hasTimeline = createMemo(() => {
+    if (session.lcmActivity().length > 0) return true
     for (const m of session.visibleMessages()) {
       if (m.role !== "assistant") continue
       if (session.getParts(m.id).some((p) => p.type !== "step-start")) return true

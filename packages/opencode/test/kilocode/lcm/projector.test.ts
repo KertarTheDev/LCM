@@ -7,7 +7,7 @@ import { SummaryTree } from "@/kilocode/session/lcm/summary-tree"
 import type { FinalSource } from "@/kilocode/session/lcm/types"
 
 function makeSource(ordinal: number): FinalSource {
-  const content = `turn ${ordinal} ${"detail ".repeat(500)}`
+  const content = sourceText(ordinal)
   const digest = sha256(content)
   return {
     id: sourceID({
@@ -27,6 +27,10 @@ function makeSource(ordinal: number): FinalSource {
     bytes: Buffer.byteLength(content),
     excerpt: content.slice(0, 300),
   }
+}
+
+function sourceText(ordinal: number) {
+  return `turn ${ordinal} ${"detail ".repeat(500)}`
 }
 
 function measure(messages: ModelMessage[]) {
@@ -66,6 +70,7 @@ describe("LCM projector", () => {
       usableInputTokens: 4_000,
       thresholdRatio: 0.6,
       protectedTailTurns: 2,
+      sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
       continuationID: "msg_current",
       reason: "soft",
       measure,
@@ -90,6 +95,7 @@ describe("LCM projector", () => {
       usableInputTokens: 4_000,
       thresholdRatio: 0.6,
       protectedTailTurns: 2,
+      sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
       continuationID: "msg_current",
       reason: "soft",
       measure,
@@ -109,6 +115,7 @@ describe("LCM projector", () => {
       messages,
       tools: {},
       protectedTailTurns: 2,
+      sourceContent: new Map(),
       reason: "soft" as const,
       measure,
     }
@@ -130,6 +137,65 @@ describe("LCM projector", () => {
         })
       ).type,
     ).toBe("unchanged")
+    store.close()
+  })
+
+  test("restores finer tree detail when the request has more usable context", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = Array.from({ length: 40 }, (_, ordinal) => makeSource(ordinal))
+    const lineage = {
+      sessionID: "ses_adaptive",
+      digest: lineageDigest(sources),
+      sourceCount: sources.length,
+      lastSourceID: sources.at(-1)?.id,
+    }
+    const scoped = sources.map((source) => ({ ...source, sessionID: lineage.sessionID }))
+    await store.replaceSources({ sessionID: lineage.sessionID, lineage, sources: scoped })
+    await new SummaryTree(store).build({
+      sessionID: lineage.sessionID,
+      lineage,
+      usableInputTokens: 4_000,
+      protectedSources: 4,
+      reason: "background",
+    })
+    const messages: ModelMessage[] = Array.from({ length: 40 }, (_, index) => ({
+      role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
+      content: sourceText(index),
+    }))
+    const sourceContent = new Map(scoped.map((source) => [source.id, sourceText(source.ordinal)]))
+    const projector = new Projector(store)
+    const narrow = await projector.project({
+      sessionID: lineage.sessionID,
+      lineage,
+      system: [],
+      messages,
+      tools: {},
+      usableInputTokens: 10_000,
+      thresholdRatio: 0.6,
+      protectedTailTurns: 2,
+      sourceContent,
+      reason: "soft",
+      measure,
+    })
+    const wider = await projector.project({
+      sessionID: lineage.sessionID,
+      lineage,
+      system: [],
+      messages,
+      tools: {},
+      usableInputTokens: 20_000,
+      thresholdRatio: 0.6,
+      protectedTailTurns: 2,
+      sourceContent,
+      reason: "soft",
+      measure,
+    })
+
+    expect(narrow.type).toBe("projected")
+    expect(wider.type).toBe("projected")
+    if (narrow.type !== "projected" || wider.type !== "projected") throw new Error("expected adaptive projections")
+    expect(JSON.stringify(wider.messages[0]).length).toBeGreaterThan(JSON.stringify(narrow.messages[0]).length)
+    expect(wider.pressureAfter).toBeLessThanOrEqual(0.9)
     store.close()
   })
 })

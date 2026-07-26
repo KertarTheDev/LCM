@@ -39,7 +39,7 @@ export function lineageDigest(sources: Array<Pick<FinalSource, "id" | "digest" |
   return sha256(JSON.stringify(sources.map((source) => [source.ordinal, source.id, source.digest])))
 }
 
-export function sortableID(prefix: "rev" | "frame" | "activity" | "attempt" | "export") {
+export function sortableID(prefix: "rev" | "frame" | "activity" | "attempt" | "export" | "lease") {
   return `${prefix}_${ulid()}`
 }
 

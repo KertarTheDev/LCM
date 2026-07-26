@@ -11409,6 +11409,490 @@
         ]
       }
     },
+    "/session/{sessionID}/lcm/status": {
+      "get": {
+        "tags": ["conversation-memory"],
+        "operationId": "conversationMemory.status",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation Memory status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionID": {
+                      "type": "string"
+                    },
+                    "sequence": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": ["raw", "preparing", "summarized"]
+                    },
+                    "health": {
+                      "type": "string",
+                      "enum": ["ok", "degraded"]
+                    },
+                    "capacity": {
+                      "type": "object",
+                      "properties": {
+                        "known": {
+                          "type": "boolean"
+                        },
+                        "usableInputTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "rawInputTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "activeInputTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "freeTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "pressureRatio": {
+                          "type": "number"
+                        },
+                        "thresholdRatio": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["known"],
+                      "additionalProperties": false
+                    },
+                    "composition": {
+                      "type": "object",
+                      "properties": {
+                        "revisionID": {
+                          "type": "string"
+                        },
+                        "rawTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "summaryTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "rawItems": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "summaryItems": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["rawTokens", "summaryTokens", "rawItems", "summaryItems"],
+                      "additionalProperties": false
+                    },
+                    "background": {
+                      "type": "object",
+                      "properties": {
+                        "pendingSources": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "summarizing": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["pendingSources", "summarizing"],
+                      "additionalProperties": false
+                    },
+                    "memoryWork": {
+                      "type": "object",
+                      "properties": {
+                        "attempts": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "inputTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "outputTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "reasoningTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "cacheReadTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "cacheWriteTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "cost": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "attempts",
+                        "inputTokens",
+                        "outputTokens",
+                        "reasoningTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
+                        "cost"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "lastInterventionAt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "issue": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "since": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "lastAt": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "nextRetryAt": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["code", "message", "since", "lastAt"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "sessionID",
+                    "sequence",
+                    "mode",
+                    "health",
+                    "capacity",
+                    "composition",
+                    "background",
+                    "memoryWork"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Conversation Memory status"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return current context pressure, composition, background work, and memory-work usage.",
+        "summary": "Get conversation context status",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.conversationMemory.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/lcm/activity": {
+      "get": {
+        "tags": ["conversation-memory"],
+        "operationId": "conversationMemory.activity",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation Memory activity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "sessionID": {
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": ["summary_created", "frontier_advanced", "intervention", "fallback", "rebuild"]
+                          },
+                          "pressureBefore": {
+                            "type": "number"
+                          },
+                          "pressureAfter": {
+                            "type": "number"
+                          },
+                          "rawTokens": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "summaryTokens": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "summaryIDs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": ["id", "sessionID", "sequence", "kind", "message", "createdAt"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["items"],
+                  "additionalProperties": false,
+                  "description": "Conversation Memory activity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return a cursor-paged timeline of context preparation and projection activity.",
+        "summary": "List conversation context activity",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.conversationMemory.activity({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/lcm/context/export": {
+      "post": {
+        "tags": ["conversation-memory"],
+        "operationId": "conversationMemory.export",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/effect_HttpApiError_ServiceUnavailable"
+                }
+              }
+            }
+          }
+        },
+        "description": "Download a redacted ZIP containing intervention frames and the latest active model input.",
+        "summary": "Export normalized conversation context",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createKiloClient } from \"@kilocode/sdk\"\n\nconst client = createKiloClient()\nawait client.conversationMemory.export({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/config/overlay": {
       "get": {
         "tags": ["config-console"],
@@ -23685,6 +24169,15 @@
             "$ref": "#/components/schemas/EventServerInstanceDisposed"
           },
           {
+            "$ref": "#/components/schemas/EventSessionTurnOpen"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionTurnClose"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionQueueChanged"
+          },
+          {
             "$ref": "#/components/schemas/EventSessionNetworkAsked"
           },
           {
@@ -23710,12 +24203,6 @@
           },
           {
             "$ref": "#/components/schemas/EventInteractive_terminalDeleted"
-          },
-          {
-            "$ref": "#/components/schemas/EventSessionTurnOpen"
-          },
-          {
-            "$ref": "#/components/schemas/EventSessionTurnClose"
           },
           {
             "$ref": "#/components/schemas/EventSandboxStatusChanged"
@@ -23745,10 +24232,10 @@
             "$ref": "#/components/schemas/EventKilocodeNotebookCancelled"
           },
           {
-            "$ref": "#/components/schemas/EventLspClientDiagnostics"
+            "$ref": "#/components/schemas/EventKilo-sessionsRemote-status-changed"
           },
           {
-            "$ref": "#/components/schemas/EventKilo-sessionsRemote-status-changed"
+            "$ref": "#/components/schemas/EventLspClientDiagnostics"
           },
           {
             "$ref": "#/components/schemas/EventMemoryStatus1"
@@ -24006,10 +24493,16 @@
             "$ref": "#/components/schemas/EventProjectUpdated"
           },
           {
+            "$ref": "#/components/schemas/EventVcsBranchUpdated"
+          },
+          {
             "$ref": "#/components/schemas/EventLspUpdated"
           },
           {
-            "$ref": "#/components/schemas/EventVcsBranchUpdated"
+            "$ref": "#/components/schemas/EventSessionLcmStatus"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionLcmActivity"
           },
           {
             "$ref": "#/components/schemas/EventWorkspaceReady"
@@ -26026,7 +26519,7 @@
             "type": "object",
             "properties": {
               "start": {
-                "type": "number",
+                "type": "integer",
                 "minimum": 0
               }
             },
@@ -26102,11 +26595,11 @@
             "type": "object",
             "properties": {
               "start": {
-                "type": "number",
+                "type": "integer",
                 "minimum": 0
               },
               "end": {
-                "type": "number",
+                "type": "integer",
                 "minimum": 0
               },
               "elapsed": {
@@ -26871,6 +27364,15 @@
                 "$ref": "#/components/schemas/EventServerInstanceDisposed"
               },
               {
+                "$ref": "#/components/schemas/EventSessionTurnOpen"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionTurnClose"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionQueueChanged"
+              },
+              {
                 "$ref": "#/components/schemas/EventSessionNetworkAsked"
               },
               {
@@ -26896,12 +27398,6 @@
               },
               {
                 "$ref": "#/components/schemas/EventInteractive_terminalDeleted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionTurnOpen"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionTurnClose"
               },
               {
                 "$ref": "#/components/schemas/EventSandboxStatusChanged"
@@ -26931,10 +27427,10 @@
                 "$ref": "#/components/schemas/EventKilocodeNotebookCancelled"
               },
               {
-                "$ref": "#/components/schemas/EventLspClientDiagnostics"
+                "$ref": "#/components/schemas/EventKilo-sessionsRemote-status-changed"
               },
               {
-                "$ref": "#/components/schemas/EventKilo-sessionsRemote-status-changed"
+                "$ref": "#/components/schemas/EventLspClientDiagnostics"
               },
               {
                 "$ref": "#/components/schemas/EventMemoryStatus"
@@ -27192,10 +27688,16 @@
                 "$ref": "#/components/schemas/EventProjectUpdated"
               },
               {
+                "$ref": "#/components/schemas/EventVcsBranchUpdated"
+              },
+              {
                 "$ref": "#/components/schemas/EventLspUpdated"
               },
               {
-                "$ref": "#/components/schemas/EventVcsBranchUpdated"
+                "$ref": "#/components/schemas/EventSessionLcmStatus"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionLcmActivity"
               },
               {
                 "$ref": "#/components/schemas/EventWorkspaceReady"
@@ -32522,6 +33024,17 @@
         "required": ["message"],
         "additionalProperties": false
       },
+      "effect_HttpApiError_ServiceUnavailable": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ServiceUnavailable"]
+          }
+        },
+        "required": ["_tag"],
+        "additionalProperties": false
+      },
       "ConfigOverlayResponse": {
         "type": "object",
         "properties": {
@@ -33131,17 +33644,6 @@
           "_tag": {
             "type": "string",
             "enum": ["Unauthorized"]
-          }
-        },
-        "required": ["_tag"],
-        "additionalProperties": false
-      },
-      "effect_HttpApiError_ServiceUnavailable": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["ServiceUnavailable"]
           }
         },
         "required": ["_tag"],
@@ -34378,6 +34880,96 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventSessionTurnOpen": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.turn.open"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionTurnClose": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.turn.close"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "parentID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["completed", "error", "interrupted"]
+              }
+            },
+            "required": ["sessionID", "reason"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionQueueChanged": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.queue.changed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "queued": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^msg"
+                }
+              }
+            },
+            "required": ["sessionID", "queued"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventSessionNetworkAsked": {
         "type": "object",
         "properties": {
@@ -34624,64 +35216,6 @@
               }
             },
             "required": ["terminalID", "sessionID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventSessionTurnOpen": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.turn.open"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              }
-            },
-            "required": ["sessionID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventSessionTurnClose": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.turn.close"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "parentID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "reason": {
-                "type": "string",
-                "enum": ["completed", "error", "interrupted"]
-              }
-            },
-            "required": ["sessionID", "reason"],
             "additionalProperties": false
           }
         },
@@ -34997,33 +35531,6 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventLspClientDiagnostics": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["lsp.client.diagnostics"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "serverID": {
-                "type": "string"
-              },
-              "path": {
-                "type": "string"
-              }
-            },
-            "required": ["serverID", "path"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
       "EventKilo-sessionsRemote-status-changed": {
         "type": "object",
         "properties": {
@@ -35045,6 +35552,33 @@
               }
             },
             "required": ["enabled", "connected"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventLspClientDiagnostics": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["lsp.client.diagnostics"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "serverID": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": ["serverID", "path"],
             "additionalProperties": false
           }
         },
@@ -39610,6 +40144,29 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventVcsBranchUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["vcs.branch.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "branch": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventLspUpdated": {
         "type": "object",
         "properties": {
@@ -39628,7 +40185,7 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventVcsBranchUpdated": {
+      "EventSessionLcmStatus": {
         "type": "object",
         "properties": {
           "id": {
@@ -39636,15 +40193,264 @@
           },
           "type": {
             "type": "string",
-            "enum": ["vcs.branch.updated"]
+            "enum": ["session.lcm.status"]
           },
           "properties": {
             "type": "object",
             "properties": {
-              "branch": {
-                "type": "string"
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "status": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["raw", "preparing", "summarized"]
+                  },
+                  "health": {
+                    "type": "string",
+                    "enum": ["ok", "degraded"]
+                  },
+                  "capacity": {
+                    "type": "object",
+                    "properties": {
+                      "known": {
+                        "type": "boolean"
+                      },
+                      "usableInputTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "rawInputTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "activeInputTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "freeTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "pressureRatio": {
+                        "type": "number"
+                      },
+                      "thresholdRatio": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["known"],
+                    "additionalProperties": false
+                  },
+                  "composition": {
+                    "type": "object",
+                    "properties": {
+                      "revisionID": {
+                        "type": "string"
+                      },
+                      "rawTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "summaryTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "rawItems": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "summaryItems": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": ["rawTokens", "summaryTokens", "rawItems", "summaryItems"],
+                    "additionalProperties": false
+                  },
+                  "background": {
+                    "type": "object",
+                    "properties": {
+                      "pendingSources": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "summarizing": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["pendingSources", "summarizing"],
+                    "additionalProperties": false
+                  },
+                  "memoryWork": {
+                    "type": "object",
+                    "properties": {
+                      "attempts": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "inputTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "outputTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "reasoningTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "cacheReadTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "cacheWriteTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "cost": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "attempts",
+                      "inputTokens",
+                      "outputTokens",
+                      "reasoningTokens",
+                      "cacheReadTokens",
+                      "cacheWriteTokens",
+                      "cost"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "lastInterventionAt": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "issue": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "since": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "lastAt": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "nextRetryAt": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": ["code", "message", "since", "lastAt"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "sequence",
+                  "mode",
+                  "health",
+                  "capacity",
+                  "composition",
+                  "background",
+                  "memoryWork"
+                ],
+                "additionalProperties": false
               }
             },
+            "required": ["sessionID", "status"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionLcmActivity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.lcm.activity"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "activity": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "sessionID": {
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": ["summary_created", "frontier_advanced", "intervention", "fallback", "rebuild"]
+                  },
+                  "pressureBefore": {
+                    "type": "number"
+                  },
+                  "pressureAfter": {
+                    "type": "number"
+                  },
+                  "rawTokens": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "summaryTokens": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "summaryIDs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": ["id", "sessionID", "sequence", "kind", "message", "createdAt"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["sessionID", "activity"],
             "additionalProperties": false
           }
         },
@@ -45053,6 +45859,10 @@
     {
       "name": "commit-message",
       "description": "Kilo commit message routes."
+    },
+    {
+      "name": "conversation-memory",
+      "description": "Kilo Conversation Memory observability routes."
     },
     {
       "name": "config-console",

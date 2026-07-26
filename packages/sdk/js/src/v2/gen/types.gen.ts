@@ -116,6 +116,8 @@ export type Event =
   | EventProjectUpdated
   | EventVcsBranchUpdated
   | EventLspUpdated
+  | EventSessionLcmStatus
+  | EventSessionLcmActivity
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventWorkspaceStatus
@@ -1168,6 +1170,8 @@ export type GlobalEvent = {
     | EventProjectUpdated
     | EventVcsBranchUpdated
     | EventLspUpdated
+    | EventSessionLcmStatus
+    | EventSessionLcmActivity
     | EventWorkspaceReady
     | EventWorkspaceFailed
     | EventWorkspaceStatus
@@ -2953,6 +2957,10 @@ export type CommitMessageNoChangesError = {
   message: string
 }
 
+export type EffectHttpApiErrorServiceUnavailable = {
+  _tag: "ServiceUnavailable"
+}
+
 export type ConfigOverlayResponse = {
   scope: "global" | "project"
   effective: Config
@@ -3135,10 +3143,6 @@ export type InteractiveTerminalResizeInput = {
 
 export type EffectHttpApiErrorUnauthorized = {
   _tag: "Unauthorized"
-}
-
-export type EffectHttpApiErrorServiceUnavailable = {
-  _tag: "ServiceUnavailable"
 }
 
 export type CloudSessionImportError = {
@@ -4971,6 +4975,78 @@ export type EventLspUpdated = {
   type: "lsp.updated"
   properties: {
     [key: string]: unknown
+  }
+}
+
+export type EventSessionLcmStatus = {
+  id: string
+  type: "session.lcm.status"
+  properties: {
+    sessionID: string
+    status: {
+      sessionID: string
+      sequence: number
+      mode: "raw" | "preparing" | "summarized"
+      health: "ok" | "degraded"
+      capacity: {
+        known: boolean
+        usableInputTokens?: number
+        rawInputTokens?: number
+        activeInputTokens?: number
+        freeTokens?: number
+        pressureRatio?: number
+        thresholdRatio?: number
+      }
+      composition: {
+        revisionID?: string
+        rawTokens: number
+        summaryTokens: number
+        rawItems: number
+        summaryItems: number
+      }
+      background: {
+        pendingSources: number
+        summarizing: boolean
+      }
+      memoryWork: {
+        attempts: number
+        inputTokens: number
+        outputTokens: number
+        reasoningTokens: number
+        cacheReadTokens: number
+        cacheWriteTokens: number
+        cost: number
+      }
+      lastInterventionAt?: number
+      issue?: {
+        code: string
+        message: string
+        since: number
+        lastAt: number
+        nextRetryAt?: number
+      }
+    }
+  }
+}
+
+export type EventSessionLcmActivity = {
+  id: string
+  type: "session.lcm.activity"
+  properties: {
+    sessionID: string
+    activity: {
+      id: string
+      sessionID: string
+      sequence: number
+      kind: "summary_created" | "frontier_advanced" | "intervention" | "fallback" | "rebuild"
+      pressureBefore?: number
+      pressureAfter?: number
+      rawTokens?: number
+      summaryTokens?: number
+      summaryIDs?: Array<string>
+      message: string
+      createdAt: number
+    }
   }
 }
 
@@ -11161,6 +11237,174 @@ export type CommitMessageGenerateResponses = {
 }
 
 export type CommitMessageGenerateResponse = CommitMessageGenerateResponses[keyof CommitMessageGenerateResponses]
+
+export type ConversationMemoryStatusData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/status"
+}
+
+export type ConversationMemoryStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type ConversationMemoryStatusError = ConversationMemoryStatusErrors[keyof ConversationMemoryStatusErrors]
+
+export type ConversationMemoryStatusResponses = {
+  /**
+   * Conversation Memory status
+   */
+  200: {
+    sessionID: string
+    sequence: number
+    mode: "raw" | "preparing" | "summarized"
+    health: "ok" | "degraded"
+    capacity: {
+      known: boolean
+      usableInputTokens?: number
+      rawInputTokens?: number
+      activeInputTokens?: number
+      freeTokens?: number
+      pressureRatio?: number
+      thresholdRatio?: number
+    }
+    composition: {
+      revisionID?: string
+      rawTokens: number
+      summaryTokens: number
+      rawItems: number
+      summaryItems: number
+    }
+    background: {
+      pendingSources: number
+      summarizing: boolean
+    }
+    memoryWork: {
+      attempts: number
+      inputTokens: number
+      outputTokens: number
+      reasoningTokens: number
+      cacheReadTokens: number
+      cacheWriteTokens: number
+      cost: number
+    }
+    lastInterventionAt?: number
+    issue?: {
+      code: string
+      message: string
+      since: number
+      lastAt: number
+      nextRetryAt?: number
+    }
+  }
+}
+
+export type ConversationMemoryStatusResponse =
+  ConversationMemoryStatusResponses[keyof ConversationMemoryStatusResponses]
+
+export type ConversationMemoryActivityData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    cursor?: string
+    limit?: string
+  }
+  url: "/session/{sessionID}/lcm/activity"
+}
+
+export type ConversationMemoryActivityErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type ConversationMemoryActivityError = ConversationMemoryActivityErrors[keyof ConversationMemoryActivityErrors]
+
+export type ConversationMemoryActivityResponses = {
+  /**
+   * Conversation Memory activity
+   */
+  200: {
+    items: Array<{
+      id: string
+      sessionID: string
+      sequence: number
+      kind: "summary_created" | "frontier_advanced" | "intervention" | "fallback" | "rebuild"
+      pressureBefore?: number
+      pressureAfter?: number
+      rawTokens?: number
+      summaryTokens?: number
+      summaryIDs?: Array<string>
+      message: string
+      createdAt: number
+    }>
+    nextCursor?: string
+  }
+}
+
+export type ConversationMemoryActivityResponse =
+  ConversationMemoryActivityResponses[keyof ConversationMemoryActivityResponses]
+
+export type ConversationMemoryExportData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/context/export"
+}
+
+export type ConversationMemoryExportErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ServiceUnavailable
+   */
+  503: EffectHttpApiErrorServiceUnavailable
+}
+
+export type ConversationMemoryExportError = ConversationMemoryExportErrors[keyof ConversationMemoryExportErrors]
+
+export type ConversationMemoryExportResponses = {
+  /**
+   * Success
+   */
+  200: Blob | File
+}
+
+export type ConversationMemoryExportResponse =
+  ConversationMemoryExportResponses[keyof ConversationMemoryExportResponses]
 
 export type ConfigOverlayData = {
   body?: never

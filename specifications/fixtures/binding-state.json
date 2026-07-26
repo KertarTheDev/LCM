@@ -1,0 +1,70 @@
+{
+  "sessionID": "ses_binding_state",
+  "usableInputTokens": 8000,
+  "protectedSources": 2,
+  "entries": [
+    "Initial goal: port the extension by replaying the older branch.",
+    "Constraint: preserve the upstream notify_user and recall tools.",
+    "Decisive error: SQLITE_BUSY while opening /workspace/.kilo/kilo.db.",
+    "Decision: use a rebuildable SQLite sidecar beside the selected Kilo database.",
+    "Rejected path: do not retry the PGlite worker integration.",
+    "Exact command: bun run --cwd packages/opencode lcm:tree.",
+    "Numeric limit: an active frontier contains at most 8 roots.",
+    "Condensation rule: combine the oldest 4 siblings when the frontier is wider than its bound.",
+    "File owner: packages/opencode/src/kilocode/session/lcm/service.ts.",
+    "Issue ID: LCM-416 tracks the v7.4.16 compatibility review.",
+    "Completed work: final-only transcript indexing is implemented.",
+    "Remaining work: verify the packaged VSIX on macOS and VSCodium.",
+    "Preference override: apply the current-state delta instead of replaying old commits.",
+    "Continuity rule: keep the current user turn and active tool chain verbatim.",
+    "Release base: upstream Kilo Code v7.4.16 at f80ebff83b32550333da7c50c91c4755e4524d0d.",
+    "Current goal: ship a frictionless single-session continuity layer without disabling upstream features."
+  ],
+  "bindings": [
+    {
+      "name": "storage",
+      "sourceOrdinal": 3,
+      "exact": "use a rebuildable SQLite sidecar beside the selected Kilo database"
+    },
+    {
+      "name": "rejected-path",
+      "sourceOrdinal": 4,
+      "exact": "do not retry the PGlite worker integration"
+    },
+    {
+      "name": "command",
+      "sourceOrdinal": 5,
+      "exact": "bun run --cwd packages/opencode lcm:tree"
+    },
+    {
+      "name": "numeric-limit",
+      "sourceOrdinal": 6,
+      "exact": "at most 8 roots"
+    },
+    {
+      "name": "file-owner",
+      "sourceOrdinal": 8,
+      "exact": "packages/opencode/src/kilocode/session/lcm/service.ts"
+    },
+    {
+      "name": "remaining-work",
+      "sourceOrdinal": 11,
+      "exact": "verify the packaged VSIX on macOS and VSCodium"
+    },
+    {
+      "name": "preference-override",
+      "sourceOrdinal": 12,
+      "exact": "apply the current-state delta instead of replaying old commits"
+    },
+    {
+      "name": "release-base",
+      "sourceOrdinal": 14,
+      "exact": "f80ebff83b32550333da7c50c91c4755e4524d0d"
+    },
+    {
+      "name": "current-goal",
+      "sourceOrdinal": 15,
+      "exact": "frictionless single-session continuity layer without disabling upstream features"
+    }
+  ]
+}

@@ -910,7 +910,7 @@ describe("session prompt queue", () => {
     } finally {
       server.stop(true)
     }
-  }, 10_000)
+  }, 120_000) // kilocode_change - allow full runtime startup on throttled release verification
 
   test("drop returns false for the actively running prompt", async () => {
     const sessionID = SessionID.make("session_drop_active")

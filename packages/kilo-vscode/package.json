@@ -1186,6 +1186,7 @@
     "lint": "eslint src webview-ui",
     "test": "vscode-test",
     "test:unit": "bun test tests/unit/ --dots",
+    "lcm:ui": "bun test tests/unit/lcm-ui.test.ts tests/unit/i18n-keys.test.ts tests/unit/connection-utils.test.ts tests/unit/task-timeline-tooltip.test.ts --timeout 120000",
     "rebuild-sdk": "bun run --cwd ../sdk/js build",
     "storybook": "storybook dev -p 6007",
     "build-storybook": "storybook build -o storybook-static",

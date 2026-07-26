@@ -1,4 +1,7 @@
+import { conversationMemory } from "./conversation-memory"
+
 export const dict = {
+  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.line1": "Kilo Gateway 为您提供一组精选的可靠优化模型，专为编码代理设计。",
   "provider.connect.kiloGateway.line2": "只需一个 API 密钥，您就可以使用 Claude、GPT、Gemini、GLM 等模型。",
@@ -40,12 +43,10 @@ export const dict = {
   "marketplace.install.scope": "作用域",
   "marketplace.install.scope.project": "项目",
   "marketplace.install.scope.global": "全局",
-  "marketplace.install.scope.project.description":
-    "仅限此项目。安装的文件可以提交到版本控制并与你的团队共享。",
+  "marketplace.install.scope.project.description": "仅限此项目。安装的文件可以提交到版本控制并与你的团队共享。",
   "marketplace.install.scope.global.description": "此计算机上的所有项目。存储在你的用户配置中。",
   "marketplace.install.destination": "安装位置",
-  "marketplace.install.about.mcp":
-    "MCP 服务器为 Kilo 提供用于处理外部服务或本地程序的额外工具。",
+  "marketplace.install.about.mcp": "MCP 服务器为 Kilo 提供用于处理外部服务或本地程序的额外工具。",
   "marketplace.install.about.agent": "智能体会添加一个具有专属指令和权限的可复用角色。",
   "marketplace.install.about.skill": "技能会添加特定任务的指令和资源，Kilo 可在需要时加载它们。",
   "marketplace.install.mcp.warning":

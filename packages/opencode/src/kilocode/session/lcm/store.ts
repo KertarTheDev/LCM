@@ -1,6 +1,7 @@
 import path from "node:path"
-import { chmodSync, existsSync } from "node:fs"
+import { chmodSync, existsSync, renameSync } from "node:fs"
 import { open } from "#lcm-db"
+import { sha256 } from "./ids"
 import { LCM_SCHEMA_VERSION } from "./types"
 import type {
   ActivityRecord,
@@ -10,6 +11,7 @@ import type {
   FrontierItem,
   FrontierRevision,
   MemoryState,
+  MemoryStoreMetrics,
   SummaryAttempt,
   SummaryChild,
   SummaryNode,
@@ -127,6 +129,11 @@ CREATE TABLE IF NOT EXISTS lcm_activity (
   UNIQUE(session_id, sequence)
 );
 CREATE INDEX IF NOT EXISTS lcm_activity_session_idx ON lcm_activity(session_id, sequence DESC);
+CREATE TABLE IF NOT EXISTS lcm_blob (
+  blob_id TEXT PRIMARY KEY,
+  content BLOB NOT NULL,
+  byte_count INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS lcm_context_frame (
   frame_id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
@@ -135,10 +142,12 @@ CREATE TABLE IF NOT EXISTS lcm_context_frame (
   lineage_digest TEXT NOT NULL,
   active INTEGER NOT NULL,
   reason TEXT NOT NULL,
-  pre_json TEXT NOT NULL,
-  post_json TEXT NOT NULL,
+  pre_blob_id TEXT NOT NULL,
+  post_blob_id TEXT NOT NULL,
   pressure_before REAL,
   pressure_after REAL,
+  usable_input_tokens INTEGER NOT NULL,
+  threshold_ratio REAL NOT NULL,
   raw_tokens INTEGER NOT NULL,
   summary_tokens INTEGER NOT NULL,
   created_at INTEGER NOT NULL
@@ -235,10 +244,12 @@ type FrameRow = {
   lineage_digest: string
   active: number
   reason: ContextFrame["reason"]
-  pre_json: string
-  post_json: string
+  pre_blob_id: string
+  post_blob_id: string
   pressure_before: number | null
   pressure_after: number | null
+  usable_input_tokens: number
+  threshold_ratio: number
   raw_tokens: number
   summary_tokens: number
   created_at: number
@@ -306,25 +317,51 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
   private constructor(
     private readonly client: ReturnType<typeof open>,
     readonly path: string,
+    readonly recovered: boolean,
   ) {}
 
   static open(input: { databasePath: string; derivedPath?: string }) {
     const target = input.derivedPath ?? sidecarPath(input.databasePath)
+    try {
+      return SqliteConversationMemoryStore.openTarget(target)
+    } catch (error) {
+      const code = error instanceof Error ? error.message : ""
+      const recoverable =
+        code === "lcm_schema_incompatible" ||
+        code.includes("SQLITE_CORRUPT") ||
+        code.includes("SQLITE_NOTADB") ||
+        code.includes("database disk image is malformed") ||
+        code.includes("file is not a database")
+      if (target === ":memory:" || !existsSync(target) || !recoverable) throw error
+      const suffix = `.incompatible-${Date.now()}`
+      renameSync(target, `${target}${suffix}`)
+      for (const companion of [`${target}-wal`, `${target}-shm`]) {
+        if (existsSync(companion)) renameSync(companion, `${companion}${suffix}`)
+      }
+      return SqliteConversationMemoryStore.openTarget(target, true)
+    }
+  }
+
+  private static openTarget(target: string, recovered = false) {
     const existed = target === ":memory:" || existsSync(target)
     const client = open(target)
-    client.exec("PRAGMA journal_mode = WAL")
-    client.exec("PRAGMA synchronous = NORMAL")
-    client.exec("PRAGMA busy_timeout = 250")
-    client.exec("PRAGMA foreign_keys = ON")
-    client.exec(SCHEMA)
-    const version = client.get<{ value: string }>("SELECT value FROM lcm_meta WHERE key = 'schema_version'")
-    if (version && Number(version.value) !== LCM_SCHEMA_VERSION) {
+    try {
+      client.exec("PRAGMA journal_mode = WAL")
+      client.exec("PRAGMA synchronous = NORMAL")
+      client.exec("PRAGMA busy_timeout = 250")
+      client.exec("PRAGMA foreign_keys = ON")
+      client.exec(SCHEMA)
+      const version = client.get<{ value: string }>("SELECT value FROM lcm_meta WHERE key = 'schema_version'")
+      if (version && Number(version.value) !== LCM_SCHEMA_VERSION) throw new Error("lcm_schema_incompatible")
+      client.run("INSERT OR IGNORE INTO lcm_meta(key, value) VALUES ('schema_version', ?)", [
+        String(LCM_SCHEMA_VERSION),
+      ])
+      if (target !== ":memory:" && !existed) chmodSync(target, 0o600)
+      return new SqliteConversationMemoryStore(client, target, recovered)
+    } catch (error) {
       client.close()
-      throw new Error("lcm_schema_incompatible")
+      throw error
     }
-    client.run("INSERT OR IGNORE INTO lcm_meta(key, value) VALUES ('schema_version', ?)", [String(LCM_SCHEMA_VERSION)])
-    if (target !== ":memory:" && !existed) chmodSync(target, 0o600)
-    return new SqliteConversationMemoryStore(client, target)
   }
 
   async inspect(sessionID: string): Promise<MemoryState> {
@@ -355,6 +392,12 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
     sources: FinalSource[]
   }): Promise<void> {
     this.client.transaction(() => {
+      const previous = this.client.get<SessionRow>("SELECT * FROM lcm_session WHERE session_id = ?", [input.sessionID])
+      if (previous && previous.lineage_digest !== input.lineage.digest) {
+        // Historical revisions remain derived export evidence. Exact-lineage
+        // activation keeps them unreachable from the current prompt and tools.
+        this.client.run("UPDATE lcm_context_frame SET active = 0 WHERE session_id = ?", [input.sessionID])
+      }
       this.client.run("DELETE FROM lcm_source WHERE session_id = ?", [input.sessionID])
       for (const item of input.sources) {
         this.client.run(
@@ -419,6 +462,15 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
         input.summary.sessionID,
       ])
       if (!state) throw new Error("lcm_not_ready")
+      for (const child of input.children) {
+        const table = child.kind === "source" ? "lcm_source" : "lcm_summary"
+        const id = child.kind === "source" ? "source_id" : "summary_id"
+        const exists = this.client.get<{ found: number }>(
+          `SELECT 1 AS found FROM ${table} WHERE session_id = ? AND ${id} = ?`,
+          [input.summary.sessionID, child.id],
+        )
+        if (!exists) throw new Error("lcm_not_found")
+      }
       this.client.run(
         `INSERT OR IGNORE INTO lcm_summary(
           summary_id, node_key, session_id, level, text, digest, source_digest, token_count, byte_count,
@@ -483,6 +535,10 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
         attempt.createdAt,
       ],
     )
+  }
+
+  async recordAttempt(attempt: SummaryAttempt): Promise<void> {
+    this.client.transaction(() => this.insertAttempt(attempt))
   }
 
   async getSummary(sessionID: string, summaryID: string): Promise<SummaryNode | undefined> {
@@ -598,7 +654,7 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
     }
   }
 
-  async appendActivity(record: ActivityRecord): Promise<ActivityRecord> {
+  async appendActivity(record: Omit<ActivityRecord, "sequence"> & { sequence?: number }): Promise<ActivityRecord> {
     return this.client.transaction(() => {
       const row = this.client.get<{ sequence: number }>(
         "SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence FROM lcm_activity WHERE session_id = ?",
@@ -629,7 +685,9 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
   }
 
   async listActivity(sessionID: string, input: { before?: number; limit?: number } = {}): Promise<ActivityRecord[]> {
-    const limit = Math.min(100, Math.max(1, input.limit ?? 50))
+    // The HTTP layer may request one look-ahead row to decide whether an
+    // opaque continuation cursor is necessary; public pages remain capped at 100.
+    const limit = Math.min(101, Math.max(1, input.limit ?? 50))
     const rows =
       input.before === undefined
         ? this.client.all<ActivityRow>(
@@ -643,21 +701,81 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
     return rows.map(activity)
   }
 
+  async setIssue(sessionID: string, issue?: NonNullable<MemoryState["issue"]>): Promise<void> {
+    this.client.run("UPDATE lcm_session SET health = ?, issue_json = ?, updated_at = ? WHERE session_id = ?", [
+      issue ? "degraded" : "ok",
+      issue ? JSON.stringify(issue) : null,
+      Date.now(),
+      sessionID,
+    ])
+  }
+
+  async metrics(sessionID: string): Promise<MemoryStoreMetrics> {
+    const row = this.client.get<{
+      attempts: number
+      input_tokens: number
+      output_tokens: number
+      reasoning_tokens: number
+      cache_read_tokens: number
+      cache_write_tokens: number
+      cost: number
+    }>(
+      `SELECT
+        COUNT(*) AS attempts,
+        COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(output_tokens), 0) AS output_tokens,
+        COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
+        COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+        COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
+        COALESCE(SUM(cost), 0) AS cost
+       FROM lcm_summary_attempt WHERE session_id = ?`,
+      [sessionID],
+    )
+    const activity = this.client.get<{ sequence: number }>(
+      "SELECT COALESCE(MAX(sequence), 0) AS sequence FROM lcm_activity WHERE session_id = ?",
+      [sessionID],
+    )
+    return {
+      sequence: activity?.sequence ?? 0,
+      work: {
+        attempts: row?.attempts ?? 0,
+        inputTokens: row?.input_tokens ?? 0,
+        outputTokens: row?.output_tokens ?? 0,
+        reasoningTokens: row?.reasoning_tokens ?? 0,
+        cacheReadTokens: row?.cache_read_tokens ?? 0,
+        cacheWriteTokens: row?.cache_write_tokens ?? 0,
+        cost: row?.cost ?? 0,
+      },
+    }
+  }
+
   async recordFrame(frame: ContextFrame): Promise<void> {
     this.client.transaction(() => {
+      const pre = Buffer.from(JSON.stringify(frame.pre))
+      const post = Buffer.from(JSON.stringify(frame.post))
+      const preID = sha256(pre)
+      const postID = sha256(post)
+      this.client.run("INSERT OR IGNORE INTO lcm_blob(blob_id, content, byte_count) VALUES (?, ?, ?)", [
+        preID,
+        pre,
+        pre.byteLength,
+      ])
+      this.client.run("INSERT OR IGNORE INTO lcm_blob(blob_id, content, byte_count) VALUES (?, ?, ?)", [
+        postID,
+        post,
+        post.byteLength,
+      ])
       if (frame.reason === "latest") {
-        this.client.run("DELETE FROM lcm_context_frame WHERE session_id = ? AND reason = 'latest'", [
-          frame.sessionID,
-        ])
+        this.client.run("DELETE FROM lcm_context_frame WHERE session_id = ? AND reason = 'latest'", [frame.sessionID])
       }
       if (frame.active) {
         this.client.run("UPDATE lcm_context_frame SET active = 0 WHERE session_id = ?", [frame.sessionID])
       }
       this.client.run(
         `INSERT INTO lcm_context_frame(
-          frame_id, session_id, request_id, revision_id, lineage_digest, active, reason, pre_json, post_json,
-          pressure_before, pressure_after, raw_tokens, summary_tokens, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          frame_id, session_id, request_id, revision_id, lineage_digest, active, reason, pre_blob_id, post_blob_id,
+          pressure_before, pressure_after, usable_input_tokens, threshold_ratio, raw_tokens, summary_tokens, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           frame.id,
           frame.sessionID,
@@ -666,21 +784,31 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
           frame.lineageDigest,
           frame.active ? 1 : 0,
           frame.reason,
-          JSON.stringify(frame.pre),
-          JSON.stringify(frame.post),
+          preID,
+          postID,
           frame.pressureBefore ?? null,
           frame.pressureAfter ?? null,
+          frame.usableInputTokens,
+          frame.thresholdRatio,
           frame.rawTokens,
           frame.summaryTokens,
           frame.createdAt,
         ],
       )
+      this.deleteOrphanBlobs()
     })
   }
 
   async listFrames(sessionID: string): Promise<ContextFrame[]> {
     return this.client
-      .all<FrameRow>("SELECT * FROM lcm_context_frame WHERE session_id = ? ORDER BY created_at, frame_id", [sessionID])
+      .all<FrameRow & { pre_content: Uint8Array; post_content: Uint8Array }>(
+        `SELECT frame.*, pre.content AS pre_content, post.content AS post_content
+         FROM lcm_context_frame frame
+         JOIN lcm_blob pre ON pre.blob_id = frame.pre_blob_id
+         JOIN lcm_blob post ON post.blob_id = frame.post_blob_id
+         WHERE frame.session_id = ? ORDER BY frame.created_at, frame.frame_id`,
+        [sessionID],
+      )
       .map((row) => ({
         id: row.frame_id,
         sessionID: row.session_id,
@@ -689,14 +817,27 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
         lineageDigest: row.lineage_digest,
         active: row.active === 1,
         reason: row.reason,
-        pre: JSON.parse(row.pre_json) as ContextFrame["pre"],
-        post: JSON.parse(row.post_json) as ContextFrame["post"],
+        pre: JSON.parse(Buffer.from(row.pre_content).toString("utf8")) as ContextFrame["pre"],
+        post: JSON.parse(Buffer.from(row.post_content).toString("utf8")) as ContextFrame["post"],
         ...(row.pressure_before === null ? {} : { pressureBefore: row.pressure_before }),
         ...(row.pressure_after === null ? {} : { pressureAfter: row.pressure_after }),
+        usableInputTokens: row.usable_input_tokens,
+        thresholdRatio: row.threshold_ratio,
         rawTokens: row.raw_tokens,
         summaryTokens: row.summary_tokens,
         createdAt: row.created_at,
       }))
+  }
+
+  private deleteOrphanBlobs() {
+    this.client.run(
+      `DELETE FROM lcm_blob
+       WHERE blob_id NOT IN (
+         SELECT pre_blob_id FROM lcm_context_frame
+         UNION
+         SELECT post_blob_id FROM lcm_context_frame
+       )`,
+    )
   }
 
   async acquireLease(input: { key: string; owner: string; now: number; expiresAt: number }): Promise<boolean> {
@@ -740,6 +881,7 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
       this.client.run("DELETE FROM lcm_summary WHERE session_id = ?", [sessionID])
       this.client.run("DELETE FROM lcm_source WHERE session_id = ?", [sessionID])
       this.client.run("DELETE FROM lcm_session WHERE session_id = ?", [sessionID])
+      this.deleteOrphanBlobs()
     })
   }
 

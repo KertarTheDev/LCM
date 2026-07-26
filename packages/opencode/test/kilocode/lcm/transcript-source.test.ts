@@ -62,6 +62,22 @@ function messages() {
           },
         },
         {
+          id: "part_tool",
+          sessionID,
+          messageID: "msg_assistant",
+          type: "tool",
+          callID: "call_read",
+          tool: "read",
+          state: {
+            status: "completed",
+            input: { filePath: "decision.txt" },
+            output: "original compacted tool detail",
+            title: "read",
+            metadata: {},
+            time: { start: 2, end: 3, compacted: 4 },
+          },
+        },
+        {
           id: "part_answer",
           sessionID,
           messageID: "msg_assistant",
@@ -104,9 +120,10 @@ function messages() {
 describe("LCM transcript source", () => {
   test("indexes only finalized ordinary model-visible content", () => {
     const items = extractFinalSources(sessionID, messages())
-    expect(items.map((item) => item.metadata.partID)).toEqual(["part_user", "part_media", "part_answer"])
-    expect(items.map((item) => item.metadata.ordinal)).toEqual([0, 1, 2])
-    expect(items[2]?.content).toBe("The binding answer is beta.")
+    expect(items.map((item) => item.metadata.partID)).toEqual(["part_user", "part_media", "part_tool", "part_answer"])
+    expect(items.map((item) => item.metadata.ordinal)).toEqual([0, 1, 2, 3])
+    expect(items[2]?.content).toContain("original compacted tool detail")
+    expect(items[3]?.content).toBe("The binding answer is beta.")
   })
 
   test("returns digest-verified immutable persisted media", async () => {

@@ -35,28 +35,8 @@ function resolveSyncSessionId(
 }
 
 function resolveTransientSessionId(event: TransientPayload): string | undefined {
-  switch (event.type) {
-    case "session.status":
-    case "session.turn.open":
-    case "session.turn.close":
-    case "session.idle":
-    case "session.error":
-    case "todo.updated":
-    case "message.part.delta":
-    case "permission.asked":
-    case "permission.replied":
-    case "question.asked":
-    case "question.replied":
-    case "question.rejected":
-    case "suggestion.shown":
-    case "suggestion.accepted":
-    case "suggestion.dismissed":
-    case "session.network.asked":
-    case "session.network.replied":
-    case "session.network.rejected":
-    case "session.network.restored":
-      return event.properties.sessionID
-    default:
-      return undefined
-  }
+  // Transient global events simply omit sessionID. Reading the optional field
+  // also keeps newly added session-scoped event types routable without growing
+  // a duplicate switch alongside the generated SSE union.
+  return (event.properties as { sessionID?: string }).sessionID
 }

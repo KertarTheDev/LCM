@@ -1,6 +1,11 @@
 import { sha256 } from "./ids"
 import type { NormalizedModelInput } from "./types"
 
+// These fields are transport/provider lanes, not normalized prompt content.
+// Do not redact arbitrary "token" or "secret" keys inside model-visible tool
+// results: exact conversation strings are part of the export contract.
+const REDACTED_KEYS = /^(credentials?|headers?|providerMetadata|providerOptions)$/i
+
 function binary(value: string | Uint8Array, mediaType?: string) {
   const data =
     typeof value === "string"
@@ -21,15 +26,12 @@ function normalize(value: unknown, parentType?: string, mediaType?: string): unk
   const record = value as Record<string, unknown>
   const type = typeof record.type === "string" ? record.type : parentType
   const mime =
-    typeof record.mediaType === "string"
-      ? record.mediaType
-      : typeof record.mime === "string"
-        ? record.mime
-        : mediaType
+    typeof record.mediaType === "string" ? record.mediaType : typeof record.mime === "string" ? record.mime : mediaType
   return Object.fromEntries(
     Object.entries(record)
       .filter(([key, item]) => typeof item !== "function" && key !== "execute")
       .map(([key, item]) => {
+        if (REDACTED_KEYS.test(key)) return [key, { type: "excluded-sensitive" }]
         if (
           ["file", "image", "media"].includes(type ?? "") &&
           ["data", "image", "url"].includes(key) &&

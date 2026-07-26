@@ -1,4 +1,7 @@
+import { conversationMemory } from "./conversation-memory"
+
 export const dict = {
+  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.line1":
     "Kilo Gateway giver dig adgang til et udvalgt sæt pålidelige, optimerede modeller til kodningsagenter.",
@@ -44,8 +47,7 @@ export const dict = {
   "marketplace.install.scope.global": "Global",
   "marketplace.install.scope.project.description":
     "Kun dette projekt. De installerede filer kan føjes til versionsstyring og deles med dit team.",
-  "marketplace.install.scope.global.description":
-    "Alle projekter på denne maskine. Gemmes i din brugerkonfiguration.",
+  "marketplace.install.scope.global.description": "Alle projekter på denne maskine. Gemmes i din brugerkonfiguration.",
   "marketplace.install.destination": "Installationsplacering",
   "marketplace.install.about.mcp":
     "En MCP-server giver Kilo yderligere værktøjer til at arbejde med eksterne tjenester eller lokale programmer.",

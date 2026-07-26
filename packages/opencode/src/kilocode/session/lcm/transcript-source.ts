@@ -49,8 +49,7 @@ function stringify(value: unknown) {
 function toolContent(part: Extract<Part, { type: "tool" }>) {
   const input = stringify(part.state.input)
   if (part.state.status === "completed") {
-    const output = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
-    return [`Tool: ${part.tool}`, `Input:\n${input}`, `Result:\n${output}`].join("\n\n")
+    return [`Tool: ${part.tool}`, `Input:\n${input}`, `Result:\n${part.state.output}`].join("\n\n")
   }
   if (part.state.status === "error") {
     const recovered = part.state.metadata?.interrupted === true ? part.state.metadata.output : undefined

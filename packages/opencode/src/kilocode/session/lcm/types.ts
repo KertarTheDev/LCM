@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai"
 
-export const LCM_SCHEMA_VERSION = 1
+export const LCM_SCHEMA_VERSION = 2
 
 export type SourceKind = "user_text" | "assistant_text" | "reasoning" | "tool" | "media" | "attachment"
 export type GenerationMode = "normal" | "aggressive" | "deterministic"
@@ -111,7 +111,7 @@ export interface FrontierRevision {
   id: string
   sessionID: string
   lineageDigest: string
-  reason: "background" | "hard_ready" | "hard_built" | "rebuild"
+  reason: "background" | "append" | "hard_ready" | "hard_built" | "rebuild"
   items: FrontierItem[]
   createdAt: number
 }
@@ -119,7 +119,7 @@ export interface FrontierRevision {
 export interface ActivityRecord {
   id: string
   sessionID: string
-  sequence?: number
+  sequence: number
   kind: ActivityKind
   pressureBefore?: number
   pressureAfter?: number
@@ -142,6 +142,8 @@ export interface ContextFrame {
   post: NormalizedModelInput
   pressureBefore?: number
   pressureAfter?: number
+  usableInputTokens: number
+  thresholdRatio: number
   rawTokens: number
   summaryTokens: number
   createdAt: number
@@ -170,6 +172,51 @@ export interface MemoryState {
   }
 }
 
+export interface MemoryWork {
+  attempts: number
+  inputTokens: number
+  outputTokens: number
+  reasoningTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  cost: number
+}
+
+export interface MemoryStoreMetrics {
+  sequence: number
+  work: MemoryWork
+}
+
+export interface LcmStatus {
+  sessionID: string
+  sequence: number
+  mode: MemoryMode
+  health: MemoryHealth
+  capacity: {
+    known: boolean
+    usableInputTokens?: number
+    rawInputTokens?: number
+    activeInputTokens?: number
+    freeTokens?: number
+    pressureRatio?: number
+    thresholdRatio?: number
+  }
+  composition: {
+    revisionID?: string
+    rawTokens: number
+    summaryTokens: number
+    rawItems: number
+    summaryItems: number
+  }
+  background: {
+    pendingSources: number
+    summarizing: boolean
+  }
+  memoryWork: MemoryWork
+  lastInterventionAt?: number
+  issue?: MemoryState["issue"]
+}
+
 export interface ProjectionInput {
   sessionID: string
   lineage: TranscriptLineage
@@ -179,6 +226,7 @@ export interface ProjectionInput {
   usableInputTokens: number
   thresholdRatio: number
   protectedTailTurns: number
+  sourceContent: ReadonlyMap<string, string>
   requestID?: string
   continuationID?: string
   reason: "soft" | "hard"
@@ -205,6 +253,7 @@ export interface ConversationMemoryStore {
   listSources(sessionID: string): Promise<FinalSource[]>
   getSource(sessionID: string, sourceID: string): Promise<FinalSource | undefined>
   commitSummary(input: { summary: SummaryNode; children: SummaryChild[]; attempt?: SummaryAttempt }): Promise<void>
+  recordAttempt(attempt: SummaryAttempt): Promise<void>
   getSummary(sessionID: string, summaryID: string): Promise<SummaryNode | undefined>
   findSummary(sessionID: string, nodeKey: string): Promise<SummaryNode | undefined>
   listSummaries(sessionID: string): Promise<SummaryNode[]>
@@ -212,8 +261,10 @@ export interface ConversationMemoryStore {
   commitRevision(revision: FrontierRevision): Promise<void>
   getRevision(sessionID: string, revisionID: string): Promise<FrontierRevision | undefined>
   activeRevision(sessionID: string, lineageDigest: string): Promise<FrontierRevision | undefined>
-  appendActivity(record: ActivityRecord): Promise<ActivityRecord>
+  appendActivity(record: Omit<ActivityRecord, "sequence"> & { sequence?: number }): Promise<ActivityRecord>
   listActivity(sessionID: string, input?: { before?: number; limit?: number }): Promise<ActivityRecord[]>
+  setIssue(sessionID: string, issue?: NonNullable<MemoryState["issue"]>): Promise<void>
+  metrics(sessionID: string): Promise<MemoryStoreMetrics>
   recordFrame(frame: ContextFrame): Promise<void>
   listFrames(sessionID: string): Promise<ContextFrame[]>
   acquireLease(input: { key: string; owner: string; now: number; expiresAt: number }): Promise<boolean>

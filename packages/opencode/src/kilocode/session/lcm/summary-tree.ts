@@ -82,6 +82,31 @@ function summaryItem(summary: SummaryNode): TreeItem {
   }
 }
 
+export function rollForwardItems(input: {
+  revision: FrontierRevision
+  previousSources: FinalSource[]
+  sources: FinalSource[]
+}) {
+  const appended =
+    input.previousSources.length > 0 &&
+    input.sources.length > input.previousSources.length &&
+    input.previousSources.every(
+      (source, index) =>
+        source.id === input.sources[index]?.id &&
+        source.digest === input.sources[index]?.digest &&
+        source.ordinal === input.sources[index]?.ordinal,
+    )
+  if (!appended) return
+  return [
+    ...input.revision.items,
+    ...input.sources.slice(input.previousSources.length).map((source) => ({
+      kind: "source" as const,
+      id: source.id,
+      ordinal: source.ordinal,
+    })),
+  ].toSorted((a, b) => a.ordinal - b.ordinal)
+}
+
 function windows(sources: FinalSource[], usableInputTokens: number) {
   const target = Math.min(MAX_LEAF_TOKENS, Math.max(512, Math.floor(usableInputTokens * 0.3)))
   const result: FinalSource[][] = []
@@ -120,14 +145,16 @@ function deterministic(children: TreeItem[], limit: number) {
     .replace(/\uFFFD+$/u, "")}${suffix}`
 }
 
-function valid(candidate: string, sourceTokens: number, sourceBytes: number, target: number) {
+function valid(candidate: string, sourceTokens: number, sourceBytes: number, target: number, allowed: Set<string>) {
   const candidateBytes = Buffer.byteLength(candidate)
   const candidateTokens = Math.max(1, Math.ceil(candidateBytes / 4))
+  const handles = candidate.match(/\b(?:src|sum)_[a-f0-9]{24}\b/g) ?? []
   return (
     candidate.trim().length > 0 &&
     candidateBytes < sourceBytes &&
     candidateTokens < sourceTokens &&
-    candidateTokens <= Math.ceil(target * 1.15)
+    candidateTokens <= Math.ceil(target * 1.15) &&
+    handles.every((handle) => allowed.has(handle))
   )
 }
 
@@ -136,6 +163,23 @@ export class SummaryTree {
     private readonly store: ConversationMemoryStore,
     private readonly generator?: SummaryGenerator,
   ) {}
+
+  private async allowedHandles(sessionID: string, items: TreeItem[]) {
+    const allowed = new Set(items.map((item) => item.id))
+    const visited = new Set<string>()
+    const visit = async (summaryID: string): Promise<void> => {
+      if (visited.has(summaryID)) return
+      visited.add(summaryID)
+      for (const child of await this.store.listChildren(sessionID, summaryID)) {
+        allowed.add(child.id)
+        if (child.kind === "summary") await visit(child.id)
+      }
+    }
+    for (const item of items) {
+      if (item.kind === "summary") await visit(item.id)
+    }
+    return allowed
+  }
 
   private async createSummary(input: {
     sessionID: string
@@ -164,6 +208,7 @@ export class SummaryTree {
     const sourceTokens = input.items.reduce((total, item) => total + item.tokens, 0)
     const sourceBytes = input.items.reduce((total, item) => total + item.bytes, 0)
     const target = targetTokens(sourceTokens, input.usableInputTokens)
+    const allowed = await this.allowedHandles(input.sessionID, input.items)
     let candidate: SummaryCandidate | undefined
     if (this.generator) {
       const values = input.items.map((item) => item.source ?? item.summary).filter(Boolean) as Array<
@@ -185,14 +230,28 @@ export class SummaryTree {
         }
       }
       candidate = await generate("normal")
-      if (!candidate || !valid(candidate.text, sourceTokens, sourceBytes, target)) {
+      if (!candidate || !valid(candidate.text, sourceTokens, sourceBytes, target, allowed)) {
+        if (candidate?.attempt)
+          await this.store.recordAttempt({
+            ...candidate.attempt,
+            nodeKey: key,
+            sessionID: input.sessionID,
+            errorCode: candidate.attempt.errorCode ?? "lcm_summary_rejected",
+          })
         candidate = await generate("aggressive")
       }
     }
-    if (!candidate || !valid(candidate.text, sourceTokens, sourceBytes, target)) {
+    if (!candidate || !valid(candidate.text, sourceTokens, sourceBytes, target, allowed)) {
+      if (candidate?.attempt)
+        await this.store.recordAttempt({
+          ...candidate.attempt,
+          nodeKey: key,
+          sessionID: input.sessionID,
+          errorCode: candidate.attempt.errorCode ?? "lcm_summary_rejected",
+        })
       candidate = { text: deterministic(input.items, target), mode: "deterministic" }
     }
-    if (!valid(candidate.text, sourceTokens, sourceBytes, target)) return
+    if (!valid(candidate.text, sourceTokens, sourceBytes, target, allowed)) return
     const id = summaryID({ nodeKey: key, text: candidate.text })
     for (const child of children) child.summaryID = id
     const summary: SummaryNode = {

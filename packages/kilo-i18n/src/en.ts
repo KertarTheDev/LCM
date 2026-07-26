@@ -1,6 +1,9 @@
 // Kilo-specific translations and overrides
 // Keys here will override any matching keys from upstream translations
+import { conversationMemory } from "./conversation-memory"
+
 export const dict = {
+  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.line1":
     "Kilo Gateway gives you access to a curated set of reliable optimized models for coding agents.",
@@ -51,7 +54,8 @@ export const dict = {
   "marketplace.install.about.mcp":
     "An MCP server gives Kilo additional tools for working with external services or local programs.",
   "marketplace.install.about.agent": "An agent adds a reusable role with its own instructions and permissions.",
-  "marketplace.install.about.skill": "A skill adds task-specific instructions and resources that Kilo can load when needed.",
+  "marketplace.install.about.skill":
+    "A skill adds task-specific instructions and resources that Kilo can load when needed.",
   "marketplace.install.mcp.warning":
     "MCP servers can run local commands or connect to external services. Kilo will ask for permission before using their tools unless your permissions allow them automatically.",
   "marketplace.install.project.warning":

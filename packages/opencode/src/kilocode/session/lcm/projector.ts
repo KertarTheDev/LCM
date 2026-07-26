@@ -1,5 +1,12 @@
 import type { ModelMessage } from "ai"
-import type { ConversationMemoryStore, FrontierRevision, ProjectionInput, ProjectionResult, SummaryNode } from "./types"
+import type {
+  ConversationMemoryStore,
+  FinalSource,
+  FrontierRevision,
+  ProjectionInput,
+  ProjectionResult,
+  SummaryNode,
+} from "./types"
 
 const MEMORY_OPEN = "<conversation-memory>"
 const MEMORY_CLOSE = "</conversation-memory>"
@@ -16,10 +23,16 @@ function protectedStart(messages: ModelMessage[], turns: number) {
   return 0
 }
 
-function render(summaries: SummaryNode[]) {
-  const body = summaries
-    .map(
-      (summary) => `Summary ${summary.id} (sources ${summary.firstOrdinal}-${summary.lastOrdinal}):\n${summary.text}`,
+type MemoryItem =
+  | { kind: "summary"; summary: SummaryNode }
+  | { kind: "source"; source: FinalSource; content: string }
+
+function render(items: MemoryItem[]) {
+  const body = items
+    .map((item) =>
+      item.kind === "summary"
+        ? `Summary ${item.summary.id} (sources ${item.summary.firstOrdinal}-${item.summary.lastOrdinal}):\n${item.summary.text}`
+        : `Source ${item.source.id} (${item.source.kind}, source ${item.source.ordinal}):\n${item.content}`,
     )
     .join("\n\n")
   return [
@@ -51,6 +64,25 @@ export class Projector {
     return active
   }
 
+  private async children(input: ProjectionInput, item: MemoryItem) {
+    if (item.kind !== "summary") return
+    const children = await this.store.listChildren(input.sessionID, item.summary.id)
+    const result: MemoryItem[] = []
+    for (const child of children) {
+      if (child.kind === "summary") {
+        const summary = await this.store.getSummary(input.sessionID, child.id)
+        if (!summary) return
+        result.push({ kind: "summary", summary })
+        continue
+      }
+      const source = await this.store.getSource(input.sessionID, child.id)
+      const content = input.sourceContent.get(child.id)
+      if (!source || content === undefined) return
+      result.push({ kind: "source", source, content })
+    }
+    return result
+  }
+
   async project(input: ProjectionInput): Promise<ProjectionResult> {
     const rawTokens = input.measure(input.messages)
     const pressure = input.usableInputTokens > 0 ? rawTokens / input.usableInputTokens : 0
@@ -60,23 +92,61 @@ export class Projector {
 
     const revision = await this.revision(input)
     if (!revision) return { type: "unchanged", messages: input.messages, pressure }
-    const summaries: SummaryNode[] = []
+    const roots: MemoryItem[] = []
     for (const item of revision.items) {
       if (item.kind !== "summary") continue
       const summary = await this.store.getSummary(input.sessionID, item.id)
       if (!summary) return { type: "unavailable", messages: input.messages, pressure, code: "lcm_not_ready" }
-      summaries.push(summary)
+      roots.push({ kind: "summary", summary })
     }
-    if (summaries.length === 0) return { type: "unchanged", messages: input.messages, pressure }
+    if (roots.length === 0) return { type: "unchanged", messages: input.messages, pressure }
 
     const start = protectedStart(input.messages, input.protectedTailTurns)
     if (start === 0) return { type: "unchanged", messages: input.messages, pressure }
-    const memory: ModelMessage = { role: "user", content: render(summaries) }
-    const messages = [memory, ...input.messages.slice(start)]
-    const activeTokens = input.measure(messages)
-    const pressureAfter = activeTokens / input.usableInputTokens
+    const tail = input.messages.slice(start)
+    let items = roots
+    let memory: ModelMessage = { role: "user", content: render(items) }
+    let messages = [memory, ...tail]
+    let activeTokens = input.measure(messages)
+    let pressureAfter = activeTokens / input.usableInputTokens
     if (activeTokens >= rawTokens || pressureAfter >= 1)
       return { type: "unchanged", messages: input.messages, pressure }
+
+    // Start from the coarsest current-lineage cut, then restore child summaries
+    // or exact sources while the request still retains a 10% capacity reserve.
+    // A larger-context model therefore sees more detail without mutating the
+    // durable tree or changing the pinned revision for this continuation.
+    const detailBudget = Math.min(rawTokens - 1, Math.floor(input.usableInputTokens * 0.9))
+    const blocked = new Set<string>()
+    while (true) {
+      let expanded = false
+      for (let index = 0; index < items.length; index++) {
+        const item = items[index]!
+        if (item.kind !== "summary" || blocked.has(item.summary.id)) continue
+        const children = await this.children(input, item)
+        if (!children?.length) {
+          blocked.add(item.summary.id)
+          continue
+        }
+        const candidate = [...items.slice(0, index), ...children, ...items.slice(index + 1)]
+        const candidateMemory: ModelMessage = { role: "user", content: render(candidate) }
+        const candidateMessages = [candidateMemory, ...tail]
+        const candidateTokens = input.measure(candidateMessages)
+        if (candidateTokens > detailBudget) {
+          blocked.add(item.summary.id)
+          continue
+        }
+        items = candidate
+        memory = candidateMemory
+        messages = candidateMessages
+        activeTokens = candidateTokens
+        pressureAfter = activeTokens / input.usableInputTokens
+        expanded = true
+        break
+      }
+      if (!expanded) break
+    }
+
     return {
       type: "projected",
       messages,
@@ -84,7 +154,7 @@ export class Projector {
       pressureAfter,
       revision,
       rawTokens,
-      summaryTokens: summaries.reduce((total, summary) => total + summary.tokens, 0),
+      summaryTokens: input.measure([memory]),
     }
   }
 }
