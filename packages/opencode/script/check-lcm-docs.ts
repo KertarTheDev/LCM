@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// kilocode_change - new file
 
 import path from "node:path"
 import { existsSync } from "node:fs"

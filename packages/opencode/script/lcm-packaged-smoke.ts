@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// kilocode_change - new file
 
 import { Uint8ArrayReader, Uint8ArrayWriter, ZipReader } from "@zip.js/zip.js"
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
