@@ -15,7 +15,7 @@ import { MessageID, SessionID } from "@/session/schema"
 import { EffectBridge } from "@/effect/bridge"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LLMResponse } from "@opencode-ai/llm"
-import { extractFinalSources } from "./transcript-source"
+import { bootstrapConsumedThrough, extractFinalSources } from "./transcript-source"
 import { lineageDigest, sortableID } from "./ids"
 import { Projector } from "./projector"
 import { SqliteConversationMemoryStore } from "./store"
@@ -24,11 +24,14 @@ import type {
   ActivityRecord,
   ConversationMemoryStore,
   FinalSource,
+  FrontierRevision,
   LcmStatus,
   MemoryState,
+  MaintenancePhase,
   ProjectionResult,
   TranscriptLineage,
 } from "./types"
+import { DEFAULT_RECENT_TAIL_RATIO, DEFAULT_SOFT_THRESHOLD_RATIO } from "./types"
 import type { ModelMessage } from "ai"
 import type { SummaryGenerator } from "./summary-tree"
 import type { Provider as ProviderType } from "@/provider/provider"
@@ -36,7 +39,8 @@ import { normalizeModelInput } from "./context-frame"
 import { Event as LcmEvent } from "./events"
 
 const log = Log.create({ service: "lcm" })
-const DEFAULT_PROTECTED_TURNS = 2
+const MIN_RECENT_TAIL_TOKENS = 2_000
+const MAX_RECENT_TAIL_TOKENS = 20_000
 const SUMMARY_PROMPT = `Summarize the supplied earlier conversation for a coding agent that must continue the same session.
 
 Preserve binding state over narrative:
@@ -57,7 +61,8 @@ export interface HostProjectionInput {
   tools: Record<string, unknown>
   usableInputTokens: number
   thresholdRatio: number
-  protectedTailTurns?: number
+  recentTailTokens: number
+  protectedMessages: ModelMessage[]
   requestID?: string
   continuationID?: string
   measure(messages: ModelMessage[]): number
@@ -70,7 +75,7 @@ export interface EnsureReadyInput {
   transcript: SessionV1.WithParts[]
   usableInputTokens: number
   model: ProviderType.Model
-  protectedTailTurns?: number
+  recentTailTokens: number
   signal?: AbortSignal
 }
 
@@ -79,12 +84,30 @@ interface Synced {
   lineage: TranscriptLineage
   sources: FinalSource[]
   content: Map<string, string>
+  consumedThrough: number
   protectedSources: number
+  maxEligibleOrdinal: number
+  firstProtectedMessageID?: string
+  eligibleRawTokens: number
+  eligibleRawItems: number
+  protectedRawTokens: number
+  protectedRawItems: number
 }
 
 export interface Interface {
   readonly project: (input: HostProjectionInput) => Effect.Effect<ProjectionResult>
   readonly ensureReady: (input: EnsureReadyInput) => Effect.Effect<boolean>
+  readonly completeRequest: (input: { sessionID: string; requestID: string; success: boolean }) => Effect.Effect<void>
+  readonly maintain: (input: {
+    sessionID: string
+    model: ProviderType.Model
+    usableInputTokens: number
+    thresholdRatio: number
+    recentTailTokens: number
+    reason: "hard" | "manual"
+    strict?: boolean
+    signal?: AbortSignal
+  }) => Effect.Effect<"maintained" | "noop" | "constrained" | "unresolved">
   readonly inspect: (sessionID: string) => Effect.Effect<MemoryState>
   readonly activity: (sessionID: string, input?: { before?: number; limit?: number }) => Effect.Effect<ActivityRecord[]>
   readonly status: (sessionID: string) => Effect.Effect<LcmStatus>
@@ -95,6 +118,9 @@ export interface Interface {
     messages: ModelMessage[]
     tools: Record<string, unknown>
     rawTokens: number
+    rawLaneTokens: number
+    fixedInputTokens: number
+    recentTailTokens: number
     usableInputTokens: number
     thresholdRatio: number
   }) => Effect.Effect<void>
@@ -102,8 +128,21 @@ export interface Interface {
     sessionID: string
     transcript: SessionV1.WithParts[]
     protectedTailTurns?: number
+    recentTailTokens?: number
     signal?: AbortSignal
-  }) => Effect.Effect<{ store: ConversationMemoryStore; lineage: TranscriptLineage } | undefined>
+  }) => Effect.Effect<
+    | {
+        store: ConversationMemoryStore
+        lineage: TranscriptLineage
+        maxEligibleOrdinal: number
+        firstProtectedMessageID?: string
+        eligibleRawTokens: number
+        eligibleRawItems: number
+        protectedRawTokens: number
+        protectedRawItems: number
+      }
+    | undefined
+  >
   readonly access: (
     sessionID: string,
   ) => Effect.Effect<{ store: ConversationMemoryStore; state: MemoryState } | undefined>
@@ -111,17 +150,54 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@kilocode/ConversationMemory") {}
 
-function countProtectedSources(input: { transcript: SessionV1.WithParts[]; sources: FinalSource[]; turns: number }) {
-  if (input.turns <= 0) return 0
-  const sourceMessages = new Set(input.sources.map((source) => source.messageID))
-  const users = input.transcript.filter(
-    (message) => message.info.role === "user" && sourceMessages.has(message.info.id),
+export function recentTailTokens(input: { usableInputTokens: number; configured?: number }) {
+  if (input.configured !== undefined) return Math.max(0, input.configured)
+  return Math.min(
+    MAX_RECENT_TAIL_TOKENS,
+    Math.max(MIN_RECENT_TAIL_TOKENS, Math.floor(input.usableInputTokens * DEFAULT_RECENT_TAIL_RATIO)),
   )
-  const cutoff = users.at(-input.turns)
-  if (!cutoff) return input.sources.length
-  const order = new Map<string, number>(input.transcript.map((message, index) => [message.info.id, index]))
-  const cutoffIndex = order.get(cutoff.info.id) ?? Number.POSITIVE_INFINITY
-  return input.sources.filter((source) => (order.get(source.messageID) ?? -1) >= cutoffIndex).length
+}
+
+export function providerRequiresBlocking(error: unknown) {
+  const detail = error instanceof Error ? `${error.name} ${error.message}`.toLowerCase() : String(error).toLowerCase()
+  return (
+    detail.includes("concurr") ||
+    detail.includes("single-flight") ||
+    detail.includes("single flight") ||
+    detail.includes("busy") ||
+    detail.includes("409")
+  )
+}
+
+export function conversationLanes(input: {
+  sources: FinalSource[]
+  consumedThrough: number
+  recentTailTokens: number
+  revision?: FrontierRevision
+}) {
+  let recentStart = input.sources.length
+  let recentTokens = 0
+  while (recentStart > 0 && recentTokens < input.recentTailTokens) {
+    recentStart--
+    recentTokens += input.sources[recentStart]!.tokens
+  }
+  const maxEligibleOrdinal = Math.min(input.consumedThrough, recentStart - 1)
+  const activeSourceIDs = input.revision
+    ? new Set(input.revision.items.filter((item) => item.kind === "source").map((item) => item.id))
+    : new Set(input.sources.map((source) => source.id))
+  const activeRaw = input.sources.filter((source) => activeSourceIDs.has(source.id))
+  const eligible = activeRaw.filter((source) => source.ordinal <= maxEligibleOrdinal)
+  const protectedRaw = activeRaw.filter((source) => source.ordinal > maxEligibleOrdinal)
+  const firstProtectedMessageID = input.sources.find((source) => source.ordinal > maxEligibleOrdinal)?.messageID
+  return {
+    maxEligibleOrdinal,
+    ...(firstProtectedMessageID ? { firstProtectedMessageID } : {}),
+    protectedSources: protectedRaw.length,
+    eligibleRawTokens: eligible.reduce((total, source) => total + source.tokens, 0),
+    eligibleRawItems: eligible.length,
+    protectedRawTokens: protectedRaw.reduce((total, source) => total + source.tokens, 0),
+    protectedRawItems: protectedRaw.length,
+  }
 }
 
 export const layer: Layer.Layer<
@@ -139,7 +215,21 @@ export const layer: Layer.Layer<
     const bridge = yield* EffectBridge.make()
     let store: SqliteConversationMemoryStore | undefined
     let projector: Projector | undefined
-    const background = new Map<string, { promise: Promise<void>; controller: AbortController }>()
+    const background = new Map<string, { promise: Promise<void>; ready: Promise<void>; controller: AbortController }>()
+    const phases = new Map<string, MaintenancePhase>()
+    const pending = new Map<
+      string,
+      {
+        requestID: string
+        lineageDigest: string
+        throughOrdinal: number
+        model: ProviderType.Model
+        usableInputTokens: number
+        thresholdRatio: number
+        recentTailTokens: number
+      }
+    >()
+    const blockingProviders = new Set<string>()
     const rebuildRecorded = new Set<string>()
     const shutdown = new AbortController()
     let modelQueue: Promise<void> = Promise.resolve()
@@ -228,7 +318,7 @@ export const layer: Layer.Layer<
     const sync = async (input: {
       sessionID: string
       transcript: SessionV1.WithParts[]
-      protectedTailTurns: number
+      recentTailTokens: number
       signal?: AbortSignal
     }): Promise<Synced> => {
       if (input.signal?.aborted)
@@ -242,8 +332,11 @@ export const layer: Layer.Layer<
         ...(sources.at(-1) ? { lastSourceID: sources.at(-1)!.id } : {}),
       }
       const target = open()
-      const state = await target.inspect(input.sessionID)
+      let state = await target.inspect(input.sessionID)
       if (state.lineageDigest !== lineage.digest || state.sourceCount !== sources.length) {
+        const bootstrap = state.lineageDigest
+          ? -1
+          : bootstrapConsumedThrough(input.sessionID, input.transcript, sources)
         const previousSources = state.lineageDigest ? await target.listSources(input.sessionID) : []
         const previousRevision = state.lineageDigest
           ? await target.activeRevision(input.sessionID, state.lineageDigest)
@@ -252,6 +345,13 @@ export const layer: Layer.Layer<
           ? rollForwardItems({ revision: previousRevision, previousSources, sources })
           : undefined
         await target.replaceSources({ sessionID: input.sessionID, lineage, sources })
+        if (bootstrap >= 0) {
+          await target.markConsumed({
+            sessionID: input.sessionID,
+            lineageDigest: lineage.digest,
+            throughOrdinal: bootstrap,
+          })
+        }
         if (items) {
           await target.commitRevision({
             id: sortableID("rev"),
@@ -262,6 +362,7 @@ export const layer: Layer.Layer<
             createdAt: Date.now(),
           })
         }
+        state = await target.inspect(input.sessionID)
       }
       if (target.recovered && !rebuildRecorded.has(input.sessionID)) {
         rebuildRecorded.add(input.sessionID)
@@ -276,16 +377,20 @@ export const layer: Layer.Layer<
           .promise(events.publish(LcmEvent.Activity, { sessionID: input.sessionID as SessionID, activity }))
           .catch(() => undefined)
       }
+      const revision = await target.activeRevision(input.sessionID, lineage.digest)
+      const currentLanes = conversationLanes({
+        sources,
+        consumedThrough: state.consumedThrough,
+        recentTailTokens: input.recentTailTokens,
+        revision,
+      })
       return {
         store: target,
         lineage,
         sources,
         content: new Map(extracted.map((item) => [item.metadata.id, item.content])),
-        protectedSources: countProtectedSources({
-          transcript: input.transcript,
-          sources,
-          turns: input.protectedTailTurns,
-        }),
+        consumedThrough: state.consumedThrough,
+        ...currentLanes,
       }
     }
 
@@ -301,7 +406,7 @@ export const layer: Layer.Layer<
               sync({
                 sessionID: event.data.sessionID,
                 transcript,
-                protectedTailTurns: DEFAULT_PROTECTED_TURNS,
+                recentTailTokens: MIN_RECENT_TAIL_TOKENS,
               }),
             ),
           ),
@@ -330,15 +435,17 @@ export const layer: Layer.Layer<
       synced: Synced,
       input: {
         usableInputTokens: number
-        reason: "background" | "hard_built"
+        thresholdRatio: number
+        reason: "soft" | "hard" | "manual"
         model: ProviderType.Model
+        strict?: boolean
+        onModelStart?: () => void
         signal?: AbortSignal
       },
     ) => {
       if (input.usableInputTokens <= 0) return
-      const timeout = AbortSignal.timeout(input.reason === "background" ? 180_000 : 60_000)
       const signal = AbortSignal.any(
-        [input.signal, timeout, shutdown.signal].filter((item): item is AbortSignal => item !== undefined),
+        [input.signal, shutdown.signal].filter((item): item is AbortSignal => item !== undefined),
       )
       const owner = sortableID("lease")
       const key = `summary:${synced.lineage.sessionID}`
@@ -346,125 +453,126 @@ export const layer: Layer.Layer<
         key,
         owner,
         now: Date.now(),
-        expiresAt: Date.now() + (input.reason === "background" ? 190_000 : 70_000),
+        expiresAt: Date.now() + 30 * 60_000,
       })
       if (!acquired) return synced.store.activeRevision(synced.lineage.sessionID, synced.lineage.digest)
       const generator: SummaryGenerator = {
         generate: (request) => {
           const started = Date.now()
-          return serialized(
-            () =>
-              bridge.promise(
-                Effect.gen(function* () {
-                  const configured = yield* agents.get("compaction")
-                  const agent: Agent.Info =
-                    configured ??
-                    ({
-                      name: "compaction",
-                      mode: "subagent",
-                      hidden: true,
-                      options: {},
-                      permission: [],
-                    } satisfies Agent.Info)
-                  const model = agent.model
-                    ? yield* provider.getModel(agent.model.providerID, agent.model.modelID)
-                    : input.model
-                  const info = yield* provider.getProvider(model.providerID)
-                  const user: SessionV1.User = {
-                    id: MessageID.ascending(),
-                    sessionID: request.sessionID as SessionID,
-                    role: "user",
-                    time: { created: Date.now() },
-                    agent: agent.name,
-                    model: { providerID: model.providerID, modelID: model.id },
-                  }
-                  const body = request.children
-                    .map((child) =>
-                      "text" in child
-                        ? `${child.id}:\n${child.text}`
-                        : `${child.id}:\n${synced.content.get(child.id) ?? child.excerpt}`,
-                    )
-                    .join("\n\n")
-                  const events = Array.from(
-                    yield* llm
-                      .stream({
-                        agent: {
-                          ...agent,
-                          prompt: SUMMARY_PROMPT,
-                          options: { ...agent.options, maxOutputTokens: request.targetTokens },
-                        },
-                        user,
-                        tools: {},
-                        model,
-                        messages: [
-                          {
-                            role: "user",
-                            content: [
-                              `Target at most ${request.targetTokens} tokens.`,
-                              request.mode === "aggressive"
-                                ? "Compress more aggressively while retaining binding decisions, constraints, and recovery handles."
-                                : "Prefer a concise but complete account of binding state.",
-                              "",
-                              body,
-                            ].join("\n"),
-                          },
-                        ],
-                        sessionID: `lcm-summary:${request.sessionID}`,
-                        system: [],
-                        retries: 1,
-                      })
-                      .pipe(
-                        Stream.runCollect,
-                        Effect.raceFirst(
-                          Effect.callback<never, unknown>((resume) => {
-                            const aborted = () =>
-                              resume(
-                                Effect.fail(
-                                  signal.reason ?? new DOMException("The operation was aborted", "AbortError"),
-                                ),
-                              )
-                            if (signal.aborted) {
-                              aborted()
-                              return
-                            }
-                            signal.addEventListener("abort", aborted, { once: true })
-                            return Effect.sync(() => signal.removeEventListener("abort", aborted))
-                          }),
-                        ),
-                      ),
+          return serialized(() => {
+            const running = bridge.promise(
+              Effect.gen(function* () {
+                const configured = yield* agents.get("compaction")
+                const agent: Agent.Info =
+                  configured ??
+                  ({
+                    name: "compaction",
+                    mode: "subagent",
+                    hidden: true,
+                    options: {},
+                    permission: [],
+                  } satisfies Agent.Info)
+                const model = agent.model
+                  ? yield* provider.getModel(agent.model.providerID, agent.model.modelID)
+                  : input.model
+                const info = yield* provider.getProvider(model.providerID)
+                const user: SessionV1.User = {
+                  id: MessageID.ascending(),
+                  sessionID: request.sessionID as SessionID,
+                  role: "user",
+                  time: { created: Date.now() },
+                  agent: agent.name,
+                  model: { providerID: model.providerID, modelID: model.id },
+                }
+                const body = request.children
+                  .map((child) =>
+                    "text" in child
+                      ? `${child.id}:\n${child.text}`
+                      : `${child.id}:\n${synced.content.get(child.id) ?? child.excerpt}`,
                   )
-                  const usage = LLMResponse.usage({ events })
-                  const billed = usage
-                    ? Session.getUsage({ model, usage, metadata: usage.providerMetadata, provider: info })
-                    : undefined
-                  const finish = events.findLast((event) => event.type === "finish")
-                  return {
-                    text: LLMResponse.text({ events }),
+                  .join("\n\n")
+                const events = Array.from(
+                  yield* llm
+                    .stream({
+                      agent: {
+                        ...agent,
+                        prompt: SUMMARY_PROMPT,
+                        options: { ...agent.options, maxOutputTokens: request.targetTokens },
+                      },
+                      user,
+                      tools: {},
+                      model,
+                      messages: [
+                        {
+                          role: "user",
+                          content: [
+                            `Target at most ${request.targetTokens} tokens.`,
+                            request.mode === "aggressive"
+                              ? "Compress more aggressively while retaining binding decisions, constraints, and recovery handles."
+                              : "Prefer a concise but complete account of binding state.",
+                            "",
+                            body,
+                          ].join("\n"),
+                        },
+                      ],
+                      sessionID: `lcm-summary:${request.sessionID}`,
+                      system: [],
+                      retries: 1,
+                    })
+                    .pipe(
+                      Stream.runCollect,
+                      Effect.raceFirst(
+                        Effect.callback<never, unknown>((resume) => {
+                          const aborted = () =>
+                            resume(
+                              Effect.fail(signal.reason ?? new DOMException("The operation was aborted", "AbortError")),
+                            )
+                          if (signal.aborted) {
+                            aborted()
+                            return
+                          }
+                          signal.addEventListener("abort", aborted, { once: true })
+                          return Effect.sync(() => signal.removeEventListener("abort", aborted))
+                        }),
+                      ),
+                    ),
+                )
+                const usage = LLMResponse.usage({ events })
+                const billed = usage
+                  ? Session.getUsage({ model, usage, metadata: usage.providerMetadata, provider: info })
+                  : undefined
+                const finish = events.findLast((event) => event.type === "finish")
+                return {
+                  text: LLMResponse.text({ events }),
+                  mode: request.mode,
+                  attempt: {
+                    id: sortableID("attempt"),
+                    nodeKey: "",
+                    sessionID: request.sessionID,
+                    providerID: model.providerID,
+                    modelID: model.id,
+                    variant: agent.variant,
                     mode: request.mode,
-                    attempt: {
-                      id: sortableID("attempt"),
-                      nodeKey: "",
-                      sessionID: request.sessionID,
-                      providerID: model.providerID,
-                      modelID: model.id,
-                      variant: agent.variant,
-                      mode: request.mode,
-                      inputTokens: billed?.tokens.input ?? 0,
-                      outputTokens: billed?.tokens.output ?? 0,
-                      reasoningTokens: billed?.tokens.reasoning ?? 0,
-                      cacheReadTokens: billed?.tokens.cache.read ?? 0,
-                      cacheWriteTokens: billed?.tokens.cache.write ?? 0,
-                      cost: billed?.cost ?? 0,
-                      finish: finish?.reason,
-                      durationMs: Date.now() - started,
-                      createdAt: started,
-                    },
-                  }
-                }),
-              ),
-            signal,
-          ).catch((error) => {
+                    inputTokens: billed?.tokens.input ?? 0,
+                    outputTokens: billed?.tokens.output ?? 0,
+                    reasoningTokens: billed?.tokens.reasoning ?? 0,
+                    cacheReadTokens: billed?.tokens.cache.read ?? 0,
+                    cacheWriteTokens: billed?.tokens.cache.write ?? 0,
+                    cost: billed?.cost ?? 0,
+                    finish: finish?.reason,
+                    durationMs: Date.now() - started,
+                    createdAt: started,
+                  },
+                }
+              }),
+            )
+            input.onModelStart?.()
+            return running
+          }, signal).catch((error) => {
             if (signal.aborted) throw error
+            if (providerRequiresBlocking(error)) {
+              blockingProviders.add(`${input.model.providerID}:${input.model.id}`)
+            }
             return {
               text: "",
               mode: request.mode,
@@ -488,12 +596,13 @@ export const layer: Layer.Layer<
         },
       }
       try {
-        const revision = await new SummaryTree(synced.store, generator).build({
+        const revision = await new SummaryTree(synced.store, generator).maintain({
           sessionID: synced.lineage.sessionID,
           lineage: synced.lineage,
           usableInputTokens: input.usableInputTokens,
-          protectedSources: synced.protectedSources,
-          reason: input.reason,
+          maxEligibleOrdinal: synced.maxEligibleOrdinal,
+          targetTokens: Math.floor(input.usableInputTokens * input.thresholdRatio * (input.strict ? 0.75 : 1)),
+          mode: input.reason,
           signal,
         })
         if (revision) await synced.store.setIssue(synced.lineage.sessionID)
@@ -534,14 +643,33 @@ export const layer: Layer.Layer<
       }
       await publishCurrentStatus(sessionID)
     }
-    const schedule = (synced: Synced, usableInputTokens: number, model: ProviderType.Model) => {
-      if (background.has(synced.lineage.sessionID)) return
+    const schedule = (
+      synced: Synced,
+      input: { usableInputTokens: number; thresholdRatio: number; model: ProviderType.Model },
+    ) => {
       const sessionID = synced.lineage.sessionID
+      const existing = background.get(sessionID)
+      if (existing) return existing.ready
       const controller = new AbortController()
+      let markReady = () => {}
+      const ready = new Promise<void>((resolve) => {
+        markReady = resolve
+      })
+      phases.set(sessionID, "soft_queued")
       const job = (async () => {
+        const before = await synced.store.activeRevision(sessionID, synced.lineage.digest)
+        phases.set(sessionID, "soft_running")
         await synced.store.bumpStatus(sessionID)
         await publishCurrentStatus(sessionID)
-        return build(synced, { usableInputTokens, reason: "background", model, signal: controller.signal })
+        const revision = await build(synced, {
+          usableInputTokens: input.usableInputTokens,
+          thresholdRatio: input.thresholdRatio,
+          reason: "soft",
+          model: input.model,
+          onModelStart: markReady,
+          signal: controller.signal,
+        })
+        return revision?.id === before?.id ? undefined : revision
       })()
         .then(async (revision) => {
           if (!revision) return
@@ -575,46 +703,46 @@ export const layer: Layer.Layer<
           await publishFallback(sessionID, "lcm_summary_unavailable")
         })
         .finally(async () => {
+          markReady()
           background.delete(sessionID)
+          phases.set(sessionID, "idle")
           await synced.store.bumpStatus(sessionID).catch(() => undefined)
           await publishCurrentStatus(sessionID)
         })
-      background.set(sessionID, { promise: job, controller })
+      background.set(sessionID, { promise: job, ready, controller })
+      return ready
     }
 
     const projectUnsafe: (input: HostProjectionInput) => Effect.Effect<ProjectionResult> = Effect.fn(
       "ConversationMemory.projectUnsafe",
     )(function* (input) {
-      const pressure = input.usableInputTokens > 0 ? input.measure(input.messages) / input.usableInputTokens : 0
-      if (input.usableInputTokens <= 0 || pressure < input.thresholdRatio)
-        return { type: "unchanged", messages: input.messages, pressure } satisfies ProjectionResult
-      const protectedTailTurns = input.protectedTailTurns ?? DEFAULT_PROTECTED_TURNS
+      const fullTokens = input.measure(input.messages)
+      const fixedTokens = input.measure([])
+      const pressure = input.usableInputTokens > 0 ? fullTokens / input.usableInputTokens : 0
       const synced = yield* Effect.promise(() =>
         sync({
           sessionID: input.sessionID,
           transcript: input.transcript,
-          protectedTailTurns,
+          recentTailTokens: input.recentTailTokens,
           signal: input.signal,
         }),
       )
-      const hard = pressure >= 1
-      let revision = yield* Effect.promise(() => synced.store.activeRevision(input.sessionID, synced.lineage.digest))
-      if (revision?.reason === "append") schedule(synced, input.usableInputTokens, input.model)
-      if (!revision && hard) {
-        revision = yield* Effect.promise(() =>
-          build(synced, {
-            usableInputTokens: input.usableInputTokens,
-            reason: "hard_built",
-            model: input.model,
-            signal: input.signal,
-          }),
-        )
-      } else if (!revision) {
-        schedule(synced, input.usableInputTokens, input.model)
-        return { type: "unchanged", messages: input.messages, pressure } satisfies ProjectionResult
+      if (input.requestID) {
+        pending.set(input.sessionID, {
+          requestID: input.requestID,
+          lineageDigest: synced.lineage.digest,
+          throughOrdinal: synced.sources.at(-1)?.ordinal ?? -1,
+          model: input.model,
+          usableInputTokens: input.usableInputTokens,
+          thresholdRatio: input.thresholdRatio,
+          recentTailTokens: input.recentTailTokens,
+        })
       }
-      if (!revision) return { type: "unchanged", messages: input.messages, pressure } satisfies ProjectionResult
-      const result = yield* Effect.promise(() =>
+      if (input.usableInputTokens <= 0)
+        return { type: "unchanged", messages: input.messages, pressure } satisfies ProjectionResult
+      const rawLaneTokens = synced.eligibleRawTokens + synced.protectedRawTokens
+      const softPressure = rawLaneTokens / input.usableInputTokens
+      const projectCurrent = (reason: "soft" | "hard") =>
         projector!.project({
           sessionID: input.sessionID,
           lineage: synced.lineage,
@@ -623,16 +751,72 @@ export const layer: Layer.Layer<
           tools: input.tools,
           usableInputTokens: input.usableInputTokens,
           thresholdRatio: input.thresholdRatio,
-          protectedTailTurns,
+          recentTailTokens: input.recentTailTokens,
+          protectedMessages: input.protectedMessages,
+          maxEligibleOrdinal: synced.maxEligibleOrdinal,
           sourceContent: synced.content,
           requestID: input.requestID,
           continuationID: input.continuationID,
-          reason: hard ? "hard" : "soft",
+          reason,
           measure: input.measure,
           signal: input.signal,
-        }),
-      )
-      if (result.type !== "projected") return result
+        })
+      let result = yield* Effect.promise(() => projectCurrent("soft"))
+      const hard =
+        input.measure(result.type === "projected" ? result.messages : input.messages) >= input.usableInputTokens
+      if (hard) {
+        const running = background.get(input.sessionID)
+        if (running) {
+          running.controller.abort(new DOMException("Superseded by hard maintenance", "AbortError"))
+          yield* Effect.promise(() => running.promise.catch(() => undefined))
+        }
+        phases.set(input.sessionID, "hard_running")
+        try {
+          yield* Effect.promise(() =>
+            build(synced, {
+              usableInputTokens: input.usableInputTokens,
+              thresholdRatio: input.thresholdRatio,
+              reason: "hard",
+              model: input.model,
+              signal: input.signal,
+            }),
+          )
+        } finally {
+          phases.set(input.sessionID, "idle")
+        }
+        result = yield* Effect.promise(() => projectCurrent("hard"))
+        if (input.measure(result.type === "projected" ? result.messages : input.messages) >= input.usableInputTokens) {
+          phases.set(input.sessionID, "constrained")
+          return {
+            type: "unavailable",
+            messages: input.messages,
+            pressure,
+            code: "lcm_hard_limit_unresolved",
+          } satisfies ProjectionResult
+        }
+      } else if (softPressure >= input.thresholdRatio && synced.eligibleRawTokens > 0) {
+        const ready = schedule(synced, {
+          usableInputTokens: input.usableInputTokens,
+          thresholdRatio: input.thresholdRatio,
+          model: input.model,
+        })
+        if (ready) yield* Effect.promise(() => ready)
+        const providerKey = `${input.model.providerID}:${input.model.id}`
+        if (blockingProviders.has(providerKey)) {
+          yield* Effect.promise(() => background.get(input.sessionID)?.promise ?? Promise.resolve())
+          projector!.clearSession(input.sessionID)
+          result = yield* Effect.promise(() => projectCurrent("soft"))
+        }
+      }
+      if (result.type !== "projected") {
+        return result
+      }
+      const projectedLanes = conversationLanes({
+        sources: synced.sources,
+        consumedThrough: synced.consumedThrough,
+        recentTailTokens: input.recentTailTokens,
+        revision: result.revision,
+      })
       const activity = yield* Effect.promise(async () => {
         const createdAt = Date.now()
         const [written, frame] = await Promise.allSettled([
@@ -655,7 +839,7 @@ export const layer: Layer.Layer<
             revisionID: result.revision.id,
             lineageDigest: synced.lineage.digest,
             active: true,
-            reason: hard ? (result.revision.reason === "hard_built" ? "hard_built" : "hard_ready") : "soft_ready",
+            reason: hard ? "hard_built" : "soft_ready",
             pre: normalizeModelInput({ system: input.system, messages: input.messages, tools: input.tools }),
             post: normalizeModelInput({ system: input.system, messages: result.messages, tools: input.tools }),
             pressureBefore: result.pressureBefore,
@@ -663,6 +847,9 @@ export const layer: Layer.Layer<
             usableInputTokens: input.usableInputTokens,
             thresholdRatio: input.thresholdRatio,
             rawTokens: result.rawTokens,
+            rawLaneTokens: projectedLanes.eligibleRawTokens + projectedLanes.protectedRawTokens,
+            fixedInputTokens: fixedTokens,
+            recentTailTokens: input.recentTailTokens,
             summaryTokens: result.summaryTokens,
             createdAt,
           }),
@@ -701,7 +888,7 @@ export const layer: Layer.Layer<
       projectUnsafe(input).pipe(
         Effect.catchCause((cause) => {
           const cancelled = Cause.hasInterruptsOnly(cause) || input.signal?.aborted
-          log.warn("projection unavailable; using upstream context", {
+          log.warn("projection unavailable", {
             code: cancelled ? "cancelled" : "unavailable",
           })
           const pressure = input.usableInputTokens > 0 ? input.measure(input.messages) / input.usableInputTokens : 0
@@ -724,12 +911,11 @@ export const layer: Layer.Layer<
     const ensureReadyUnsafe: (input: EnsureReadyInput) => Effect.Effect<boolean> = Effect.fn(
       "ConversationMemory.ensureReadyUnsafe",
     )(function* (input) {
-      const protectedTailTurns = input.protectedTailTurns ?? DEFAULT_PROTECTED_TURNS
       const synced = yield* Effect.promise(() =>
         sync({
           sessionID: input.sessionID,
           transcript: input.transcript,
-          protectedTailTurns,
+          recentTailTokens: input.recentTailTokens,
           signal: input.signal,
         }),
       )
@@ -738,7 +924,8 @@ export const layer: Layer.Layer<
       const revision = yield* Effect.promise(() =>
         build(synced, {
           usableInputTokens: input.usableInputTokens,
-          reason: "hard_built",
+          thresholdRatio: DEFAULT_SOFT_THRESHOLD_RATIO,
+          reason: "hard",
           model: input.model,
           signal: input.signal,
         }),
@@ -761,6 +948,112 @@ export const layer: Layer.Layer<
         }),
       )
 
+    const completeRequest: Interface["completeRequest"] = (input) =>
+      Effect.tryPromise(async () => {
+        const item = pending.get(input.sessionID)
+        if (!item || item.requestID !== input.requestID) return
+        pending.delete(input.sessionID)
+        if (!input.success) return
+        const target = open()
+        await target.markConsumed({
+          sessionID: input.sessionID,
+          lineageDigest: item.lineageDigest,
+          throughOrdinal: item.throughOrdinal,
+        })
+        const transcript = await bridge.promise(
+          MessageV2.stream(input.sessionID).pipe(Effect.provideService(CoreDatabase.Service, database)),
+        )
+        const synced = await sync({
+          sessionID: input.sessionID,
+          transcript,
+          recentTailTokens: item.recentTailTokens,
+        })
+        const rawLaneTokens = synced.eligibleRawTokens + synced.protectedRawTokens
+        if (
+          item.usableInputTokens > 0 &&
+          rawLaneTokens / item.usableInputTokens >= item.thresholdRatio &&
+          synced.eligibleRawTokens > 0
+        ) {
+          schedule(synced, {
+            usableInputTokens: item.usableInputTokens,
+            thresholdRatio: item.thresholdRatio,
+            model: item.model,
+          })
+        }
+      }).pipe(Effect.catch(() => Effect.void))
+
+    const maintain: Interface["maintain"] = (input) =>
+      Effect.tryPromise(async () => {
+        const running = background.get(input.sessionID)
+        if (running) {
+          running.controller.abort(new DOMException("Superseded by foreground maintenance", "AbortError"))
+          await running.promise.catch(() => undefined)
+        }
+        phases.set(input.sessionID, input.reason === "manual" ? "manual_running" : "hard_running")
+        await publishCurrentStatus(input.sessionID)
+        const transcript = await bridge.promise(
+          MessageV2.stream(input.sessionID).pipe(Effect.provideService(CoreDatabase.Service, database)),
+        )
+        const synced = await sync({
+          sessionID: input.sessionID,
+          transcript,
+          recentTailTokens: input.recentTailTokens,
+          signal: input.signal,
+        })
+        if (synced.maxEligibleOrdinal < 0) {
+          const activity = await synced.store.appendActivity({
+            id: sortableID("activity"),
+            sessionID: input.sessionID,
+            kind: "intervention",
+            message: "Conversation Memory maintenance found no eligible history to reduce.",
+            createdAt: Date.now(),
+          })
+          await bridge
+            .promise(events.publish(LcmEvent.Activity, { sessionID: input.sessionID as SessionID, activity }))
+            .catch(() => undefined)
+          phases.set(input.sessionID, "idle")
+          await publishCurrentStatus(input.sessionID)
+          return "noop" as const
+        }
+        const before = await synced.store.activeRevision(input.sessionID, synced.lineage.digest)
+        const revision = await build(synced, {
+          usableInputTokens: input.usableInputTokens,
+          thresholdRatio: input.thresholdRatio,
+          reason: input.reason,
+          model: input.model,
+          strict: input.strict,
+          signal: input.signal,
+        })
+        const changed = revision && revision.id !== before?.id
+        const activity = await synced.store.appendActivity({
+          id: sortableID("activity"),
+          sessionID: input.sessionID,
+          kind: changed ? "frontier_advanced" : "intervention",
+          summaryIDs: revision?.items.filter((item) => item.kind === "summary").map((item) => item.id),
+          message: changed
+            ? `Conversation Memory completed ${input.reason} maintenance.`
+            : "Conversation Memory maintenance found no further reducible history.",
+          createdAt: Date.now(),
+        })
+        await bridge
+          .promise(events.publish(LcmEvent.Activity, { sessionID: input.sessionID as SessionID, activity }))
+          .catch(() => undefined)
+        const result = changed
+          ? ("maintained" as const)
+          : input.reason === "manual"
+            ? ("noop" as const)
+            : ("constrained" as const)
+        phases.set(input.sessionID, result === "constrained" ? "constrained" : "idle")
+        await synced.store.bumpStatus(input.sessionID)
+        await publishCurrentStatus(input.sessionID)
+        return result
+      }).pipe(
+        Effect.catch(() => {
+          phases.set(input.sessionID, "constrained")
+          return Effect.succeed(input.reason === "hard" ? ("unresolved" as const) : ("constrained" as const))
+        }),
+      )
+
     const inspect: Interface["inspect"] = (sessionID) =>
       Effect.try({
         try: () => open(),
@@ -773,6 +1066,7 @@ export const layer: Layer.Layer<
                 sessionID,
                 sequence: 0,
                 sourceCount: 0,
+                consumedThrough: -1,
                 state: "raw" as const,
                 health: "degraded" as const,
                 issue: {
@@ -788,6 +1082,7 @@ export const layer: Layer.Layer<
             sessionID,
             sequence: 0,
             sourceCount: 0,
+            consumedThrough: -1,
             state: "raw" as const,
             health: "degraded" as const,
           }),
@@ -818,6 +1113,14 @@ export const layer: Layer.Layer<
         ])
         const frame = frames.findLast((item) => item.active) ?? frames.at(-1)
         const revision = state.lineageDigest ? await target.activeRevision(sessionID, state.lineageDigest) : undefined
+        const sources = await target.listSources(sessionID)
+        const currentLanes = conversationLanes({
+          sources,
+          consumedThrough: state.consumedThrough,
+          recentTailTokens:
+            frame?.recentTailTokens ?? recentTailTokens({ usableInputTokens: frame?.usableInputTokens ?? 0 }),
+          revision,
+        })
         let rawItems = revision?.items.filter((item) => item.kind === "source").length ?? state.sourceCount
         let summaryItems = revision?.items.filter((item) => item.kind === "summary").length ?? 0
         let rawTokens = 0
@@ -828,13 +1131,14 @@ export const layer: Layer.Layer<
             else summaryTokens += (await target.getSummary(sessionID, item.id))?.tokens ?? 0
           }
         } else {
-          const sources = await target.listSources(sessionID)
           rawTokens = sources.reduce((total, item) => total + item.tokens, 0)
           rawItems = sources.length
           summaryItems = 0
         }
         if (frame) summaryTokens = frame.summaryTokens || summaryTokens
         const usableInputTokens = frame?.usableInputTokens
+        const rawLaneTokens = currentLanes.eligibleRawTokens + currentLanes.protectedRawTokens
+        const fixedInputTokens = frame?.fixedInputTokens
         const activeInputTokens =
           frame && usableInputTokens !== undefined
             ? Math.round((frame.pressureAfter ?? frame.pressureBefore ?? 0) * usableInputTokens)
@@ -858,6 +1162,10 @@ export const layer: Layer.Layer<
                       : Math.max(0, frame.usableInputTokens - activeInputTokens),
                   pressureRatio: frame.pressureAfter ?? frame.pressureBefore,
                   thresholdRatio: frame.thresholdRatio,
+                  softThresholdTokens: Math.floor(frame.usableInputTokens * frame.thresholdRatio),
+                  rawLaneTokens,
+                  rawLaneRatio: frame.usableInputTokens > 0 ? rawLaneTokens / frame.usableInputTokens : 0,
+                  fixedInputTokens,
                 }
               : {}),
           },
@@ -867,8 +1175,12 @@ export const layer: Layer.Layer<
             summaryTokens,
             rawItems,
             summaryItems,
+            eligibleRawTokens: currentLanes.eligibleRawTokens,
+            eligibleRawItems: currentLanes.eligibleRawItems,
+            protectedRawTokens: currentLanes.protectedRawTokens,
+            protectedRawItems: currentLanes.protectedRawItems,
           },
-          background: { summarizing: background.has(sessionID) },
+          background: { summarizing: background.has(sessionID), phase: phases.get(sessionID) ?? "idle" },
           memoryWork: metrics.work,
           ...(lastInterventionAt ? { lastInterventionAt } : {}),
           ...(state.issue ? { issue: state.issue } : {}),
@@ -881,8 +1193,17 @@ export const layer: Layer.Layer<
             mode: "raw" as const,
             health: "degraded" as const,
             capacity: { known: false },
-            composition: { rawTokens: 0, summaryTokens: 0, rawItems: 0, summaryItems: 0 },
-            background: { summarizing: false },
+            composition: {
+              rawTokens: 0,
+              summaryTokens: 0,
+              rawItems: 0,
+              summaryItems: 0,
+              eligibleRawTokens: 0,
+              eligibleRawItems: 0,
+              protectedRawTokens: 0,
+              protectedRawItems: 0,
+            },
+            background: { summarizing: false, phase: "idle" as const },
             memoryWork: emptyWork,
             issue: {
               code: "lcm_unavailable",
@@ -913,6 +1234,9 @@ export const layer: Layer.Layer<
           usableInputTokens: input.usableInputTokens,
           thresholdRatio: input.thresholdRatio,
           rawTokens: input.rawTokens,
+          rawLaneTokens: input.rawLaneTokens,
+          fixedInputTokens: input.fixedInputTokens,
+          recentTailTokens: input.recentTailTokens,
           summaryTokens: 0,
           createdAt: Date.now(),
         })
@@ -930,11 +1254,20 @@ export const layer: Layer.Layer<
         sync({
           sessionID: input.sessionID,
           transcript: input.transcript,
-          protectedTailTurns: input.protectedTailTurns ?? DEFAULT_PROTECTED_TURNS,
+          recentTailTokens: input.recentTailTokens ?? (input.protectedTailTurns === 0 ? 0 : MIN_RECENT_TAIL_TOKENS),
           signal: input.signal,
         }),
       ).pipe(
-        Effect.map((synced) => ({ store: synced.store, lineage: synced.lineage })),
+        Effect.map((synced) => ({
+          store: synced.store,
+          lineage: synced.lineage,
+          maxEligibleOrdinal: synced.maxEligibleOrdinal,
+          ...(synced.firstProtectedMessageID ? { firstProtectedMessageID: synced.firstProtectedMessageID } : {}),
+          eligibleRawTokens: synced.eligibleRawTokens,
+          eligibleRawItems: synced.eligibleRawItems,
+          protectedRawTokens: synced.protectedRawTokens,
+          protectedRawItems: synced.protectedRawItems,
+        })),
         Effect.catch(() => Effect.succeed(undefined)),
       )
 
@@ -944,7 +1277,18 @@ export const layer: Layer.Layer<
         return { store: target, state: await target.inspect(sessionID) }
       }).pipe(Effect.catch(() => Effect.succeed(undefined)))
 
-    return Service.of({ project, ensureReady, inspect, activity, status, capture, index, access })
+    return Service.of({
+      project,
+      ensureReady,
+      completeRequest,
+      maintain,
+      inspect,
+      activity,
+      status,
+      capture,
+      index,
+      access,
+    })
   }),
 )
 

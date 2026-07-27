@@ -10,8 +10,9 @@ import type {
   SummaryNode,
   TranscriptLineage,
 } from "./types"
+import { LCM_TREE_POLICY } from "./types"
 
-const POLICY = "lcm-tree-v1"
+const POLICY = LCM_TREE_POLICY
 const MAX_LEAF_TOKENS = 20_000
 const MAX_ROOTS = 8
 const CONDENSE_COUNT = 4
@@ -281,57 +282,206 @@ export class SummaryTree {
     return summary
   }
 
+  private async item(sessionID: string, item: FrontierItem): Promise<TreeItem | undefined> {
+    if (item.kind === "source") {
+      const value = await this.store.getSource(sessionID, item.id)
+      return value ? sourceItem(value) : undefined
+    }
+    const value = await this.store.getSummary(sessionID, item.id)
+    return value ? summaryItem(value) : undefined
+  }
+
+  private async items(sessionID: string, revision: FrontierRevision | undefined, sources: FinalSource[]) {
+    if (!revision) return sources.map(sourceItem)
+    const result: TreeItem[] = []
+    for (const value of revision.items) {
+      const loaded = await this.item(sessionID, value)
+      if (!loaded) return sources.map(sourceItem)
+      result.push(loaded)
+    }
+    return result.toSorted((a, b) => a.firstOrdinal - b.firstOrdinal)
+  }
+
+  private revision(input: {
+    sessionID: string
+    lineage: TranscriptLineage
+    reason: FrontierRevision["reason"]
+    items: TreeItem[]
+  }): FrontierRevision {
+    return {
+      id: sortableID("rev"),
+      sessionID: input.sessionID,
+      lineageDigest: input.lineage.digest,
+      reason: input.reason,
+      items: input.items.map((item) => ({
+        kind: item.kind,
+        id: item.id,
+        ordinal: item.firstOrdinal,
+      })),
+      createdAt: Date.now(),
+    }
+  }
+
+  private async summarizeRaw(input: {
+    sessionID: string
+    items: TreeItem[]
+    maxEligibleOrdinal: number
+    usableInputTokens: number
+    one: boolean
+    signal?: AbortSignal
+  }) {
+    let changed = false
+    for (let index = 0; index < input.items.length; ) {
+      abort(input.signal)
+      if (input.items[index]?.kind !== "source" || input.items[index]!.lastOrdinal > input.maxEligibleOrdinal) {
+        index++
+        continue
+      }
+      let end = index
+      const eligible: FinalSource[] = []
+      while (
+        end < input.items.length &&
+        input.items[end]?.kind === "source" &&
+        input.items[end]!.lastOrdinal <= input.maxEligibleOrdinal
+      ) {
+        eligible.push(input.items[end]!.source!)
+        end++
+      }
+      const groups = windows(eligible, input.usableInputTokens)
+      const replacements: TreeItem[] = []
+      let consumed = 0
+      for (const group of groups) {
+        const created = await this.createSummary({
+          sessionID: input.sessionID,
+          items: group.map(sourceItem),
+          level: 0,
+          usableInputTokens: input.usableInputTokens,
+          signal: input.signal,
+        })
+        if (!created) {
+          replacements.push(...group.map(sourceItem))
+        } else {
+          replacements.push(summaryItem(created))
+          changed = true
+        }
+        consumed += group.length
+        if (input.one && changed) {
+          replacements.push(...eligible.slice(consumed).map(sourceItem))
+          break
+        }
+      }
+      input.items.splice(index, end - index, ...replacements)
+      index += replacements.length
+      if (input.one && changed) break
+    }
+    return changed
+  }
+
+  private async promote(input: {
+    sessionID: string
+    items: TreeItem[]
+    maxEligibleOrdinal: number
+    usableInputTokens: number
+    targetTokens: number
+    force: boolean
+    signal?: AbortSignal
+  }) {
+    let changed = false
+    const total = () => input.items.reduce((sum, item) => sum + item.tokens, 0)
+    while (
+      input.force
+        ? total() > input.targetTokens
+        : input.items.filter((item) => item.kind === "summary").length > MAX_ROOTS
+    ) {
+      abort(input.signal)
+      const eligible = input.items
+        .map((item, index) => ({ item, index }))
+        .filter(({ item }) => item.kind === "summary" && item.lastOrdinal <= input.maxEligibleOrdinal)
+      if (eligible.length < 2) break
+      const group = eligible.slice(0, CONDENSE_COUNT)
+      if (!input.force && group.length < CONDENSE_COUNT) break
+      const first = group[0]!.index
+      const last = group.at(-1)!.index
+      if (last - first + 1 !== group.length) break
+      const children = group.map(({ item }) => item)
+      const before = children.reduce((sum, item) => sum + item.tokens, 0)
+      const created = await this.createSummary({
+        sessionID: input.sessionID,
+        items: children,
+        level: Math.max(...children.map((item) => item.summary?.level ?? -1)) + 1,
+        usableInputTokens: input.usableInputTokens,
+        signal: input.signal,
+      })
+      if (!created || created.tokens >= before) break
+      input.items.splice(first, group.length, summaryItem(created))
+      changed = true
+      if (!input.force) break
+    }
+    return changed
+  }
+
+  async maintain(input: {
+    sessionID: string
+    lineage: TranscriptLineage
+    usableInputTokens: number
+    maxEligibleOrdinal: number
+    targetTokens: number
+    mode: "soft" | "hard" | "manual"
+    signal?: AbortSignal
+  }): Promise<FrontierRevision | undefined> {
+    const sources = await this.store.listSources(input.sessionID)
+    if (input.maxEligibleOrdinal < 0 || sources.length === 0) return
+    const active = await this.store.activeRevision(input.sessionID, input.lineage.digest)
+    const items = await this.items(input.sessionID, active, sources)
+    const rawChanged = await this.summarizeRaw({
+      sessionID: input.sessionID,
+      items,
+      maxEligibleOrdinal: input.maxEligibleOrdinal,
+      usableInputTokens: input.usableInputTokens,
+      one: input.mode === "soft",
+      signal: input.signal,
+    })
+    const promoted =
+      input.mode === "soft" && rawChanged
+        ? false
+        : await this.promote({
+            sessionID: input.sessionID,
+            items,
+            maxEligibleOrdinal: input.maxEligibleOrdinal,
+            usableInputTokens: input.usableInputTokens,
+            targetTokens: input.targetTokens,
+            force: input.mode !== "soft",
+            signal: input.signal,
+          })
+    if (!rawChanged && !promoted) return active
+    const revision = this.revision({
+      sessionID: input.sessionID,
+      lineage: input.lineage,
+      reason: input.mode === "soft" ? "soft_leaf" : input.mode === "hard" ? "hard_level" : "manual",
+      items,
+    })
+    await this.store.commitRevision(revision)
+    return revision
+  }
+
+  /** Compatibility wrapper for direct tree tests and local callers. */
   async build(input: {
     sessionID: string
     lineage: TranscriptLineage
     usableInputTokens: number
     protectedSources: number
-    reason: FrontierRevision["reason"]
+    reason: "background" | "hard_built" | FrontierRevision["reason"]
     signal?: AbortSignal
-  }): Promise<FrontierRevision | undefined> {
+  }) {
     const sources = await this.store.listSources(input.sessionID)
-    const eligible = sources.slice(0, Math.max(0, sources.length - input.protectedSources))
-    const protectedTail = sources.slice(eligible.length)
-    if (eligible.length === 0) return
-    const roots: TreeItem[] = []
-    for (const window of windows(eligible, input.usableInputTokens)) {
-      abort(input.signal)
-      const created = await this.createSummary({
-        sessionID: input.sessionID,
-        items: window.map(sourceItem),
-        level: 0,
-        usableInputTokens: input.usableInputTokens,
-        signal: input.signal,
-      })
-      if (!created) return
-      roots.push(summaryItem(created))
-    }
-    while (roots.length > MAX_ROOTS) {
-      abort(input.signal)
-      const group = roots.splice(0, CONDENSE_COUNT)
-      const created = await this.createSummary({
-        sessionID: input.sessionID,
-        items: group,
-        level: Math.max(...group.map((item) => item.summary?.level ?? -1)) + 1,
-        usableInputTokens: input.usableInputTokens,
-        signal: input.signal,
-      })
-      if (!created) return
-      roots.unshift(summaryItem(created))
-    }
-    const items: FrontierItem[] = [
-      ...roots.map((item) => ({ kind: "summary" as const, id: item.id, ordinal: item.firstOrdinal })),
-      ...protectedTail.map((item) => ({ kind: "source" as const, id: item.id, ordinal: item.ordinal })),
-    ].toSorted((a, b) => a.ordinal - b.ordinal)
-    const revision: FrontierRevision = {
-      id: sortableID("rev"),
+    return this.maintain({
       sessionID: input.sessionID,
-      lineageDigest: input.lineage.digest,
-      reason: input.reason,
-      items,
-      createdAt: Date.now(),
-    }
-    await this.store.commitRevision(revision)
-    return revision
+      lineage: input.lineage,
+      usableInputTokens: input.usableInputTokens,
+      maxEligibleOrdinal: sources.length - input.protectedSources - 1,
+      targetTokens: Math.floor(input.usableInputTokens * 0.4),
+      mode: input.reason === "background" || input.reason === "soft_leaf" ? "soft" : "hard",
+      signal: input.signal,
+    })
   }
 }

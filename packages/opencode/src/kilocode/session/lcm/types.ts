@@ -1,12 +1,22 @@
 import type { ModelMessage } from "ai"
 
-export const LCM_SCHEMA_VERSION = 3
+export const LCM_SCHEMA_VERSION = 5
+export const LCM_TREE_POLICY = "lcm-tree-v2"
+export const DEFAULT_SOFT_THRESHOLD_RATIO = 0.4
+export const DEFAULT_RECENT_TAIL_RATIO = 0.15
 
 export type SourceKind = "user_text" | "assistant_text" | "reasoning" | "tool" | "media" | "attachment"
 export type GenerationMode = "normal" | "aggressive" | "deterministic"
 export type MemoryHealth = "ok" | "degraded"
 export type MemoryMode = "raw" | "preparing" | "summarized"
 export type ActivityKind = "frontier_advanced" | "intervention" | "fallback" | "rebuild"
+export type MaintenancePhase =
+  | "idle"
+  | "soft_queued"
+  | "soft_running"
+  | "hard_running"
+  | "manual_running"
+  | "constrained"
 
 export interface FinalSource {
   id: string
@@ -83,7 +93,7 @@ export interface FrontierRevision {
   id: string
   sessionID: string
   lineageDigest: string
-  reason: "background" | "append" | "hard_built"
+  reason: "soft_leaf" | "hard_level" | "manual" | "append"
   items: FrontierItem[]
   createdAt: number
 }
@@ -109,7 +119,7 @@ export interface ContextFrame {
   revisionID?: string
   lineageDigest: string
   active: boolean
-  reason: "soft_ready" | "hard_ready" | "hard_built" | "latest"
+  reason: "soft_ready" | "hard_ready" | "hard_built" | "manual" | "latest"
   pre: NormalizedModelInput
   post: NormalizedModelInput
   pressureBefore?: number
@@ -117,6 +127,9 @@ export interface ContextFrame {
   usableInputTokens: number
   thresholdRatio: number
   rawTokens: number
+  rawLaneTokens: number
+  fixedInputTokens: number
+  recentTailTokens: number
   summaryTokens: number
   createdAt: number
 }
@@ -133,6 +146,7 @@ export interface MemoryState {
   lineageDigest?: string
   indexedThrough?: number
   sourceCount: number
+  consumedThrough: number
   state: MemoryMode
   health: MemoryHealth
   issue?: {
@@ -171,6 +185,10 @@ export interface LcmStatus {
     freeTokens?: number
     pressureRatio?: number
     thresholdRatio?: number
+    softThresholdTokens?: number
+    rawLaneTokens?: number
+    rawLaneRatio?: number
+    fixedInputTokens?: number
   }
   composition: {
     revisionID?: string
@@ -178,9 +196,14 @@ export interface LcmStatus {
     summaryTokens: number
     rawItems: number
     summaryItems: number
+    eligibleRawTokens: number
+    eligibleRawItems: number
+    protectedRawTokens: number
+    protectedRawItems: number
   }
   background: {
     summarizing: boolean
+    phase: MaintenancePhase
   }
   memoryWork: MemoryWork
   lastInterventionAt?: number
@@ -195,11 +218,13 @@ export interface ProjectionInput {
   tools: Record<string, unknown>
   usableInputTokens: number
   thresholdRatio: number
-  protectedTailTurns: number
+  recentTailTokens: number
+  protectedMessages: ModelMessage[]
+  maxEligibleOrdinal: number
   sourceContent: ReadonlyMap<string, string>
   requestID?: string
   continuationID?: string
-  reason: "soft" | "hard"
+  reason: "soft" | "hard" | "manual"
   measure(messages: ModelMessage[]): number
   signal?: AbortSignal
 }
@@ -231,6 +256,7 @@ export interface ConversationMemoryStore {
   commitRevision(revision: FrontierRevision): Promise<void>
   getRevision(sessionID: string, revisionID: string): Promise<FrontierRevision | undefined>
   activeRevision(sessionID: string, lineageDigest: string): Promise<FrontierRevision | undefined>
+  markConsumed(input: { sessionID: string; lineageDigest: string; throughOrdinal: number }): Promise<void>
   appendActivity(record: Omit<ActivityRecord, "sequence"> & { sequence?: number }): Promise<ActivityRecord>
   listActivity(sessionID: string, input?: { before?: number; limit?: number }): Promise<ActivityRecord[]>
   setIssue(sessionID: string, issue?: NonNullable<MemoryState["issue"]>): Promise<void>

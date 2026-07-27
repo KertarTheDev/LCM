@@ -11490,6 +11490,21 @@
                         },
                         "thresholdRatio": {
                           "type": "number"
+                        },
+                        "softThresholdTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "rawLaneTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "rawLaneRatio": {
+                          "type": "number"
+                        },
+                        "fixedInputTokens": {
+                          "type": "integer",
+                          "minimum": 0
                         }
                       },
                       "required": ["known"],
@@ -11516,9 +11531,34 @@
                         "summaryItems": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "eligibleRawTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "eligibleRawItems": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "protectedRawTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "protectedRawItems": {
+                          "type": "integer",
+                          "minimum": 0
                         }
                       },
-                      "required": ["rawTokens", "summaryTokens", "rawItems", "summaryItems"],
+                      "required": [
+                        "rawTokens",
+                        "summaryTokens",
+                        "rawItems",
+                        "summaryItems",
+                        "eligibleRawTokens",
+                        "eligibleRawItems",
+                        "protectedRawTokens",
+                        "protectedRawItems"
+                      ],
                       "additionalProperties": false
                     },
                     "background": {
@@ -11526,9 +11566,20 @@
                       "properties": {
                         "summarizing": {
                           "type": "boolean"
+                        },
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "idle",
+                            "soft_queued",
+                            "soft_running",
+                            "hard_running",
+                            "manual_running",
+                            "constrained"
+                          ]
                         }
                       },
-                      "required": ["summarizing"],
+                      "required": ["summarizing", "phase"],
                       "additionalProperties": false
                     },
                     "memoryWork": {
@@ -29211,6 +29262,36 @@
             },
             "additionalProperties": false
           },
+          "conversation_memory": {
+            "type": "object",
+            "properties": {
+              "soft_threshold_percent": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ],
+                "description": "Raw conversation-lane pressure that starts Conversation Memory maintenance (default: 40%)."
+              }
+            },
+            "additionalProperties": false
+          },
           "experimental": {
             "type": "object",
             "properties": {
@@ -40243,6 +40324,21 @@
                       },
                       "thresholdRatio": {
                         "type": "number"
+                      },
+                      "softThresholdTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "rawLaneTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "rawLaneRatio": {
+                        "type": "number"
+                      },
+                      "fixedInputTokens": {
+                        "type": "integer",
+                        "minimum": 0
                       }
                     },
                     "required": ["known"],
@@ -40269,9 +40365,34 @@
                       "summaryItems": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "eligibleRawTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "eligibleRawItems": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "protectedRawTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "protectedRawItems": {
+                        "type": "integer",
+                        "minimum": 0
                       }
                     },
-                    "required": ["rawTokens", "summaryTokens", "rawItems", "summaryItems"],
+                    "required": [
+                      "rawTokens",
+                      "summaryTokens",
+                      "rawItems",
+                      "summaryItems",
+                      "eligibleRawTokens",
+                      "eligibleRawItems",
+                      "protectedRawTokens",
+                      "protectedRawItems"
+                    ],
                     "additionalProperties": false
                   },
                   "background": {
@@ -40279,9 +40400,13 @@
                     "properties": {
                       "summarizing": {
                         "type": "boolean"
+                      },
+                      "phase": {
+                        "type": "string",
+                        "enum": ["idle", "soft_queued", "soft_running", "hard_running", "manual_running", "constrained"]
                       }
                     },
-                    "required": ["summarizing"],
+                    "required": ["summarizing", "phase"],
                     "additionalProperties": false
                   },
                   "memoryWork": {

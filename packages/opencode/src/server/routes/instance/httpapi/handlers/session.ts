@@ -4,14 +4,17 @@ import { BlockedError as AgentRequirementError } from "@/kilocode/agent-requirem
 import { KiloSessionPromptQueue } from "@/kilocode/session/prompt-queue" // kilocode_change
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { KiloViewers } from "@/kilocode/presence/service" // kilocode_change
-import { Agent } from "@/agent/agent"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Command } from "@/command"
 import { Permission } from "@/permission"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
-import { SessionCompaction } from "@/session/compaction"
+import { ConversationMemory } from "@/kilocode/session/lcm/service" // kilocode_change
+import { Config } from "@/config/config" // kilocode_change
+import { Provider } from "@/provider/provider" // kilocode_change
+import { RuntimeFlags } from "@/effect/runtime-flags" // kilocode_change
+import { usable as usableContext } from "@/session/overflow" // kilocode_change
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
@@ -56,9 +59,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const shareSvc = yield* SessionShare.Service
     const promptSvc = yield* SessionPrompt.Service
     const revertSvc = yield* SessionRevert.Service
-    const compactSvc = yield* SessionCompaction.Service
+    const conversationMemory = yield* ConversationMemory.Service // kilocode_change
+    const config = yield* Config.Service // kilocode_change
+    const provider = yield* Provider.Service // kilocode_change
+    const flags = yield* RuntimeFlags.Service // kilocode_change
     const runState = yield* SessionRunState.Service
-    const agentSvc = yield* Agent.Service
     const permissionSvc = yield* Permission.Service
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
@@ -268,20 +273,27 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof SummarizePayload.Type
     }) {
       yield* revertSvc.cleanup(yield* requireSession(ctx.params.sessionID))
-      const messages = yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
-      const defaultAgent = yield* agentSvc.defaultAgent()
-      const currentAgent = messages.findLast((message) => message.info.role === "user")?.info.agent ?? defaultAgent
-
-      yield* compactSvc.create({
+      // kilocode_change start - preserve the public compaction affordance while
+      // redirecting it to one forced full Conversation Memory cycle.
+      const model = yield* provider.getModel(ctx.payload.providerID, ctx.payload.modelID)
+      const cfg = yield* config.get()
+      const usableInputTokens = usableContext({ cfg, model, outputTokenMax: flags.outputTokenMax })
+      const thresholdRatio =
+        typeof cfg.conversation_memory?.soft_threshold_percent === "number"
+          ? cfg.conversation_memory.soft_threshold_percent / 100
+          : 0.4
+      yield* conversationMemory.maintain({
         sessionID: ctx.params.sessionID,
-        agent: currentAgent,
-        model: {
-          providerID: ctx.payload.providerID,
-          modelID: ctx.payload.modelID,
-        },
-        auto: ctx.payload.auto ?? false,
+        model,
+        usableInputTokens,
+        thresholdRatio,
+        recentTailTokens: ConversationMemory.recentTailTokens({
+          usableInputTokens,
+          configured: cfg.compaction?.preserve_recent_tokens,
+        }),
+        reason: "manual",
       })
-      yield* promptSvc.loop({ sessionID: ctx.params.sessionID })
+      // kilocode_change end
       return true
     })
 

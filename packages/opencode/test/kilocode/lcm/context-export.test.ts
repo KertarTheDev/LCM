@@ -48,6 +48,9 @@ describe("LCM context export", () => {
       usableInputTokens: 10_000,
       thresholdRatio: 0.6,
       rawTokens: 4_000,
+      rawLaneTokens: 3_000,
+      fixedInputTokens: 1_000,
+      recentTailTokens: 2_000,
       summaryTokens: 0,
       createdAt: 1,
     })

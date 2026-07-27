@@ -26,10 +26,12 @@ export const LcmDescribeTool = Tool.define(
           const view = yield* loadMemory({ sessionID: ctx.sessionID, signal: ctx.abort, memory, database })
           if (params.id.startsWith("sum_")) {
             const summary = requireSummary(view, params.id)
+            const frontier = view.revision?.items.some((item) => item.id === summary.id) ?? false
             const result = {
               id: summary.id,
               kind: "summary",
-              active: view.revision?.items.some((item) => item.id === summary.id) ?? false,
+              active: true,
+              frontier,
               excerpt: summary.text.slice(0, 500),
               tokens: summary.tokens,
               bytes: summary.bytes,
@@ -48,7 +50,8 @@ export const LcmDescribeTool = Tool.define(
           const result = {
             id: source.id,
             kind: "source",
-            active: view.revision?.items.some((item) => item.id === source.id) ?? false,
+            active: parents.length > 0 || (view.revision?.items.some((item) => item.id === source.id) ?? false),
+            frontier: view.revision?.items.some((item) => item.id === source.id) ?? false,
             excerpt: source.excerpt,
             tokens: source.tokens,
             bytes: source.bytes,

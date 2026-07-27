@@ -472,10 +472,10 @@ describe("RemoteCommand", () => {
       catalog,
     })
 
-    expect(steps).toEqual(["get", "cleanup", "messages", "create", "loop"])
+    expect(steps).toEqual(["get", "cleanup", "messages", "create"])
   })
 
-  test("executes compact through cleanup, compaction, and prompt loop", async () => {
+  test("executes compact through cleanup and one forced maintenance call without starting a prompt loop", async () => {
     const steps: unknown[] = []
     const session = {
       id: SessionID.make("ses_remote"),
@@ -538,7 +538,6 @@ describe("RemoteCommand", () => {
           auto: false,
         },
       ],
-      ["loop", SessionID.make("ses_remote")],
     ])
   })
 

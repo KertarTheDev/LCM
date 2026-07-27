@@ -1,28 +1,46 @@
 # Product contract
 
-Status: normative current-code contract.
+Status: normative v7.4.16 LCM contract.
 
-Conversation Memory helps small-context models continue one Kilo session through repeated context pressure without
-silently losing binding details. It automatically represents older finalized history as a durable summary tree while
-keeping exact source content recoverable from Kilo's retained transcript.
+Conversation Memory lets a Kilo session continue through repeated context pressure without rewriting the Kilo
+transcript or silently discarding binding detail. It incrementally represents consumed finalized history as an
+immutable summary tree. Exact source content remains recoverable from the retained Kilo SQLite conversation.
 
-The product follows these rules:
+The active request has four conceptual lanes:
 
-- Kilo continues to own prompts, tools, permissions, Project Memory, editor context, attachments, queues, remote
-  sessions, provider behavior, structured output, and compaction.
-- Conversation Memory may replace only an eligible finalized historical prefix.
-- The current user turn, active assistant/tool continuation, recent raw tail, system input, tool schemas, and all
-  other upstream-prepared lanes remain intact.
-- Failures return the unchanged Kilo request path. Existing overflow handling remains available.
-- There is one automatic behavior with no Conversation Memory administration screen or algorithm selector.
-- The user sees pressure, composition, interventions, health, memory-work usage, and a diagnostic export—not storage
-  machinery.
-- `compaction.auto` retains its upstream meaning. It does not disable memory preparation or ready projections.
-- Manual compaction and summarization remain supported upstream capabilities.
+- stable summary roots;
+- eligible consumed raw backlog;
+- protected raw history (unconsumed current work plus the exact recent tail); and
+- fixed upstream input such as system prompts and tool schemas.
 
-The raw Kilo conversation is authoritative. Derived state may be deleted and rebuilt without deleting or rewriting the
-conversation. Summary generation uses the configured compaction agent through the ordinary model service, records its
-own usage, writes no synthetic transcript turn, and has bounded cancellation-aware execution.
+Only the two raw-history lanes drive soft pressure. Summary roots and fixed upstream input do not repeatedly trigger
+soft work. A source already covered by an active summary root is in the summary lane, not the raw backlog. The
+complete final provider request still drives hard-limit safety.
+
+`conversation_memory.soft_threshold_percent` configures soft pressure and the hard-reset target. It defaults to 40%.
+The exact recent tail defaults to 15% of usable input, clamped to 2,000–20,000 tokens;
+`compaction.preserve_recent_tokens` is the explicit override. `compaction.auto` controls only the retained legacy
+subsystem and never disables Conversation Memory.
+
+Conversation Memory begins a soft quantum as soon as raw pressure reaches the threshold. Work may overlap ordinary
+agent activity. If a provider rejects concurrent work, that provider/model is treated as single-flight for the
+process: maintenance becomes a barrier before the same session's next model request. One model call is dispatched per
+soft quantum and sessions receive fair opportunities between quanta.
+
+Hard maintenance runs when the complete outgoing request reaches usable input or after a provider overflow. It first
+summarizes eligible raw backlog, then promotes complete active frontier levels until LCM-owned context reaches the
+configured soft target when feasible. One stricter retry is allowed after a provider overflow. If irreducible fixed or
+protected input still cannot fit, the request fails closed with `lcm_hard_limit_unresolved`; legacy compaction is not
+used as fallback.
+
+Manual compaction buttons, `/compact`, TUI/remote commands, HTTP routes, and SDK responses remain compatible
+affordances. They all request one forced full LCM maintenance cycle. Manual maintenance creates no compaction control
+part and no synthetic assistant summary message. It succeeds as an observable no-op when nothing is eligible.
+
+Kilo continues to own prompts, tools, permissions, Project Memory, editor/media context, queues, remote sessions,
+structured output, provider requests, retries, and timeouts. Conversation Memory never changes those lanes or creates
+a second provider protocol. Legacy compaction remains compiled for upstream compatibility but is unreachable from
+normal automatic and manual product flows.
 
 The supported recovery surface is exactly `lcm_grep`, `lcm_describe`, `lcm_expand`, and `lcm_read`. They use trusted
-current-session context and Kilo's ordinary tool filtering and permission flow.
+current-session context and Kilo's ordinary filtering and permission flow.

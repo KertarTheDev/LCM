@@ -1,38 +1,30 @@
 # API, UI, and export
 
-Status: normative current-code product-surface contract.
+Status: normative v7.4.16 product-surface contract.
 
-The instance API exposes:
+The authorized instance API retains:
 
 - `GET /session/:sessionID/lcm/status`
 - `GET /session/:sessionID/lcm/activity`
 - `POST /session/:sessionID/lcm/context/export`
 
-Every route uses the normal instance/workspace authorization middleware and first verifies the Kilo session exists.
-Status returns mode, health, a durable monotonically increasing sequence, context capacity, raw/summary composition,
-whether summarization is running, separate memory-work usage, last intervention, and a safe issue when degraded. The
-sequence survives process reopen and advances for every status-visible transition, including background start/finish.
+Status includes usable/active/full capacity plus `softThresholdTokens`, `rawLaneTokens`, `rawLaneRatio`, and
+`fixedInputTokens`. Composition separately reports eligible-backlog and protected-raw token/item counts alongside
+active summary/raw composition. Maintenance phase is one of `idle`, `soft_queued`, `soft_running`, `hard_running`,
+`manual_running`, or `constrained`.
 
-Activity returns newest-first records with maximum page size 100. Its opaque signed cursor binds session and page size.
-Activity kinds are `frontier_advanced`, `intervention`, `fallback`, and `rebuild`.
+Activity is newest-first and records frontier advancement, interventions/no-ops, degraded fallback below hard
+pressure, and cache rebuild. Frontier activity identifies the direct summary roots and whether the cause was
+`soft_leaf`, `hard_level`, or `manual`.
 
-`session.lcm.status` and `session.lcm.activity` use the ordinary EventV2 stream. VS Code accepts events only from the
-tracked session directory, ignores foreign-session and non-increasing status updates, deduplicates activity by ID,
-sorts it by sequence, and clears both when switching sessions.
+VS Code shows lane pressure, composition, health, and maintenance phase in the task context header and Context
+preferences. The old Auto Compaction toggle/limit is not presented as the active control. Context preferences expose
+the LCM soft threshold, default 40%; legacy tool-output pruning remains separate. TUI/CLI `/lcm status` shows the same
+lane and phase fields.
 
-VS Code shows passive pressure/composition in the existing context area, adds intervention markers to the existing
-task timeline, and provides timeline inspection and export from the Context preferences tab. It does not expose
-maintenance controls. TUI `/lcm`, `/lcm status`, `/lcm timeline`, and `/lcm export` provide equivalent inspection.
-Headless CLI uses `kilo lcm status|timeline|export [sessionID]`.
+All existing manual compact/summarize affordances retain their request and success contracts but invoke forced manual
+LCM maintenance. A no-op is successful and observable.
 
-Export is a ZIP with `context.json`, `context.md`, and `manifest.json`. It includes product/upstream identity, health,
-all retained intervention frames plus the latest active frame, referenced revisions, source metadata, summaries and
-children, and the complete activity history. Manifest hashes cover the JSON and Markdown files.
-
-Normalized pre/post frames preserve model-visible system, message, and tool-schema content. Executable functions,
-credentials, headers, provider metadata/options, provider wire bodies, and raw inline binary bytes are excluded.
-Secret-looking text that was actually model-visible is intentionally preserved; the UI warns before export.
-
-CLI/TUI export first verifies the session exists, writes a complete mode-`0600` file atomically, and refuses overwrite.
-VS Code uses a no-overwrite workspace rename, applies restrictive permissions for local files, and removes its
-temporary file after any write, permission, or rename failure. Partial failures leave no apparently complete target.
+Export remains a private atomic ZIP containing normalized pre/post frames, current and retained diagnostic revisions,
+summary relationships, source metadata, activity, product/upstream identity, and hashes. It excludes executable
+functions, credentials, provider headers/options/wire bodies, and raw inline binary bytes.

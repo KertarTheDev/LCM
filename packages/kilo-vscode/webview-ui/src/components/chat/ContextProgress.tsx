@@ -81,10 +81,17 @@ export const ContextProgress: Component = () => {
       )
       lines.push(
         language.t("conversationMemory.tooltip.state", {
-          mode: d.memory.mode,
+          mode: `${d.memory.mode}/${d.memory.background.phase}`,
           health: d.memory.health,
         }),
       )
+      lines.push(
+        `Raw conversation: ${fmt(d.memory.composition.eligibleRawTokens)} eligible + ${fmt(
+          d.memory.composition.protectedRawTokens,
+        )} protected`,
+      )
+      if (d.memory.capacity.fixedInputTokens !== undefined)
+        lines.push(`Fixed upstream input: ${fmt(d.memory.capacity.fixedInputTokens)}`)
     }
     return lines.join("\n")
   })

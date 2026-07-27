@@ -51,19 +51,20 @@ describe("LCM deterministic long-context continuity", () => {
     }
     const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
     await store.replaceSources({ sessionID: fixture.sessionID, lineage, sources })
-    const revision = await new SummaryTree(store).build({
+    const revision = await new SummaryTree(store).maintain({
       sessionID: fixture.sessionID,
       lineage,
       usableInputTokens: fixture.usableInputTokens,
-      protectedSources: fixture.protectedSources,
-      reason: "background",
+      maxEligibleOrdinal: sources.length - fixture.protectedSources - 1,
+      targetTokens: Math.floor(fixture.usableInputTokens * 0.4),
+      mode: "hard",
     })
 
     expect(revision).toBeDefined()
     expect(revision!.items.length).toBeLessThanOrEqual(8 + fixture.protectedSources)
     expect(
       Math.max(...(await store.listSummaries(fixture.sessionID)).map((item) => item.level)),
-    ).toBeGreaterThanOrEqual(2)
+    ).toBeGreaterThanOrEqual(1)
 
     const currentSources = await store.listSources(fixture.sessionID)
     for (const binding of fixture.bindings) {

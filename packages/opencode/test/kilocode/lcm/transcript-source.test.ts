@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
-import { extractFinalSources } from "@/kilocode/session/lcm/transcript-source"
+import { bootstrapConsumedThrough, extractFinalSources } from "@/kilocode/session/lcm/transcript-source"
 import { sha256 } from "@/kilocode/session/lcm/ids"
 
 const sessionID = "ses_source"
@@ -131,5 +131,46 @@ describe("LCM transcript source", () => {
     expect(media).toBeDefined()
     expect(media?.immutableMedia?.bytes).toEqual(new Uint8Array([1, 2, 3, 4]))
     expect(media?.metadata.digest).toBe(sha256(new Uint8Array([1, 2, 3, 4])))
+  })
+
+  test("normalizes the newest-first MessageV2 stream before assigning ordinals", () => {
+    const chronological = extractFinalSources(sessionID, messages())
+    const streamed = extractFinalSources(sessionID, messages().toReversed())
+    expect(streamed.map((item) => item.metadata.id)).toEqual(chronological.map((item) => item.metadata.id))
+    expect(streamed.map((item) => item.metadata.ordinal)).toEqual([0, 1, 2, 3])
+  })
+
+  test("keeps stable chronology beyond one hundred imported sources", () => {
+    const transcript = Array.from({ length: 128 }, (_, index) => ({
+      info: {
+        id: `msg_${index.toString().padStart(3, "0")}`,
+        sessionID,
+        role: "user" as const,
+        time: { created: index + 1 },
+        agent: "build",
+        model: { providerID: "test", modelID: "test" },
+      },
+      parts: [
+        {
+          id: `part_${index.toString().padStart(3, "0")}`,
+          sessionID,
+          messageID: `msg_${index.toString().padStart(3, "0")}`,
+          type: "text" as const,
+          text: `Imported source ${index}`,
+        },
+      ],
+    })) as SessionV1.WithParts[]
+    const sources = extractFinalSources(sessionID, transcript.toReversed())
+    expect(sources).toHaveLength(128)
+    expect(sources.map((item) => item.metadata.ordinal)).toEqual(Array.from({ length: 128 }, (_, index) => index))
+    expect(sources[0]?.metadata.partID).toBe("part_000")
+    expect(sources.at(-1)?.metadata.partID).toBe("part_127")
+  })
+
+  test("bootstraps only history proven consumed by a later successful response", () => {
+    const transcript = messages()
+    const sources = extractFinalSources(sessionID, transcript).map((item) => item.metadata)
+    expect(bootstrapConsumedThrough(sessionID, transcript, sources)).toBe(1)
+    expect(bootstrapConsumedThrough(sessionID, transcript.toReversed(), sources)).toBe(1)
   })
 })

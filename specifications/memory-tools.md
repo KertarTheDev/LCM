@@ -16,7 +16,8 @@ explicitly instead of silently omitting sources, so the caller can narrow the se
 
 ## `lcm_describe`
 
-Describe one source or summary without dumping its full body. Results include stable identity, active state, excerpt,
+Describe one source or summary without dumping its full body. Results include stable identity, reachable `active`
+state, direct `frontier` membership, excerpt,
 size, covered ordinals, digest, and kind-specific provenance or navigation metadata.
 
 ## `lcm_expand`

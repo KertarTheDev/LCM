@@ -33,6 +33,10 @@ export interface CompactionConfig {
   prune?: boolean
 }
 
+export interface ConversationMemoryConfig {
+  soft_threshold_percent?: number | null
+}
+
 export interface WatcherConfig {
   ignore?: string[]
 }
@@ -152,6 +156,7 @@ export interface Config {
   formatter?: false | Record<string, unknown>
   lsp?: false | Record<string, unknown>
   compaction?: CompactionConfig
+  conversation_memory?: ConversationMemoryConfig
   commit_message?: CommitMessageConfig
   tools?: Record<string, boolean>
   auto_collapse_reasoning?: boolean

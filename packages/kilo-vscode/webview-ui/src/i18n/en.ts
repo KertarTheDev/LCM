@@ -1650,12 +1650,12 @@ export const dict = {
 
   "settings.context.autoCompaction.title": "Auto Compaction",
   "settings.context.autoCompaction.description": "Automatically compact context before it reaches the limit",
-  "settings.context.compaction.title": "Compaction",
-  "settings.context.compactionLimit.title": "Auto Compaction Limit",
+  "settings.context.compaction.title": "Tool Output Pruning",
+  "settings.context.compactionLimit.title": "Conversation Memory Soft Threshold",
   "settings.context.compactionLimit.description":
-    "Compact when context reaches this percentage of the model window. Leave blank to use the safety buffer only.",
+    "Start reducing eligible raw conversation history at this percentage of usable input. Leave blank for 40%.",
   "settings.context.prune.title": "Prune Old Outputs",
-  "settings.context.prune.description": "Remove old tool outputs during compaction",
+  "settings.context.prune.description": "Remove stale tool outputs when request payloads become large",
   "settings.context.watcherPatterns": "File Watcher Ignore Patterns",
   "settings.context.watcherPatterns.description": "Glob patterns for files the watcher should ignore",
   "settings.context.memory.title": "Memory",

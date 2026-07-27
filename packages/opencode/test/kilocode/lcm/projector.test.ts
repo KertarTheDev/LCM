@@ -49,14 +49,15 @@ describe("LCM projector", () => {
       lastSourceID: sources.at(-1)?.id,
     }
     await store.replaceSources({ sessionID: "ses_project", lineage, sources })
-    const revision = await new SummaryTree(store).build({
+    const revision = await new SummaryTree(store).maintain({
       sessionID: "ses_project",
       lineage,
       usableInputTokens: 4_000,
-      protectedSources: 2,
-      reason: "background",
+      maxEligibleOrdinal: 9,
+      targetTokens: 1_600,
+      mode: "hard",
     })
-    const messages: ModelMessage[] = Array.from({ length: 8 }, (_, index) => ({
+    const messages: ModelMessage[] = Array.from({ length: 12 }, (_, index) => ({
       role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
       content: `message ${index} ${"raw ".repeat(500)}`,
     }))
@@ -69,7 +70,9 @@ describe("LCM projector", () => {
       tools: { read: { description: "unchanged" } },
       usableInputTokens: 4_000,
       thresholdRatio: 0.6,
-      protectedTailTurns: 2,
+      recentTailTokens: 1_000,
+      protectedMessages: messages.slice(10),
+      maxEligibleOrdinal: 9,
       sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
       continuationID: "msg_current",
       reason: "soft",
@@ -78,7 +81,7 @@ describe("LCM projector", () => {
     expect(result.type).toBe("projected")
     if (result.type !== "projected") throw new Error("expected projection")
     expect(isConversationMemoryMessage(result.messages[0]!)).toBe(true)
-    expect(result.messages.slice(1)).toEqual(messages.slice(4))
+    expect(result.messages.slice(1)).toEqual(messages.slice(10))
     expect(result.revision.id).toBe(revision!.id)
 
     await store.commitRevision({
@@ -94,13 +97,33 @@ describe("LCM projector", () => {
       tools: {},
       usableInputTokens: 4_000,
       thresholdRatio: 0.6,
-      protectedTailTurns: 2,
+      recentTailTokens: 1_000,
+      protectedMessages: messages.slice(10),
+      maxEligibleOrdinal: 9,
       sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
       continuationID: "msg_current",
       reason: "soft",
       measure,
     })
     expect(pinned.type === "projected" && pinned.revision.id).toBe(revision!.id)
+
+    const hard = await projector.project({
+      sessionID: "ses_project",
+      lineage,
+      system: [],
+      messages,
+      tools: {},
+      usableInputTokens: 4_000,
+      thresholdRatio: 0.6,
+      recentTailTokens: 1_000,
+      protectedMessages: messages.slice(10),
+      maxEligibleOrdinal: 9,
+      sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
+      continuationID: "msg_current",
+      reason: "hard",
+      measure,
+    })
+    expect(hard.type === "projected" && hard.revision.id).toBe("rev_newer")
 
     const nextContinuation = await projector.project({
       sessionID: "ses_project",
@@ -110,7 +133,9 @@ describe("LCM projector", () => {
       tools: {},
       usableInputTokens: 4_000,
       thresholdRatio: 0.6,
-      protectedTailTurns: 2,
+      recentTailTokens: 1_000,
+      protectedMessages: messages.slice(10),
+      maxEligibleOrdinal: 9,
       sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
       continuationID: "msg_next",
       reason: "soft",
@@ -132,7 +157,9 @@ describe("LCM projector", () => {
       tools: {},
       usableInputTokens: 4_000,
       thresholdRatio: 0.6,
-      protectedTailTurns: 2,
+      recentTailTokens: 1_000,
+      protectedMessages: messages.slice(10),
+      maxEligibleOrdinal: 9,
       sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
       continuationID: "msg_next",
       reason: "soft",
@@ -152,7 +179,9 @@ describe("LCM projector", () => {
       system: [],
       messages,
       tools: {},
-      protectedTailTurns: 2,
+      recentTailTokens: 2_000,
+      protectedMessages: messages,
+      maxEligibleOrdinal: -1,
       sourceContent: new Map(),
       reason: "soft" as const,
       measure,
@@ -178,7 +207,7 @@ describe("LCM projector", () => {
     store.close()
   })
 
-  test("restores finer tree detail when the request has more usable context", async () => {
+  test("keeps the same stable summary cut when a model has more usable context", async () => {
     const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
     const sources = Array.from({ length: 40 }, (_, ordinal) => makeSource(ordinal))
     const lineage = {
@@ -189,12 +218,13 @@ describe("LCM projector", () => {
     }
     const scoped = sources.map((source) => ({ ...source, sessionID: lineage.sessionID }))
     await store.replaceSources({ sessionID: lineage.sessionID, lineage, sources: scoped })
-    await new SummaryTree(store).build({
+    await new SummaryTree(store).maintain({
       sessionID: lineage.sessionID,
       lineage,
       usableInputTokens: 4_000,
-      protectedSources: 4,
-      reason: "background",
+      maxEligibleOrdinal: 35,
+      targetTokens: 1_600,
+      mode: "hard",
     })
     const messages: ModelMessage[] = Array.from({ length: 40 }, (_, index) => ({
       role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
@@ -210,7 +240,9 @@ describe("LCM projector", () => {
       tools: {},
       usableInputTokens: 10_000,
       thresholdRatio: 0.6,
-      protectedTailTurns: 2,
+      recentTailTokens: 2_000,
+      protectedMessages: messages.slice(36),
+      maxEligibleOrdinal: 35,
       sourceContent,
       reason: "soft",
       measure,
@@ -223,7 +255,9 @@ describe("LCM projector", () => {
       tools: {},
       usableInputTokens: 20_000,
       thresholdRatio: 0.6,
-      protectedTailTurns: 2,
+      recentTailTokens: 2_000,
+      protectedMessages: messages.slice(36),
+      maxEligibleOrdinal: 35,
       sourceContent,
       reason: "soft",
       measure,
@@ -232,8 +266,8 @@ describe("LCM projector", () => {
     expect(narrow.type).toBe("projected")
     expect(wider.type).toBe("projected")
     if (narrow.type !== "projected" || wider.type !== "projected") throw new Error("expected adaptive projections")
-    expect(JSON.stringify(wider.messages[0]).length).toBeGreaterThan(JSON.stringify(narrow.messages[0]).length)
-    expect(wider.pressureAfter).toBeLessThanOrEqual(0.9)
+    expect(wider.messages[0]).toEqual(narrow.messages[0])
+    expect(wider.pressureAfter).toBeLessThan(narrow.pressureAfter)
     store.close()
   })
 })

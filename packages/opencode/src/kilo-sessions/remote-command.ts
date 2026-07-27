@@ -6,6 +6,7 @@ import type { SessionPrompt } from "@/session/prompt"
 import type { Info as SessionInfo } from "@/session/session"
 import { MessageID, type SessionID } from "@/session/schema"
 import { RemoteExit } from "@/kilo-sessions/remote-exit"
+import { Effect } from "effect"
 import z from "zod"
 
 export namespace RemoteCommand {
@@ -247,7 +248,6 @@ export namespace RemoteCommand {
             },
             auto: false,
           })
-          await services.prompt.loop(input.sessionID)
           return
         }
         await services.command({
@@ -321,11 +321,41 @@ export namespace RemoteCommand {
       },
       compaction: {
         create: async (input) => {
-          const [{ AppRuntime }, { SessionCompaction }] = await Promise.all([
-            import("@/effect/app-runtime"),
-            import("@/session/compaction"),
-          ])
-          await AppRuntime.runPromise(SessionCompaction.Service.use((service) => service.create(input)))
+          const [{ AppRuntime }, { ConversationMemory }, { Config }, { Provider }, { RuntimeFlags }, { usable }] =
+            await Promise.all([
+              import("@/effect/app-runtime"),
+              import("@/kilocode/session/lcm/service"),
+              import("@/config/config"),
+              import("@/provider/provider"),
+              import("@/effect/runtime-flags"),
+              import("@/session/overflow"),
+            ])
+          await AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const service = yield* ConversationMemory.Service
+              const config = yield* Config.Service
+              const provider = yield* Provider.Service
+              const flags = yield* RuntimeFlags.Service
+              const model = yield* provider.getModel(input.model.providerID, input.model.modelID)
+              const cfg = yield* config.get()
+              const usableInputTokens = usable({ cfg, model, outputTokenMax: flags.outputTokenMax })
+              const thresholdRatio =
+                typeof cfg.conversation_memory?.soft_threshold_percent === "number"
+                  ? cfg.conversation_memory.soft_threshold_percent / 100
+                  : 0.4
+              yield* service.maintain({
+                sessionID: input.sessionID,
+                model,
+                usableInputTokens,
+                thresholdRatio,
+                recentTailTokens: ConversationMemory.recentTailTokens({
+                  usableInputTokens,
+                  configured: cfg.compaction?.preserve_recent_tokens,
+                }),
+                reason: "manual",
+              })
+            }),
+          )
         },
       },
       prompt: {

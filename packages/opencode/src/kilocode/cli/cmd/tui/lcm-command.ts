@@ -40,9 +40,21 @@ export function formatLcmStatus(value: {
     thresholdRatio?: number
     activeInputTokens?: number
     usableInputTokens?: number
+    rawLaneRatio?: number
+    fixedInputTokens?: number
+    softThresholdTokens?: number
   }
-  composition: { rawItems: number; summaryItems: number; rawTokens: number; summaryTokens: number }
-  background: { summarizing: boolean }
+  composition: {
+    rawItems: number
+    summaryItems: number
+    rawTokens: number
+    summaryTokens: number
+    eligibleRawTokens: number
+    eligibleRawItems: number
+    protectedRawTokens: number
+    protectedRawItems: number
+  }
+  background: { summarizing: boolean; phase: string }
   memoryWork: { attempts: number; inputTokens: number; outputTokens: number; cost: number }
   issue?: { message: string }
 }) {
@@ -51,13 +63,17 @@ export function formatLcmStatus(value: {
     `Context pressure: ${value.capacity.known ? percent(value.capacity.pressureRatio) : "not measured yet"}${
       value.capacity.thresholdRatio === undefined ? "" : ` · intervention at ${percent(value.capacity.thresholdRatio)}`
     }`,
+    `Raw conversation pressure: ${percent(value.capacity.rawLaneRatio)} · eligible backlog ${value.composition.eligibleRawItems} items (${value.composition.eligibleRawTokens.toLocaleString()} tokens) · protected ${value.composition.protectedRawItems} items (${value.composition.protectedRawTokens.toLocaleString()} tokens)`,
+    value.capacity.fixedInputTokens === undefined
+      ? "Fixed upstream input: not measured yet"
+      : `Fixed upstream input: ${value.capacity.fixedInputTokens.toLocaleString()} tokens`,
     value.capacity.activeInputTokens === undefined || value.capacity.usableInputTokens === undefined
       ? "Active capacity: not measured yet"
       : `Active capacity: ${value.capacity.activeInputTokens.toLocaleString()} / ${value.capacity.usableInputTokens.toLocaleString()} tokens`,
     `Composition: ${value.composition.rawItems} raw (${value.composition.rawTokens.toLocaleString()} tokens) · ${
       value.composition.summaryItems
     } summaries (${value.composition.summaryTokens.toLocaleString()} tokens)`,
-    `Background: ${value.background.summarizing ? "summarizing" : "idle"}`,
+    `Maintenance: ${value.background.phase}${value.background.summarizing ? " · summarizing" : ""}`,
     `Memory work: ${value.memoryWork.attempts} attempts · ${value.memoryWork.inputTokens.toLocaleString()} in · ${value.memoryWork.outputTokens.toLocaleString()} out · $${value.memoryWork.cost.toFixed(4)}`,
     ...(value.issue ? [`Issue: ${value.issue.message}`] : []),
   ].join("\n")

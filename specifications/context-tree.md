@@ -1,42 +1,40 @@
 # Context tree
 
-Status: normative current-code tree and projection contract.
+Status: normative v7.4.16 tree and projection contract.
 
 A source is one finalized model-visible transcript part. A summary is immutable text over ordered source or summary
-children. A frontier revision is an ordered set of summary roots followed by protected recent raw sources for one
-exact transcript lineage.
+children. A frontier revision is an exact, gap-free, non-overlapping cut through the current lineage. Every retained
+source is covered exactly once by a frontier source or a reachable summary descendant.
 
-Leaf windows target 30% of usable input and never exceed 20,000 estimated tokens. The current implementation retains
-two recent turns by default, adjusted by upstream tail configuration. A frontier contains at most eight summary roots;
-when wider, it condenses the oldest four adjacent roots and repeats until bounded.
+The tree policy is `lcm-tree-v2`. This policy and derived schema intentionally invalidate the incorrect prerelease
+cache; the sidecar is discarded and rebuilt without modifying the Kilo transcript.
 
-Summary target size is:
+Soft maintenance summarizes at most one eligible raw window per quantum. Leaf windows target 30% of usable input and
+never exceed 20,000 estimated tokens. Existing roots remain stable. When more than eight roots exist, the oldest four
+adjacent roots may be promoted as one complete group. Projection always uses the stable active roots; it never expands
+children opportunistically to spend spare context.
 
-```text
-max(256, floor(min(1600, 15% of source tokens, 10% of usable input)))
-```
+Hard and manual maintenance summarize all eligible raw windows, then repeatedly promote bounded adjacent active
+summary groups until the full LCM-owned frontier reaches
+`floor(usable_input_tokens * soft_threshold_ratio)` when feasible. Each accepted promotion must strictly reduce token
+count. Model generation is attempted in normal and aggressive modes, followed by a deterministic handle-preserving
+fallback. This strict reduction rule makes reducible history converge.
 
-The configured compaction agent is tried in normal mode and then aggressive mode. Calls have no tools, do not recurse
-through Conversation Memory, and do not write transcript messages. Background attempts time out after 180 seconds;
-foreground hard-readiness attempts after 60 seconds. Only one model call runs at a time.
+Summary candidates must be non-empty, smaller than their children, within 115% of target, and contain no invented
+`src_` or `sum_` handle. Rejected/failed attempts retain usage and error provenance. Summary calls have no tools, do
+not recurse through LCM, and write no transcript message.
 
-A candidate must be non-empty, smaller than its source, within 115% of target, and contain no invented `src_` or
-`sum_` handle. Rejected and failed attempts retain usage/error provenance. If both model attempts fail validation, a
-bounded deterministic source-handle index is used when it still achieves real compression.
+The exact recent tail defaults to 15% of usable input, clamped to 2,000–20,000 tokens. It and all unconsumed current
+sources are protected. Only consumed sources older than that tail are eligible.
 
-Request pressure is measured from the final upstream-prepared system, messages, and tools against model-aware usable
-input. The soft threshold is upstream `compaction.threshold_percent`, otherwise 60%. Below it the projector is a
-no-op. At pressure it may replace only the eligible old message prefix with a clearly delimited memory message,
-followed by the untouched protected tail.
+Projection replaces the eligible historical model-message range with one inert `<conversation-memory>` message
+containing the active frontier's stable summaries and any not-yet-summarized eligible sources. The runtime derives the
+first protected persisted message, independently converts that transformed suffix, and uses the cut only when it
+matches the exact suffix of the finalized provider messages. The protected suffix is then copied by identity,
+unchanged. If that boundary cannot be verified, LCM leaves the request unchanged below the hard limit and fails closed
+at the hard limit. A projection is accepted only when it reduces the measured request, fits usable input, and belongs
+to the exact current lineage.
 
-A projection is accepted only when it lowers measured pressure, references a complete current-lineage revision, and
-keeps protected content unchanged. Starting from the coarsest revision roots, the projector expands child summaries
-and then exact source content while the measured request retains a 10% capacity reserve and remains smaller than the
-raw request. This per-request cut restores more detail for larger contexts without mutating the durable tree. A
-revision is pinned for an assistant/tool continuation ID. A new continuation, changed lineage, or deleted session
-discards the old pin. If no fitting revision exists or any validation/storage step fails, the original messages are
-returned.
-
-The deterministic `binding-state.json` fixture proves multi-level construction, stable authorization relationships,
-and exact recovery. Binding facts must remain visible in active memory or be recoverable by search plus source read
-without guessing.
+Frontier reasons exposed to diagnostics are `soft_leaf`, `hard_level`, and `manual`; `append` is an internal exact
+roll-forward revision. `lcm_describe.active` means reachable anywhere in the active tree. Its separate `frontier`
+field means directly present in the current cut.

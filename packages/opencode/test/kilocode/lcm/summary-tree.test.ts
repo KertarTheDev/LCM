@@ -35,7 +35,7 @@ describe("LCM summary tree", () => {
       id: "rev_previous",
       sessionID: "ses_tree",
       lineageDigest: lineageDigest(previous),
-      reason: "background" as const,
+      reason: "soft_leaf" as const,
       items: [
         { kind: "summary" as const, id: "sum_0123456789abcdef01234567", ordinal: 0 },
         { kind: "source" as const, id: previous[2]!.id, ordinal: 2 },
@@ -56,7 +56,7 @@ describe("LCM summary tree", () => {
     ).toBeUndefined()
   })
 
-  test("builds a stable bounded frontier and preserves the raw tail", async () => {
+  test("advances one stable soft quantum at a time and preserves the raw tail", async () => {
     const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
     const sources = Array.from({ length: 20 }, (_, ordinal) => makeSource(ordinal))
     const digest = lineageDigest(sources)
@@ -86,7 +86,11 @@ describe("LCM summary tree", () => {
       protectedSources: 2,
       reason: "background",
     })
-    expect(again!.items.map((item) => item.id)).toEqual(revision!.items.map((item) => item.id))
+    expect(again!.items[0]?.id).toBe(revision!.items[0]?.id)
+    expect(again!.items.filter((item) => item.kind === "summary").length).toBe(
+      revision!.items.filter((item) => item.kind === "summary").length + 1,
+    )
+    expect(again!.items.slice(-2).map((item) => item.id)).toEqual(sources.slice(-2).map((item) => item.id))
     store.close()
   })
 
@@ -146,6 +150,39 @@ describe("LCM summary tree", () => {
     expect(summary?.generationMode).toBe("deterministic")
     expect(summary?.text).not.toContain("src_aaaaaaaaaaaaaaaaaaaaaaaa")
     expect((await store.metrics("ses_tree")).work.attempts).toBe(2)
+    store.close()
+  })
+
+  test("hard maintenance strictly promotes a complete frontier toward the soft target", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = Array.from({ length: 30 }, (_, ordinal) => makeSource(ordinal))
+    const lineage = {
+      sessionID: "ses_tree",
+      digest: lineageDigest(sources),
+      sourceCount: sources.length,
+      lastSourceID: sources.at(-1)?.id,
+    }
+    await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
+    const revision = await new SummaryTree(store).maintain({
+      sessionID: "ses_tree",
+      lineage,
+      usableInputTokens: 8_000,
+      maxEligibleOrdinal: 27,
+      targetTokens: 3_200,
+      mode: "hard",
+    })
+
+    expect(revision?.reason).toBe("hard_level")
+    expect(revision?.items.slice(-2).map((item) => item.id)).toEqual(sources.slice(-2).map((item) => item.id))
+    expect(revision?.items.filter((item) => item.kind === "source").length).toBe(2)
+    const frontierTokens = await Promise.all(
+      revision!.items.map(async (item) =>
+        item.kind === "source"
+          ? ((await store.getSource("ses_tree", item.id))?.tokens ?? 0)
+          : ((await store.getSummary("ses_tree", item.id))?.tokens ?? 0),
+      ),
+    )
+    expect(frontierTokens.reduce((total, tokens) => total + tokens, 0)).toBeLessThanOrEqual(3_200)
     store.close()
   })
 })

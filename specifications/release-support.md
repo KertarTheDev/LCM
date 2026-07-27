@@ -1,34 +1,27 @@
 # Release support
 
-Status: normative current-code release policy.
+Status: normative v7.4.16 release policy.
 
-The product branch is based directly on upstream Kilo Code `v7.4.16`
-(`f80ebff83b32550333da7c50c91c4755e4524d0d`). Product commits must remain understandable as a minimal upstream pull
-request; older branch commits are historical reference, not a replay sequence.
+The product branch remains a direct, narrow augmentation of upstream tag `v7.4.16`
+(`f80ebff83b32550333da7c50c91c4755e4524d0d`). Correct the product branch with ordinary reviewable commits; do not
+rewrite its published history or replay old LCM branches.
 
-Before a prerelease candidate:
+The incorrect public `v7.4.16-lcm.1` has no compatibility contract. After the fixed product and packaged candidate are
+fully verified:
 
-1. Run every focused LCM gate and deterministic fixture.
-2. Regenerate OpenAPI/SDK output and prove a second generation is clean.
-3. Run affected type checks, extension compile, marker/annotation checks, and formatting checks.
-4. Reconstruct the narrow prerelease overlay on the verified product SHA, then build the CLI and VSIX from that exact
-   candidate SHA.
-5. Run `lcm:packaged-smoke` against the extracted artifacts.
-6. Exercise runtime rebuild, four-tool recovery, events/routes, export verification, failure fallback, and manual
-   compaction.
-7. Record artifact SHA-256 values and the exact source SHA.
+1. push the verified product branch;
+2. reconstruct the narrow prerelease overlay directly on that product SHA;
+3. push `kilocode-lcm-prerelease` with an exact fetched force-with-lease;
+4. re-resolve and delete only the captured incorrect GitHub release ID, its exact matching tag, and assets;
+5. verify the old release and tag are absent while retaining Actions run audit history;
+6. dispatch the prerelease workflow for the exact corrected candidate SHA;
+7. require the helper to select the now-free `v7.4.16-lcm.1`;
+8. verify a non-draft prerelease at the exact SHA with the exact expected 20 assets and packaged-runtime smoke; and
+9. confirm upstream version/build/publish jobs remained skipped.
 
-The inherited prompt-queue cancellation exception documented in
-`verification-and-upstream-compatibility.md` requires a pristine-v7.4.16 reproduction in the candidate evidence. It
-does not authorize ignoring any other queue failure or changing LCM behavior to compensate for the upstream runner.
+If replacement publication fails, delete only the captured failed draft/release and matching tag. Do not restore the
+incorrect prerelease. Because the semantic version is reused, testers must force reinstall the corrected artifact.
 
-External prerelease validation uses the same artifacts on Linux/VSCodium and macOS/VS Code, including a small-context
-model. It records intervention count, detail recovery, task completion, latency, storage growth, fallback behavior,
-and export usability.
-
-Derived schema, settings, or user-visible changes after a public prerelease require an explicit migration, cleanup, or
-release-note decision. Private development caches may be discarded; Kilo transcript data must never be deleted as
-part of that cleanup.
-
-The prerelease overlay, workflow dispatch, branch push, release publication, and pull-request submission are separate
-authorized operations. They are not part of local product implementation.
+Release evidence includes clean second generation, focused/affected suites, annotations, VS Code compile/snapshot and
+install identity, relevant JetBrains checks, extracted CLI/VSIX smoke, exact source/artifact hashes, and final clean
+status.

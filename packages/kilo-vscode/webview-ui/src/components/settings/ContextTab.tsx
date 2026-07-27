@@ -22,21 +22,25 @@ const ContextTab: Component = () => {
 
   const patterns = () => config().watcher?.ignore ?? []
   const limit = () => {
-    const value = config().compaction?.threshold_percent
+    const value = config().conversation_memory?.soft_threshold_percent
     return value === null || value === undefined ? "" : String(value)
   }
 
   const saveLimit = (value: string) => {
     const raw = value.trim()
     if (!raw) {
-      updateConfig({ compaction: { ...config().compaction, threshold_percent: null } })
+      updateConfig({
+        conversation_memory: { ...config().conversation_memory, soft_threshold_percent: null },
+      })
       return
     }
 
     const percent = Number(raw)
     if (!Number.isFinite(percent)) return
     const next = Math.min(100, Math.max(1, percent))
-    updateConfig({ compaction: { ...config().compaction, threshold_percent: next } })
+    updateConfig({
+      conversation_memory: { ...config().conversation_memory, soft_threshold_percent: next },
+    })
   }
 
   const addPattern = () => {
@@ -69,11 +73,11 @@ const ContextTab: Component = () => {
     const status = session.lcmStatus()
     if (!status) return language.t("conversationMemory.status.unavailable")
     const pressure =
-      status.capacity.pressureRatio === undefined
+      status.capacity.rawLaneRatio === undefined
         ? language.t("conversationMemory.status.unmeasured")
-        : `${Math.round(status.capacity.pressureRatio * 100)}%`
+        : `${Math.round(status.capacity.rawLaneRatio * 100)}%`
     return language.t("conversationMemory.status.summary", {
-      mode: status.mode,
+      mode: `${status.mode}/${status.background.phase}`,
       pressure,
       summaries: status.composition.summaryItems,
       health: status.health,
@@ -143,11 +147,7 @@ const ContextTab: Component = () => {
 
       <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>{language.t("conversationMemory.title")}</h4>
       <Card>
-        <SettingsRow
-          title={language.t("conversationMemory.activeSession")}
-          description={conversationMemoryStats()}
-          last
-        >
+        <SettingsRow title={language.t("conversationMemory.activeSession")} description={conversationMemoryStats()}>
           <div style={{ display: "flex", gap: "6px" }}>
             <Button
               variant="secondary"
@@ -168,28 +168,10 @@ const ContextTab: Component = () => {
             </Button>
           </div>
         </SettingsRow>
-      </Card>
-
-      {/* Compaction settings */}
-      <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>
-        {language.t("settings.context.compaction.title")}
-      </h4>
-      <Card>
-        <SettingsRow
-          title={language.t("settings.context.autoCompaction.title")}
-          description={language.t("settings.context.autoCompaction.description")}
-        >
-          <Switch
-            checked={config().compaction?.auto ?? true}
-            onChange={(checked) => updateConfig({ compaction: { ...config().compaction, auto: checked } })}
-            hideLabel
-          >
-            {language.t("settings.context.autoCompaction.title")}
-          </Switch>
-        </SettingsRow>
         <SettingsRow
           title={language.t("settings.context.compactionLimit.title")}
           description={language.t("settings.context.compactionLimit.description")}
+          last
         >
           <div style={{ display: "flex", "align-items": "center", gap: "6px", width: "96px" }}>
             <TextField
@@ -198,7 +180,7 @@ const ContextTab: Component = () => {
               max="100"
               step="1"
               value={limit()}
-              placeholder="80"
+              placeholder="40"
               onChange={saveLimit}
               hideLabel
               label={language.t("settings.context.compactionLimit.title")}
@@ -206,6 +188,13 @@ const ContextTab: Component = () => {
             <span style={{ color: "var(--text-weak-base, var(--vscode-descriptionForeground))" }}>%</span>
           </div>
         </SettingsRow>
+      </Card>
+
+      {/* Legacy tool-output pruning remains independent of active Conversation Memory maintenance. */}
+      <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>
+        {language.t("settings.context.compaction.title")}
+      </h4>
+      <Card>
         <SettingsRow
           title={language.t("settings.context.prune.title")}
           description={language.t("settings.context.prune.description")}

@@ -27,7 +27,7 @@ for (const filename of required) {
   if (!(await Bun.file(target).exists())) fail(`missing specifications/${filename}`)
   const text = await Bun.file(target).text()
   if (!/^Status: (?:normative|current)/m.test(text)) fail(`${filename} has no current authority status`)
-  if (/\bpglite\b|\bupward\b|\bdolt\b|child-only|fail-closed prompt|manual LCM maintenance/i.test(text)) {
+  if (/\bupward\b|\bdolt\b|child-only|legacy compaction (?:is|as|remains).{0,30}(?:hard )?fallback/i.test(text)) {
     fail(`${filename} contains a retired target claim`)
   }
   for (const match of text.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
@@ -36,6 +36,18 @@ for (const filename of required) {
     const resolved = path.resolve(path.dirname(target), href.split("#", 1)[0]!)
     if (!existsSync(resolved)) fail(`${filename} links to missing ${href}`)
   }
+}
+
+const authority = await Promise.all(required.map((filename) => Bun.file(path.join(specs, filename)).text()))
+const contract = authority.join("\n")
+for (const requiredClaim of [
+  "conversation_memory.soft_threshold_percent",
+  "newest-first",
+  "lcm_hard_limit_unresolved",
+  "manual",
+  "40%",
+]) {
+  if (!contract.includes(requiredClaim)) fail(`current authority omits ${requiredClaim}`)
 }
 
 const fixture = path.join(specs, "fixtures/binding-state.json")

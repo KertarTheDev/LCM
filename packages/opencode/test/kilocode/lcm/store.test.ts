@@ -78,7 +78,7 @@ describe("LCM SQLite store", () => {
       id: "rev_test",
       sessionID: "ses_test",
       lineageDigest: digest,
-      reason: "background",
+      reason: "soft_leaf",
       items: [{ kind: "summary", id, ordinal: 0 }],
       createdAt: 2,
     })
@@ -183,7 +183,7 @@ describe("LCM SQLite store", () => {
         id: "rev_stale",
         sessionID: "ses_test",
         lineageDigest: "stale",
-        reason: "background",
+        reason: "soft_leaf",
         items: [{ kind: "source", id: sources[0]!.id, ordinal: 0 }],
         createdAt: 1,
       }),
@@ -243,7 +243,7 @@ describe("LCM SQLite store", () => {
       id: "rev_history",
       sessionID: "ses_test",
       lineageDigest: digest,
-      reason: "background",
+      reason: "soft_leaf",
       items: [{ kind: "summary", id, ordinal: 0 }],
       createdAt: 2,
     })
@@ -259,6 +259,9 @@ describe("LCM SQLite store", () => {
       usableInputTokens: 8_000,
       thresholdRatio: 0.6,
       rawTokens: 6_000,
+      rawLaneTokens: 5_000,
+      fixedInputTokens: 1_000,
+      recentTailTokens: 2_000,
       summaryTokens: 4,
       createdAt: 3,
     })
@@ -332,6 +335,7 @@ describe("LCM SQLite store", () => {
       sessionID: "ses_test",
       sequence: 0,
       sourceCount: 0,
+      consumedThrough: -1,
       state: "raw",
       health: "ok",
     })
@@ -368,6 +372,41 @@ describe("LCM SQLite store", () => {
     expect(await store.listActivity("ses_test")).toEqual([])
     expect((await store.inspect("ses_test")).sourceCount).toBe(0)
     expect(await store.listSources("ses_other")).toEqual([other])
+    store.close()
+  })
+
+  test("advances consumption only for the exact lineage and resets it on rewrite", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = [makeSource(0), makeSource(1), makeSource(2)]
+    const digest = lineageDigest(sources)
+    await store.replaceSources({
+      sessionID: "ses_test",
+      sources,
+      lineage: { sessionID: "ses_test", digest, sourceCount: sources.length },
+    })
+
+    await store.markConsumed({ sessionID: "ses_test", lineageDigest: "stale", throughOrdinal: 2 })
+    expect((await store.inspect("ses_test")).consumedThrough).toBe(-1)
+    await store.markConsumed({ sessionID: "ses_test", lineageDigest: digest, throughOrdinal: 1 })
+    expect((await store.inspect("ses_test")).consumedThrough).toBe(1)
+    await store.markConsumed({ sessionID: "ses_test", lineageDigest: digest, throughOrdinal: 99 })
+    expect((await store.inspect("ses_test")).consumedThrough).toBe(2)
+
+    const appended = [...sources, makeSource(3)]
+    await store.replaceSources({
+      sessionID: "ses_test",
+      sources: appended,
+      lineage: { sessionID: "ses_test", digest: lineageDigest(appended), sourceCount: appended.length },
+    })
+    expect((await store.inspect("ses_test")).consumedThrough).toBe(2)
+
+    const rewritten = [{ ...makeSource(0), digest: sha256("rewritten"), id: "src_rewritten" }]
+    await store.replaceSources({
+      sessionID: "ses_test",
+      sources: rewritten,
+      lineage: { sessionID: "ses_test", digest: lineageDigest(rewritten), sourceCount: 1 },
+    })
+    expect((await store.inspect("ses_test")).consumedThrough).toBe(-1)
     store.close()
   })
 })

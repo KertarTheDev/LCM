@@ -20,6 +20,44 @@ interface ImmutableMedia {
   filename?: string
 }
 
+/**
+ * MessageV2.stream() pages the Kilo transcript newest-first. LCM has exactly
+ * one ordering boundary so callers, legacy sessions, imports, and tests all
+ * receive the same oldest-first source chronology.
+ */
+export function normalizeTranscriptChronology(messages: WithParts[]) {
+  return messages
+    .map((message, index) => ({ message, index }))
+    .toSorted(
+      (a, b) =>
+        a.message.info.time.created - b.message.info.time.created ||
+        a.message.info.id.localeCompare(b.message.info.id) ||
+        a.index - b.index,
+    )
+    .map((item) => item.message)
+}
+
+/**
+ * A retained successful assistant response is durable proof that every earlier
+ * message in that transcript was consumed by a provider. This bootstraps a
+ * rebuilt sidecar conservatively without treating the response's own parts as
+ * consumed.
+ */
+export function bootstrapConsumedThrough(sessionID: string, messages: WithParts[], sources: FinalSource[]) {
+  const ordered = normalizeTranscriptChronology(messages).filter((message) => message.info.sessionID === sessionID)
+  const proof = ordered.findLastIndex(
+    (message) =>
+      message.info.role === "assistant" &&
+      message.info.summary !== true &&
+      !message.info.error &&
+      Boolean(message.info.finish) &&
+      isFinal(message),
+  )
+  if (proof <= 0) return -1
+  const consumedMessages = new Set<string>(ordered.slice(0, proof).map((message) => message.info.id))
+  return sources.findLast((source) => consumedMessages.has(source.messageID))?.ordinal ?? -1
+}
+
 function bytes(value: string) {
   return Buffer.byteLength(value)
 }
@@ -124,7 +162,7 @@ function isFinal(message: WithParts) {
 export function extractFinalSources(sessionID: string, messages: WithParts[]) {
   const result: ExtractedSource[] = []
   let ordinal = 0
-  for (const message of messages) {
+  for (const message of normalizeTranscriptChronology(messages)) {
     if (message.info.sessionID !== sessionID || !isFinal(message)) continue
     if (message.info.role === "assistant" && message.info.summary) continue
     for (const part of message.parts) {

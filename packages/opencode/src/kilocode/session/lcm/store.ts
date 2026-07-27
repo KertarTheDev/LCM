@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS lcm_session (
   session_id TEXT PRIMARY KEY,
   lineage_digest TEXT NOT NULL,
   indexed_through INTEGER NOT NULL,
+  consumed_through INTEGER NOT NULL,
   source_count INTEGER NOT NULL,
   status_sequence INTEGER NOT NULL,
   state TEXT NOT NULL,
@@ -148,6 +149,9 @@ CREATE TABLE IF NOT EXISTS lcm_context_frame (
   usable_input_tokens INTEGER NOT NULL,
   threshold_ratio REAL NOT NULL,
   raw_tokens INTEGER NOT NULL,
+  raw_lane_tokens INTEGER NOT NULL,
+  fixed_input_tokens INTEGER NOT NULL,
+  recent_tail_tokens INTEGER NOT NULL,
   summary_tokens INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );
@@ -163,6 +167,7 @@ type SessionRow = {
   session_id: string
   lineage_digest: string
   indexed_through: number
+  consumed_through: number
   source_count: number
   status_sequence: number
   state: MemoryState["state"]
@@ -251,6 +256,9 @@ type FrameRow = {
   usable_input_tokens: number
   threshold_ratio: number
   raw_tokens: number
+  raw_lane_tokens: number
+  fixed_input_tokens: number
+  recent_tail_tokens: number
   summary_tokens: number
   created_at: number
 }
@@ -377,6 +385,7 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
         sessionID,
         sequence: 0,
         sourceCount: 0,
+        consumedThrough: -1,
         state: "raw",
         health: "ok",
       }
@@ -385,6 +394,7 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
       sequence: row.status_sequence,
       ...(row.lineage_digest ? { lineageDigest: row.lineage_digest } : {}),
       indexedThrough: row.indexed_through,
+      consumedThrough: row.consumed_through,
       sourceCount: row.source_count,
       state: row.state,
       health: row.health,
@@ -399,6 +409,18 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
   }): Promise<void> {
     this.client.transaction(() => {
       const previous = this.client.get<SessionRow>("SELECT * FROM lcm_session WHERE session_id = ?", [input.sessionID])
+      const previousSources = this.client.all<Pick<SourceRow, "source_id" | "digest" | "ordinal">>(
+        "SELECT source_id, digest, ordinal FROM lcm_source WHERE session_id = ? ORDER BY ordinal, source_id",
+        [input.sessionID],
+      )
+      const preservesConsumption =
+        previousSources.length <= input.sources.length &&
+        previousSources.every(
+          (source, index) =>
+            source.source_id === input.sources[index]?.id &&
+            source.digest === input.sources[index]?.digest &&
+            source.ordinal === input.sources[index]?.ordinal,
+        )
       if (previous && previous.lineage_digest !== input.lineage.digest) {
         // Historical revisions remain derived export evidence. Exact-lineage
         // activation keeps them unreachable from the current prompt and tools.
@@ -429,19 +451,31 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
       }
       this.client.run(
         `INSERT INTO lcm_session(
-          session_id, lineage_digest, indexed_through, source_count, status_sequence, state, health, issue_json,
+          session_id, lineage_digest, indexed_through, consumed_through, source_count, status_sequence, state, health, issue_json,
           updated_at
-        ) VALUES (?, ?, ?, ?, 1, 'raw', 'ok', NULL, ?)
+        ) VALUES (?, ?, ?, -1, ?, 1, 'raw', 'ok', NULL, ?)
         ON CONFLICT(session_id) DO UPDATE SET
           lineage_digest = excluded.lineage_digest,
           indexed_through = excluded.indexed_through,
+          consumed_through = CASE
+            WHEN ?
+              THEN MIN(lcm_session.consumed_through, excluded.indexed_through)
+            ELSE -1
+          END,
           source_count = excluded.source_count,
           status_sequence = lcm_session.status_sequence + 1,
           state = CASE WHEN lcm_session.lineage_digest = excluded.lineage_digest THEN lcm_session.state ELSE 'raw' END,
           health = 'ok',
           issue_json = NULL,
           updated_at = excluded.updated_at`,
-        [input.sessionID, input.lineage.digest, input.sources.at(-1)?.ordinal ?? -1, input.sources.length, Date.now()],
+        [
+          input.sessionID,
+          input.lineage.digest,
+          input.sources.at(-1)?.ordinal ?? -1,
+          input.sources.length,
+          Date.now(),
+          preservesConsumption ? 1 : 0,
+        ],
       )
     })
   }
@@ -647,6 +681,17 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
     }
   }
 
+  async markConsumed(input: { sessionID: string; lineageDigest: string; throughOrdinal: number }): Promise<void> {
+    this.client.run(
+      `UPDATE lcm_session
+       SET consumed_through = MAX(consumed_through, MIN(indexed_through, ?)),
+           status_sequence = status_sequence + 1,
+           updated_at = ?
+       WHERE session_id = ? AND lineage_digest = ?`,
+      [input.throughOrdinal, Date.now(), input.sessionID, input.lineageDigest],
+    )
+  }
+
   async getRevision(sessionID: string, revisionID: string): Promise<FrontierRevision | undefined> {
     const row = this.client.get<RevisionRow>(
       "SELECT * FROM lcm_frontier_revision WHERE session_id = ? AND revision_id = ?",
@@ -787,8 +832,9 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
       this.client.run(
         `INSERT INTO lcm_context_frame(
           frame_id, session_id, request_id, revision_id, lineage_digest, active, reason, pre_blob_id, post_blob_id,
-          pressure_before, pressure_after, usable_input_tokens, threshold_ratio, raw_tokens, summary_tokens, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          pressure_before, pressure_after, usable_input_tokens, threshold_ratio, raw_tokens, raw_lane_tokens,
+          fixed_input_tokens, recent_tail_tokens, summary_tokens, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           frame.id,
           frame.sessionID,
@@ -804,6 +850,9 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
           frame.usableInputTokens,
           frame.thresholdRatio,
           frame.rawTokens,
+          frame.rawLaneTokens,
+          frame.fixedInputTokens,
+          frame.recentTailTokens,
           frame.summaryTokens,
           frame.createdAt,
         ],
@@ -838,6 +887,9 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
         usableInputTokens: row.usable_input_tokens,
         thresholdRatio: row.threshold_ratio,
         rawTokens: row.raw_tokens,
+        rawLaneTokens: row.raw_lane_tokens,
+        fixedInputTokens: row.fixed_input_tokens,
+        recentTailTokens: row.recent_tail_tokens,
         summaryTokens: row.summary_tokens,
         createdAt: row.created_at,
       }))
@@ -857,9 +909,9 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
   private ensureSession(sessionID: string) {
     this.client.run(
       `INSERT OR IGNORE INTO lcm_session(
-        session_id, lineage_digest, indexed_through, source_count, status_sequence, state, health, issue_json,
+        session_id, lineage_digest, indexed_through, consumed_through, source_count, status_sequence, state, health, issue_json,
         updated_at
-      ) VALUES (?, '', -1, 0, 0, 'raw', 'ok', NULL, ?)`,
+      ) VALUES (?, '', -1, -1, 0, 0, 'raw', 'ok', NULL, ?)`,
       [sessionID, Date.now()],
     )
   }

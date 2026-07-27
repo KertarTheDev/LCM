@@ -1194,14 +1194,9 @@ export const layer = Layer.effect(
         // kilocode_change end
         yield* flushV2Fragments()
         if (MessageV2.ContextOverflowError.isInstance(error)) {
-          // respect compaction.auto === false by surfacing overflow as a hard error instead of auto-compacting
-          if ((yield* config.get()).compaction?.auto === false && !ctx.assistantMessage.summary) {
-            ctx.assistantMessage.error = error
-            ctx.assistantMessage.finish = "error"
-            yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
-            yield* status.set(ctx.sessionID, { type: "idle" })
-            return
-          }
+          // kilocode_change start - provider overflow requests one bounded LCM hard
+          // retry. compaction.auto controls only the retained legacy subsystem.
+          // kilocode_change end
           ctx.needsCompaction = true
           yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return

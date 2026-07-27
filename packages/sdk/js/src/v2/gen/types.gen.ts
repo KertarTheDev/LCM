@@ -1723,6 +1723,12 @@ export type Config = {
     preserve_recent_tokens?: number
     reserved?: number
   }
+  conversation_memory?: {
+    /**
+     * Raw conversation-lane pressure that starts Conversation Memory maintenance (default: 40%).
+     */
+    soft_threshold_percent?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
   experimental?: {
     disable_paste_summary?: boolean
     batch_tool?: boolean
@@ -4996,6 +5002,10 @@ export type EventSessionLcmStatus = {
         freeTokens?: number
         pressureRatio?: number
         thresholdRatio?: number
+        softThresholdTokens?: number
+        rawLaneTokens?: number
+        rawLaneRatio?: number
+        fixedInputTokens?: number
       }
       composition: {
         revisionID?: string
@@ -5003,9 +5013,14 @@ export type EventSessionLcmStatus = {
         summaryTokens: number
         rawItems: number
         summaryItems: number
+        eligibleRawTokens: number
+        eligibleRawItems: number
+        protectedRawTokens: number
+        protectedRawItems: number
       }
       background: {
         summarizing: boolean
+        phase: "idle" | "soft_queued" | "soft_running" | "hard_running" | "manual_running" | "constrained"
       }
       memoryWork: {
         attempts: number
@@ -11279,6 +11294,10 @@ export type ConversationMemoryStatusResponses = {
       freeTokens?: number
       pressureRatio?: number
       thresholdRatio?: number
+      softThresholdTokens?: number
+      rawLaneTokens?: number
+      rawLaneRatio?: number
+      fixedInputTokens?: number
     }
     composition: {
       revisionID?: string
@@ -11286,9 +11305,14 @@ export type ConversationMemoryStatusResponses = {
       summaryTokens: number
       rawItems: number
       summaryItems: number
+      eligibleRawTokens: number
+      eligibleRawItems: number
+      protectedRawTokens: number
+      protectedRawItems: number
     }
     background: {
       summarizing: boolean
+      phase: "idle" | "soft_queued" | "soft_running" | "hard_running" | "manual_running" | "constrained"
     }
     memoryWork: {
       attempts: number
