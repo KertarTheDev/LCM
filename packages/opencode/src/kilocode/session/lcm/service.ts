@@ -961,7 +961,7 @@ export const layer: Layer.Layer<
           throughOrdinal: item.throughOrdinal,
         })
         const transcript = await bridge.promise(
-          MessageV2.stream(input.sessionID).pipe(Effect.provideService(CoreDatabase.Service, database)),
+          MessageV2.stream(input.sessionID as SessionID).pipe(Effect.provideService(CoreDatabase.Service, database)),
         )
         const synced = await sync({
           sessionID: input.sessionID,
@@ -992,7 +992,7 @@ export const layer: Layer.Layer<
         phases.set(input.sessionID, input.reason === "manual" ? "manual_running" : "hard_running")
         await publishCurrentStatus(input.sessionID)
         const transcript = await bridge.promise(
-          MessageV2.stream(input.sessionID).pipe(Effect.provideService(CoreDatabase.Service, database)),
+          MessageV2.stream(input.sessionID as SessionID).pipe(Effect.provideService(CoreDatabase.Service, database)),
         )
         const synced = await sync({
           sessionID: input.sessionID,

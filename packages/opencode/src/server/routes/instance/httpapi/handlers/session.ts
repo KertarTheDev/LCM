@@ -275,7 +275,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       yield* revertSvc.cleanup(yield* requireSession(ctx.params.sessionID))
       // kilocode_change start - preserve the public compaction affordance while
       // redirecting it to one forced full Conversation Memory cycle.
-      const model = yield* provider.getModel(ctx.payload.providerID, ctx.payload.modelID)
+      const model = yield* provider
+        .getModel(ctx.payload.providerID, ctx.payload.modelID)
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
       const cfg = yield* config.get()
       const usableInputTokens = usableContext({ cfg, model, outputTokenMax: flags.outputTokenMax })
       const thresholdRatio =
