@@ -276,7 +276,7 @@ export const LcmExpandQueryTool = Tool.define(
             }),
             metadata: { citations: result.citations.length, truncated: retrieval.truncated || answerTruncated },
           }
-        }),
+        }).pipe(Effect.orDie),
     }
   }),
 )
