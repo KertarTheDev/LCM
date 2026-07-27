@@ -6,9 +6,13 @@ import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
 import { inertOutput, LcmToolError, loadMemory, requireSummary } from "./lcm-common"
 
 const Parameters = Schema.Struct({
-  summaryID: Schema.String,
-  limit: Schema.optional(Schema.Number),
-  cursor: Schema.optional(Schema.String),
+  summaryID: Schema.String.annotate({ description: "Active current-session sum_ summary handle." }),
+  limit: Schema.optional(Schema.Number).annotate({
+    description: "Maximum children to return (default 10, maximum 50).",
+  }),
+  cursor: Schema.optional(Schema.String).annotate({
+    description: "Opaque nextCursor from the preceding expansion of this summary.",
+  }),
 })
 
 export const LcmExpandTool = Tool.define(

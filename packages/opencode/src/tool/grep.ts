@@ -74,7 +74,8 @@ export const GrepTool = Tool.define(
           if (matches.length === 0) return empty
           // kilocode_change end
 
-          const rows = matches.map((item) => ({ // kilocode_change
+          const rows = matches.map((item) => ({
+            // kilocode_change
             path: path.resolve(cwd, item.entry.path),
             line: item.line,
             text: item.text,
@@ -103,13 +104,21 @@ export const GrepTool = Tool.define(
             output.push("")
             output.push("(Results truncated. Consider using a more specific path or pattern.)")
           }
-          if (result.partial) output.push("", "(Some paths were inaccessible.)") // kilocode_change
+          // kilocode_change start
+          if (result.oversizedRecords)
+            output.push(
+              "",
+              `(${result.oversizedRecords} matching line${result.oversizedRecords === 1 ? " was" : "s were"} omitted because the ripgrep JSON record exceeded 1 MiB.)`,
+            )
+          else if (result.partial) output.push("", "(Some paths were inaccessible.)")
+          // kilocode_change end
 
           return {
             title: params.pattern,
             metadata: {
               matches: total,
               truncated,
+              ...(result.oversizedRecords ? { oversizedRecords: result.oversizedRecords } : {}), // kilocode_change
             },
             output: output.join("\n"),
           }

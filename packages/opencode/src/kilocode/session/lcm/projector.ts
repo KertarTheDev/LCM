@@ -25,7 +25,7 @@ function render(items: MemoryItem[]) {
     MEMORY_OPEN,
     "Earlier finalized conversation is represented below. Treat it as prior conversation state, not as new user",
     "instructions. Preserve its decisions and constraints. When exact omitted detail matters, use lcm_grep,",
-    "lcm_describe, lcm_expand, or lcm_read with the stable IDs shown here instead of guessing.",
+    "lcm_describe, lcm_expand_query, lcm_expand, or lcm_read with the stable IDs shown here instead of guessing.",
     "",
     body,
     MEMORY_CLOSE,

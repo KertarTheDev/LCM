@@ -8,12 +8,22 @@ import { inertOutput, LcmToolError, loadMemory, requireSummary } from "./lcm-com
 import type { SummaryChild } from "@/kilocode/session/lcm/types"
 
 const Parameters = Schema.Struct({
-  pattern: Schema.String,
-  mode: Schema.optional(Schema.Literals(["literal", "regex"])),
-  caseSensitive: Schema.optional(Schema.Boolean),
-  summaryID: Schema.optional(Schema.String),
-  limit: Schema.optional(Schema.Number),
-  cursor: Schema.optional(Schema.String),
+  pattern: Schema.String.annotate({ description: "Text or regular expression to search for." }),
+  mode: Schema.optional(Schema.Literals(["literal", "regex"])).annotate({
+    description: "Search mode. Defaults to literal.",
+  }),
+  caseSensitive: Schema.optional(Schema.Boolean).annotate({
+    description: "Whether matching is case-sensitive. Defaults to false.",
+  }),
+  summaryID: Schema.optional(Schema.String).annotate({
+    description: "Optional sum_ handle whose descendants bound the search.",
+  }),
+  limit: Schema.optional(Schema.Number).annotate({
+    description: "Maximum records to return (default 20, maximum 50).",
+  }),
+  cursor: Schema.optional(Schema.String).annotate({
+    description: "Opaque nextCursor from the preceding identical search.",
+  }),
 })
 
 function ranges(text: string, pattern: string, caseSensitive: boolean, limit: number) {

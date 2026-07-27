@@ -947,6 +947,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           client: this.client,
           connection: this.connectionService,
           dir: this.getWorkspaceDirectory(this.currentSession?.id),
+          resolveDir: (sessionID) => this.getWorkspaceDirectory(sessionID ?? this.currentSession?.id),
           post: (msg) => this.postMessage(msg),
           exportTranscript: (sessionID) => this.handleExportSessionTranscript(sessionID),
           openSessions: (ids) => this.trackOpenSessions(ids),

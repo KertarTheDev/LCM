@@ -215,6 +215,7 @@ interface SessionContextValue {
   contextUsage: Accessor<ContextUsage | undefined>
   lcmActivity: Accessor<LcmActivity[]>
   lcmStatus: Accessor<LcmStatus | undefined>
+  lcmStatusError: Accessor<string | undefined>
   modelUsage: Accessor<SessionModelUsage | undefined>
   refreshModelUsage: () => void
 
@@ -331,11 +332,13 @@ export const SessionProvider: ParentComponent = (props) => {
   const [userClearedSession, setUserClearedSession] = createSignal(false)
   const [lcmActivity, setLcmActivity] = createSignal<LcmActivity[]>([])
   const [lcmStatus, setLcmStatus] = createSignal<LcmStatus | undefined>()
+  const [lcmStatusError, setLcmStatusError] = createSignal<string | undefined>()
 
   createEffect(() => {
     const id = currentSessionID()
     const connected = server.isConnected()
     setLcmStatus(undefined)
+    setLcmStatusError(undefined)
     setLcmActivity([])
     if (!id || id.startsWith("cloud:") || !connected) return
     vscode.postMessage({ type: "requestLcmStatus", sessionID: id })
@@ -1103,6 +1106,7 @@ export const SessionProvider: ParentComponent = (props) => {
       activeSessionID: currentSessionID(),
       requestStatus: (sessionID) => vscode.postMessage({ type: "requestLcmStatus", sessionID }),
       setStatus: setLcmStatus,
+      setError: setLcmStatusError,
       setActivity: setLcmActivity,
     })
     if (handleModelUsageMessage(message)) return
@@ -2986,6 +2990,7 @@ export const SessionProvider: ParentComponent = (props) => {
     contextUsage,
     lcmActivity,
     lcmStatus,
+    lcmStatusError,
     modelUsage,
     refreshModelUsage,
     agents,

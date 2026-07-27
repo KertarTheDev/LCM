@@ -28,6 +28,7 @@ export function routeLcmMessage(input: {
   activeSessionID?: string
   requestStatus: (sessionID: string) => void
   setStatus: (update: (current?: LcmStatus) => LcmStatus | undefined) => void
+  setError: (message?: string) => void
   setActivity: (update: (current: LcmActivity[]) => LcmActivity[]) => void
 }) {
   const message = input.message
@@ -36,6 +37,7 @@ export function routeLcmMessage(input: {
     return
   }
   if (message.type === "lcmStatus") {
+    input.setError(undefined)
     input.setStatus((current) =>
       updateLcmStatus({
         activeSessionID: input.activeSessionID,
@@ -44,6 +46,10 @@ export function routeLcmMessage(input: {
         next: message.status,
       }),
     )
+    return
+  }
+  if (message.type === "lcmStatusError") {
+    if (message.sessionID === input.activeSessionID) input.setError(message.message)
     return
   }
   if (message.type !== "lcmActivity") return

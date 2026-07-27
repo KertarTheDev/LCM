@@ -48,7 +48,7 @@ import type {
   MigrationStateMessage,
 } from "./migration"
 import type { MemoryEventMessage, MemoryLoadedMessage, MemoryOperationResultMessage } from "./memory"
-import type { LcmActivityMessage, LcmStatusMessage } from "./lcm"
+import type { LcmActivityMessage, LcmStatusErrorMessage, LcmStatusMessage } from "./lcm"
 
 // ============================================
 // Messages FROM extension TO webview
@@ -1288,4 +1288,5 @@ export type ExtensionMessage =
   | MemoryEventMessage
   | MemoryOperationResultMessage
   | LcmStatusMessage
+  | LcmStatusErrorMessage
   | LcmActivityMessage

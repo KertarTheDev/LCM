@@ -2,7 +2,7 @@
 
 Status: normative current-code tool contract.
 
-Conversation Memory registers exactly four ordinary Kilo tools. The trusted tool context supplies the session ID;
+Conversation Memory registers exactly five ordinary Kilo tools. The trusted tool context supplies the session ID;
 model parameters cannot select a session. Each execution refreshes the finalized transcript, checks the derived
 lineage, and authorizes only current-lineage sources and summaries.
 
@@ -24,6 +24,19 @@ size, covered ordinals, digest, and kind-specific provenance or navigation metad
 
 List ordered immediate children of one active summary. Inputs are `summaryID`, optional `limit`, and opaque `cursor`.
 Default limit is 10; maximum is 50. It never returns implicit grandchildren.
+
+## `lcm_expand_query`
+
+Answer one focused question from current-lineage memory. Inputs are `query`, optional `summaryID`, and optional
+`maxAnswerTokens` (default 1,000; maximum 2,000). Retrieval ranks explicit stable handles and lexical evidence, selects
+at most eight excerpts, and uses at most 20% of known usable input capped at 16,000 tokens; unknown capacity uses a
+4,000-token retrieval budget. A summary scope is limited to that summary and its cycle-safe descendants.
+
+The tool preempts same-session soft work, shares the LCM model-call queue, and makes at most one call through the active
+Kilo provider/model runtime with no tools. It does not create a child session, second provider protocol, or transcript
+turn. The answer is validated as `answer`, selected `citations`, and `coverage` (`full`, `partial`, or `none`), and its
+cost is added to the calling assistant message. Provider failure or invalid output is explicit. A bounded extractive
+fallback is allowed only for an explicit handle or at least two useful query terms.
 
 ## `lcm_read`
 

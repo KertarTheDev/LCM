@@ -565,15 +565,16 @@ describe("session.compaction.isOverflow", () => {
     ),
   )
 
+  // kilocode_change start - LCM overflow detection is independent of the retained legacy switch.
   it.live(
-    "returns false when compaction.auto is disabled",
+    "still detects overflow when legacy compaction.auto is disabled",
     provideTmpdirInstance(
       () =>
         Effect.gen(function* () {
           const compact = yield* SessionCompaction.Service
           const model = createModel({ context: 100_000, output: 32_000 })
           const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
-          expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+          expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
         }),
       {
         config: {
@@ -582,6 +583,7 @@ describe("session.compaction.isOverflow", () => {
       },
     ),
   )
+  // kilocode_change end
 })
 
 describe("session.compaction.create", () => {

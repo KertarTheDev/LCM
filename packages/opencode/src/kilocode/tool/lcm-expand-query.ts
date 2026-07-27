@@ -1,0 +1,282 @@
+import { Database } from "@opencode-ai/core/database/database"
+import { Effect, Schema } from "effect"
+import * as Tool from "@/tool/tool"
+import { Agent } from "@/agent/agent"
+import { Provider } from "@/provider/provider"
+import { Session } from "@/session/session"
+import { ConversationMemory } from "@/kilocode/session/lcm/service"
+import { KiloCostPropagation } from "@/kilocode/session/cost-propagation"
+import { inertOutput, LcmToolError, loadMemory, requireSummary, type MemoryView } from "./lcm-common"
+
+const Parameters = Schema.Struct({
+  query: Schema.String.annotate({
+    description: "Question about earlier content in the current session (1-4096 characters).",
+  }),
+  summaryID: Schema.optional(Schema.String).annotate({
+    description: "Optional active sum_ handle whose descendants bound the search.",
+  }),
+  maxAnswerTokens: Schema.optional(Schema.Number).annotate({
+    description: "Maximum answer size in tokens (default 1000, maximum 2000).",
+  }),
+})
+
+const STOP_WORDS = new Set([
+  "and",
+  "about",
+  "after",
+  "again",
+  "could",
+  "did",
+  "from",
+  "have",
+  "into",
+  "that",
+  "the",
+  "this",
+  "what",
+  "when",
+  "where",
+  "which",
+  "with",
+])
+
+interface Candidate {
+  id: string
+  kind: "source" | "summary"
+  ordinal: number
+  text: string
+  score: number
+}
+
+interface QueryAnswer {
+  answer: string
+  citations: string[]
+  coverage: "full" | "partial" | "none"
+}
+
+function scope(summaryID: string, view: MemoryView) {
+  const ids = new Set([summaryID])
+  const visit = (id: string) => {
+    for (const child of view.children.get(id) ?? []) {
+      if (ids.has(child.id)) continue
+      ids.add(child.id)
+      if (child.kind === "summary") visit(child.id)
+    }
+  }
+  visit(summaryID)
+  return ids
+}
+
+export function queryParts(query: string) {
+  const handles = [...new Set(query.match(/\b(?:src|sum)_[A-Za-z0-9_-]+\b/g) ?? [])]
+  const terms = [
+    ...new Set(
+      query
+        .toLocaleLowerCase()
+        .match(/[\p{L}\p{N}_-]{3,}/gu)
+        ?.filter((term) => !STOP_WORDS.has(term) && !term.startsWith("src_") && !term.startsWith("sum_")) ?? [],
+    ),
+  ]
+  return { handles, terms }
+}
+
+export function selectQueryExcerpts(
+  view: MemoryView,
+  query: string,
+  summaryID: string | undefined,
+  budgetTokens: number,
+) {
+  const { handles, terms } = queryParts(query)
+  const allowed = summaryID ? scope(summaryID, view) : undefined
+  const candidates: Candidate[] = [
+    ...[...view.sources.values()].map((source) => ({
+      id: source.id,
+      kind: "source" as const,
+      ordinal: source.ordinal,
+      text: view.content.get(source.id)?.content ?? "",
+      score: 0,
+    })),
+    ...[...view.summaries.values()].map((summary) => ({
+      id: summary.id,
+      kind: "summary" as const,
+      ordinal: summary.firstOrdinal,
+      text: summary.text,
+      score: 0,
+    })),
+  ]
+    .filter((item) => !allowed || allowed.has(item.id))
+    .map((item) => {
+      const text = item.text.toLocaleLowerCase()
+      const explicit = handles.includes(item.id) ? 100 : 0
+      const lexical = terms.reduce((score, term) => score + (text.includes(term) ? 1 : 0), 0)
+      return { ...item, score: explicit + lexical }
+    })
+    .filter((item) => item.score > 0)
+    .toSorted((a, b) => b.score - a.score || b.ordinal - a.ordinal || a.id.localeCompare(b.id))
+    .slice(0, 8)
+
+  let remaining = Math.max(1, budgetTokens) * 4
+  const selected: Candidate[] = []
+  for (const candidate of candidates) {
+    if (remaining <= 0) break
+    const text = candidate.text.slice(0, remaining)
+    if (!text) continue
+    selected.push({ ...candidate, text })
+    remaining -= text.length
+  }
+  return {
+    selected,
+    handles,
+    terms,
+    truncated: selected.some((item) => item.text.length < candidates.find((c) => c.id === item.id)!.text.length),
+  }
+}
+
+export function parseQueryAnswer(text: string, allowed: Set<string>): QueryAnswer | undefined {
+  const stripped = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+  const start = stripped.indexOf("{")
+  const end = stripped.lastIndexOf("}")
+  if (start === -1 || end < start) return
+  try {
+    const value = JSON.parse(stripped.slice(start, end + 1)) as Record<string, unknown>
+    if (
+      typeof value.answer !== "string" ||
+      !Array.isArray(value.citations) ||
+      !value.citations.every((item) => typeof item === "string" && allowed.has(item)) ||
+      !["full", "partial", "none"].includes(String(value.coverage))
+    )
+      return
+    const coverage = value.coverage as QueryAnswer["coverage"]
+    const citations = [...new Set(value.citations as string[])]
+    if (coverage === "none") return { answer: "", citations: [], coverage }
+    if (!value.answer.trim() || citations.length === 0) return
+    return { answer: value.answer.trim(), citations, coverage }
+  } catch {
+    return
+  }
+}
+
+function activeModel(value: unknown) {
+  if (!value || typeof value !== "object") return
+  const model = value as Partial<Provider.Model>
+  if (!model.id || !model.providerID || !model.limit) return
+  return model as Provider.Model
+}
+
+export const LcmExpandQueryTool = Tool.define(
+  "lcm_expand_query",
+  Effect.gen(function* () {
+    const memory = yield* ConversationMemory.Service
+    const database = yield* Database.Service
+    const agents = yield* Agent.Service
+    const sessions = yield* Session.Service
+    return {
+      description:
+        "Answer one focused question about earlier current-session Conversation Memory with validated src_/sum_ citations.",
+      parameters: Parameters,
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
+        Effect.gen(function* () {
+          const query = params.query.trim()
+          if (query.length < 1 || query.length > 4096)
+            throw new LcmToolError("lcm_unavailable", "The query must contain 1 through 4096 characters.")
+          if (params.maxAnswerTokens !== undefined && !Number.isFinite(params.maxAnswerTokens))
+            throw new LcmToolError("lcm_unavailable", "The answer token limit must be a finite number.")
+          const maxAnswerTokens = Math.min(2_000, Math.max(1, Math.floor(params.maxAnswerTokens ?? 1_000)))
+          yield* ctx.ask({
+            permission: "lcm_expand_query",
+            patterns: [params.summaryID ?? "*"],
+            always: ["*"],
+            metadata: { summaryID: params.summaryID },
+          })
+          const view = yield* loadMemory({ sessionID: ctx.sessionID, signal: ctx.abort, memory, database })
+          if (params.summaryID) requireSummary(view, params.summaryID)
+          const model = activeModel(ctx.extra?.model)
+          if (!model) throw new LcmToolError("lcm_unavailable", "The active model is unavailable to the query tool.")
+          const inputLimit = model.limit.input ?? model.limit.context
+          const usable = inputLimit > 0 ? Math.max(0, inputLimit - model.limit.output) : 0
+          const budgetTokens = usable > 0 ? Math.min(16_000, Math.max(1_000, Math.floor(usable * 0.2))) : 4_000
+          const retrieval = selectQueryExcerpts(view, query, params.summaryID, budgetTokens)
+          if (retrieval.selected.length === 0) {
+            return {
+              title: "Conversation Memory query",
+              output: inertOutput({
+                answer: "",
+                citations: [],
+                coverage: "none",
+                searched: { sources: view.sources.size, summaries: view.summaries.size },
+                relevant: 0,
+                truncated: false,
+                noAnswerReason: "no_relevant_memory",
+              }),
+              metadata: { citations: 0, truncated: false },
+            }
+          }
+          const excerpts = retrieval.selected
+            .map((item) => `[${item.id} | ${item.kind} | ordinal ${item.ordinal}]\n${item.text}`)
+            .join("\n\n")
+          const generated = yield* memory
+            .query({
+              sessionID: ctx.sessionID,
+              model,
+              agent: yield* agents.get(ctx.agent),
+              question: query,
+              excerpts,
+              maxOutputTokens: maxAnswerTokens,
+              signal: ctx.abort,
+            })
+            .pipe(
+              Effect.map((value) => ({ ok: true as const, value })),
+              Effect.catch((error) =>
+                Effect.succeed({
+                  ok: false as const,
+                  reason: error instanceof DOMException && error.name === "AbortError" ? "cancelled" : "provider_error",
+                }),
+              ),
+            )
+          if (!generated.ok && generated.reason === "cancelled")
+            throw new LcmToolError("lcm_cancelled", "The Conversation Memory query was cancelled.")
+          if (generated.ok)
+            yield* KiloCostPropagation.propagate(sessions, ctx.sessionID, ctx.messageID, generated.value.cost).pipe(
+              Effect.provideService(Database.Service, database),
+            )
+          const allowed = new Set(retrieval.selected.map((item) => item.id))
+          const answer = generated.ok ? parseQueryAnswer(generated.value.text, allowed) : undefined
+          const mayExtract = retrieval.handles.length > 0 || retrieval.terms.length >= 2
+          const fallback = mayExtract
+            ? {
+                answer: retrieval.selected
+                  .map((item) => `[${item.id}] ${item.text.slice(0, 800)}`)
+                  .join("\n\n")
+                  .slice(0, maxAnswerTokens * 4),
+                citations: retrieval.selected.map((item) => item.id),
+                coverage: "partial" as const,
+              }
+            : { answer: "", citations: [], coverage: "none" as const }
+          const unbounded = answer ?? fallback
+          const answerTruncated = unbounded.answer.length > maxAnswerTokens * 4
+          const result = {
+            ...unbounded,
+            answer: unbounded.answer.slice(0, maxAnswerTokens * 4),
+          }
+          return {
+            title: "Conversation Memory query",
+            output: inertOutput({
+              ...result,
+              searched: { sources: view.sources.size, summaries: view.summaries.size },
+              relevant: retrieval.selected.length,
+              truncated: retrieval.truncated || answerTruncated,
+              ...(!answer
+                ? mayExtract
+                  ? { providerFailureReason: generated.ok ? "invalid_response" : generated.reason }
+                  : { noAnswerReason: "insufficient_query_evidence" }
+                : {}),
+            }),
+            metadata: { citations: result.citations.length, truncated: retrieval.truncated || answerTruncated },
+          }
+        }),
+    }
+  }),
+)

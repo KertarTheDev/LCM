@@ -71,7 +71,10 @@ const ContextTab: Component = () => {
 
   const conversationMemoryStats = () => {
     const status = session.lcmStatus()
-    if (!status) return language.t("conversationMemory.status.unavailable")
+    if (!status)
+      return session.lcmStatusError()
+        ? language.t("conversationMemory.status.loadFailed", { message: session.lcmStatusError()! })
+        : language.t("conversationMemory.status.unavailable")
     const pressure =
       status.capacity.rawLaneRatio === undefined
         ? language.t("conversationMemory.status.unmeasured")
@@ -148,12 +151,12 @@ const ContextTab: Component = () => {
       <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>{language.t("conversationMemory.title")}</h4>
       <Card>
         <SettingsRow title={language.t("conversationMemory.activeSession")} description={conversationMemoryStats()}>
-          <div style={{ display: "flex", gap: "6px" }}>
+          <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap", "justify-content": "flex-end" }}>
             <Button
               variant="secondary"
               size="small"
               icon="eye"
-              disabled={!session.currentSessionID() || !session.lcmStatus()}
+              disabled={!session.currentSessionID()}
               onClick={() => vscode.postMessage({ type: "showLcmTimeline", sessionID: session.currentSessionID()! })}
             >
               {language.t("conversationMemory.action.timeline")}

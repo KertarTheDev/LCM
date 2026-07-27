@@ -80,11 +80,11 @@ describe("Kilo auto-compaction threshold", () => {
     expect(isOverflow({ cfg: conf, model: mdl, tokens: tokens(168_000) })).toBe(true)
   })
 
-  test("still respects disabled auto-compaction", () => {
+  test("still reports active context overflow when legacy auto-compaction is disabled", () => {
     const conf = cfg({ auto: false, threshold_percent: 75 })
     const mdl = model({ context: 200_000, output: 32_000 })
 
-    expect(isOverflow({ cfg: conf, model: mdl, tokens: tokens(150_000) })).toBe(false)
+    expect(isOverflow({ cfg: conf, model: mdl, tokens: tokens(150_000) })).toBe(true)
   })
 
   test("uses a lower configured output ceiling for overflow capacity", () => {

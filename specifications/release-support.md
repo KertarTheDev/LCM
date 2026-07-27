@@ -12,15 +12,16 @@ fully verified:
 1. push the verified product branch;
 2. reconstruct the narrow prerelease overlay directly on that product SHA;
 3. push `kilocode-lcm-prerelease` with an exact fetched force-with-lease;
-4. re-resolve and delete only the captured incorrect GitHub release ID, its exact matching tag, and assets;
-5. verify the old release and tag are absent while retaining Actions run audit history;
-6. dispatch the prerelease workflow for the exact corrected candidate SHA;
-7. require the helper to select the now-free `v7.4.16-lcm.1`;
-8. verify a non-draft prerelease at the exact SHA with the exact expected 20 assets and packaged-runtime smoke; and
-9. confirm upstream version/build/publish jobs remained skipped.
+4. dispatch the prerelease workflow for the exact corrected candidate SHA and require version
+   `v7.4.16-lcm.2`;
+5. verify a non-draft prerelease at the exact SHA with the exact expected 20 assets and packaged-runtime smoke;
+6. re-resolve and delete only the captured incorrect `v7.4.16-lcm.1` GitHub release ID, its exact matching tag, and
+   assets;
+7. verify the old release and tag are absent while retaining Actions run audit history; and
+8. confirm upstream version/build/publish jobs remained skipped.
 
 If replacement publication fails, delete only the captured failed draft/release and matching tag. Do not restore the
-incorrect prerelease. Because the semantic version is reused, testers must force reinstall the corrected artifact.
+incorrect prerelease.
 
 Release evidence includes clean second generation, focused/affected suites, annotations, VS Code compile/snapshot and
 install identity, relevant JetBrains checks, extracted CLI/VSIX smoke, exact source/artifact hashes, and final clean

@@ -22,6 +22,11 @@ The exact recent tail defaults to 15% of usable input, clamped to 2,000–20,000
 `compaction.preserve_recent_tokens` is the explicit override. `compaction.auto` controls only the retained legacy
 subsystem and never disables Conversation Memory.
 
+Provider capacity is required for pressure and maintenance. Custom-provider models therefore persist positive context
+and output token limits (plus an optional separate input limit). Missing capacity is reported as
+`lcm_capacity_unknown` in status/activity and manual or hard maintenance stops explicitly instead of silently doing
+nothing. Ordinary provider execution remains available below a known hard limit.
+
 Conversation Memory begins a soft quantum as soon as raw pressure reaches the threshold. Work may overlap ordinary
 agent activity. If a provider rejects concurrent work, that provider/model is treated as single-flight for the
 process: maintenance becomes a barrier before the same session's next model request. One model call is dispatched per
@@ -42,5 +47,5 @@ structured output, provider requests, retries, and timeouts. Conversation Memory
 a second provider protocol. Legacy compaction remains compiled for upstream compatibility but is unreachable from
 normal automatic and manual product flows.
 
-The supported recovery surface is exactly `lcm_grep`, `lcm_describe`, `lcm_expand`, and `lcm_read`. They use trusted
-current-session context and Kilo's ordinary filtering and permission flow.
+The supported recovery surface is exactly `lcm_grep`, `lcm_describe`, `lcm_expand_query`, `lcm_expand`, and
+`lcm_read`. They use trusted current-session context and Kilo's ordinary filtering and permission flow.

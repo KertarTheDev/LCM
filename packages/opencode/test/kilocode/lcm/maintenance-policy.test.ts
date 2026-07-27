@@ -1,8 +1,20 @@
 import { describe, expect, test } from "bun:test"
-import { conversationLanes, providerRequiresBlocking, recentTailTokens } from "@/kilocode/session/lcm/service"
+import {
+  conversationLanes,
+  hasKnownCapacity,
+  providerRequiresBlocking,
+  recentTailTokens,
+} from "@/kilocode/session/lcm/service"
 import type { FinalSource, FrontierRevision } from "@/kilocode/session/lcm/types"
 
 describe("LCM maintenance policy", () => {
+  test("requires a positive usable input capacity before maintenance", () => {
+    expect(hasKnownCapacity(undefined)).toBe(false)
+    expect(hasKnownCapacity(0)).toBe(false)
+    expect(hasKnownCapacity(-1)).toBe(false)
+    expect(hasKnownCapacity(1)).toBe(true)
+  })
+
   test("defaults the recent exact tail to 15% with 2k through 20k clamps", () => {
     expect(recentTailTokens({ usableInputTokens: 8_000 })).toBe(2_000)
     expect(recentTailTokens({ usableInputTokens: 40_000 })).toBe(6_000)

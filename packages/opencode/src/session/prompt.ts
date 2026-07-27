@@ -1946,8 +1946,7 @@ export const layer = Layer.effect(
               return "break" as const
             }
             compactionAttempts++
-            yield* sessions.removeMessage({ sessionID, messageID: handle.message.id })
-            yield* conversationMemory.maintain({
+            const maintenance = yield* conversationMemory.maintain({
               sessionID,
               model,
               usableInputTokens,
@@ -1956,6 +1955,20 @@ export const layer = Layer.effect(
               reason: "hard",
               strict: true,
             })
+            if (maintenance === "capacity_unknown" || maintenance === "unresolved") {
+              handle.message.error = new MessageV2.ContextOverflowError({
+                message:
+                  maintenance === "capacity_unknown"
+                    ? "lcm_capacity_unknown: Conversation Memory cannot recover this request until the selected model has context and output token limits."
+                    : "lcm_hard_limit_unresolved: Conversation Memory could not complete stricter maintenance after the provider rejected the request.",
+              }).toObject()
+              handle.message.finish = "error"
+              yield* sessions.updateMessage(handle.message)
+              yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+              closeReasons.set(sessionID, "error")
+              return "break" as const
+            }
+            yield* sessions.removeMessage({ sessionID, messageID: handle.message.id })
             // kilocode_change end
             return "continue" as const
           }

@@ -4,7 +4,9 @@ import * as Tool from "@/tool/tool"
 import { ConversationMemory } from "@/kilocode/session/lcm/service"
 import { inertOutput, loadMemory, requireSource, requireSummary } from "./lcm-common"
 
-const Parameters = Schema.Struct({ id: Schema.String })
+const Parameters = Schema.Struct({
+  id: Schema.String.annotate({ description: "Current-session src_ source or active sum_ summary handle." }),
+})
 
 export const LcmDescribeTool = Tool.define(
   "lcm_describe",

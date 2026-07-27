@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { updateLcmActivity, updateLcmStatus } from "../../webview-ui/src/context/lcm-state"
+import { routeLcmMessage, updateLcmActivity, updateLcmStatus } from "../../webview-ui/src/context/lcm-state"
 import type { LcmActivity, LcmStatus } from "../../webview-ui/src/types/messages"
 
 function status(sessionID: string, sequence: number): LcmStatus {
@@ -83,5 +83,24 @@ describe("Conversation Memory webview state", () => {
         next: [first, second],
       }),
     ).toEqual([first, second])
+  })
+
+  test("surfaces status-route failures only for the active session", () => {
+    let error: string | undefined
+    const route = (sessionID: string) =>
+      routeLcmMessage({
+        message: { type: "lcmStatusError", sessionID, message: "route failed" },
+        activeSessionID: "ses_active",
+        requestStatus: () => undefined,
+        setStatus: () => undefined,
+        setError: (message) => {
+          error = message
+        },
+        setActivity: () => undefined,
+      })
+    route("ses_other")
+    expect(error).toBeUndefined()
+    route("ses_active")
+    expect(error).toBe("route failed")
   })
 })

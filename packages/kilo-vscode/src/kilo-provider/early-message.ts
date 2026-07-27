@@ -18,6 +18,7 @@ type Ctx = {
   client: KiloClient | null
   connection: KiloConnectionService
   dir: string
+  resolveDir: (sessionID?: string) => string
   post: (msg: unknown) => void
   exportTranscript: (sessionID: string) => Promise<void>
   openSessions: (ids: string[]) => void
@@ -34,31 +35,41 @@ export async function routeEarlyMessage(message: { type: string }, ctx: Ctx): Pr
   if (message.type === "requestLcmStatus") {
     const input = message as { sessionID?: unknown }
     if (typeof input.sessionID !== "string" || !ctx.client) return true
-    const [status, activity] = await Promise.all([
-      fetchConversationMemoryStatus(ctx.client, input.sessionID, ctx.dir).catch(() => undefined),
-      fetchConversationMemoryActivity(ctx.client, input.sessionID, ctx.dir).catch(() => []),
+    const dir = ctx.resolveDir(input.sessionID)
+    const [status, activity] = await Promise.allSettled([
+      fetchConversationMemoryStatus(ctx.client, input.sessionID, dir),
+      fetchConversationMemoryActivity(ctx.client, input.sessionID, dir),
     ])
-    ctx.post({ type: "lcmStatus", sessionID: input.sessionID, status })
-    ctx.post({ type: "lcmActivity", sessionID: input.sessionID, items: activity })
+    if (status.status === "fulfilled") ctx.post({ type: "lcmStatus", sessionID: input.sessionID, status: status.value })
+    else
+      ctx.post({
+        type: "lcmStatusError",
+        sessionID: input.sessionID,
+        message: status.reason instanceof Error ? status.reason.message : String(status.reason),
+      })
+    if (activity.status === "fulfilled")
+      ctx.post({ type: "lcmActivity", sessionID: input.sessionID, items: activity.value })
     return true
   }
   if (message.type === "showLcmTimeline") {
     const input = message as { sessionID?: unknown }
     if (typeof input.sessionID === "string" && ctx.client) {
-      await showConversationMemoryTimeline(ctx.client, input.sessionID, ctx.dir).catch((error) => {
-        vscode.window.showErrorMessage(
-          t("conversationMemory.timeline.failed", {
-            message: error instanceof Error ? error.message : String(error),
-          }),
-        )
-      })
+      await showConversationMemoryTimeline(ctx.client, input.sessionID, ctx.resolveDir(input.sessionID)).catch(
+        (error) => {
+          vscode.window.showErrorMessage(
+            t("conversationMemory.timeline.failed", {
+              message: error instanceof Error ? error.message : String(error),
+            }),
+          )
+        },
+      )
     }
     return true
   }
   if (message.type === "exportLcmContext") {
     const input = message as { sessionID?: unknown }
     if (typeof input.sessionID === "string" && ctx.client) {
-      await exportConversationMemoryContext(ctx.client, input.sessionID, ctx.dir)
+      await exportConversationMemoryContext(ctx.client, input.sessionID, ctx.resolveDir(input.sessionID))
         .then((uri) => {
           if (uri)
             vscode.window.showInformationMessage(

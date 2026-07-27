@@ -6,9 +6,13 @@ import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
 import { inertOutput, LcmToolError, loadMemory, requireSource } from "./lcm-common"
 
 const Parameters = Schema.Struct({
-  sourceID: Schema.String,
-  maxBytes: Schema.optional(Schema.Number),
-  cursor: Schema.optional(Schema.String),
+  sourceID: Schema.String.annotate({ description: "Exact current-session src_ source handle." }),
+  maxBytes: Schema.optional(Schema.Number).annotate({
+    description: "Maximum UTF-8 bytes to return (default 8192, maximum 32768).",
+  }),
+  cursor: Schema.optional(Schema.String).annotate({
+    description: "Opaque nextCursor from the preceding read of this source.",
+  }),
 })
 
 export function textChunk(value: string, offset: number, limit: number) {

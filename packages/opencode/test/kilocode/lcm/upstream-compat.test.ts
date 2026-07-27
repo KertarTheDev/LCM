@@ -6,9 +6,9 @@ async function source(relative: string) {
 }
 
 describe("LCM upstream compatibility contract", () => {
-  test("keeps upstream memory and notification tools registered beside the four recovery tools", async () => {
+  test("keeps upstream memory and notification tools registered beside the five recovery tools", async () => {
     const registry = await source("tool/registry.ts")
-    for (const tool of ["LcmGrepTool", "LcmDescribeTool", "LcmExpandTool", "LcmReadTool"])
+    for (const tool of ["LcmGrepTool", "LcmDescribeTool", "LcmExpandTool", "LcmExpandQueryTool", "LcmReadTool"])
       expect(registry).toContain(tool)
     const kiloRegistry = await source("kilocode/tool/registry.ts")
     for (const tool of ["RecallTool", "NotifyUserTool"]) expect(kiloRegistry).toContain(tool)

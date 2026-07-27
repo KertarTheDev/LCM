@@ -22,16 +22,17 @@ export const ContextProgress: Component = () => {
   const provider = useProvider()
   const vscode = useVSCode()
   const language = useLanguage()
+  const memory = createMemo(() => session.lcmStatus())
 
   const data = createMemo(() => {
-    const memory = session.lcmStatus()
+    const currentMemory = memory()
     if (
-      memory?.capacity.known &&
-      memory.capacity.activeInputTokens !== undefined &&
-      memory.capacity.usableInputTokens
+      currentMemory?.capacity.known &&
+      currentMemory.capacity.activeInputTokens !== undefined &&
+      currentMemory.capacity.usableInputTokens
     ) {
-      const used = Math.min(memory.capacity.activeInputTokens, memory.capacity.usableInputTokens)
-      const limit = memory.capacity.usableInputTokens
+      const used = Math.min(currentMemory.capacity.activeInputTokens, currentMemory.capacity.usableInputTokens)
+      const limit = currentMemory.capacity.usableInputTokens
       const available = Math.max(0, limit - used)
       return {
         used,
@@ -42,7 +43,7 @@ export const ContextProgress: Component = () => {
         pctReserved: 0,
         pctAvail: (available / limit) * 100,
         output: 0,
-        memory,
+        memory: currentMemory,
       }
     }
     const usage = session.contextUsage()
@@ -63,7 +64,7 @@ export const ContextProgress: Component = () => {
     const pctReserved = (reserved / limit) * 100
     const pctAvail = (available / limit) * 100
 
-    return { used, reserved, available, limit, pctUsed, pctReserved, pctAvail, output, memory: undefined }
+    return { used, reserved, available, limit, pctUsed, pctReserved, pctAvail, output, memory: currentMemory }
   })
 
   const tip = createMemo(() => {
@@ -97,50 +98,80 @@ export const ContextProgress: Component = () => {
   })
 
   return (
-    <Show when={data()}>
-      {(d) => (
-        <div class="context-progress">
-          <span class="context-progress-count">{fmt(d().used)}</span>
-          <Tooltip value={tip()} placement="top">
-            <div class="context-progress-bar">
-              <div
-                class="context-progress-used"
-                classList={{ "context-progress-used--hot": d().pctUsed >= 50 }}
-                style={{ width: `${d().pctUsed}%` }}
-              />
-              <div class="context-progress-reserved" style={{ width: `${d().pctReserved}%` }} />
-              <Show when={d().pctAvail > 0}>
-                <div class="context-progress-available" style={{ width: `${d().pctAvail}%` }} />
+    <Show when={data() || memory() || session.lcmStatusError()}>
+      <div class="context-progress-stack">
+        <Show when={data()}>
+          {(d) => (
+            <div class="context-progress">
+              <span class="context-progress-count">{fmt(d().used)}</span>
+              <Tooltip value={tip()} placement="top">
+                <div class="context-progress-bar">
+                  <div
+                    class="context-progress-used"
+                    classList={{ "context-progress-used--hot": d().pctUsed >= 50 }}
+                    style={{ width: `${d().pctUsed}%` }}
+                  />
+                  <div class="context-progress-reserved" style={{ width: `${d().pctReserved}%` }} />
+                  <Show when={d().pctAvail > 0}>
+                    <div class="context-progress-available" style={{ width: `${d().pctAvail}%` }} />
+                  </Show>
+                </div>
+              </Tooltip>
+              <span class="context-progress-count">{fmt(d().limit)}</span>
+            </div>
+          )}
+        </Show>
+        <Show when={memory()}>
+          {(status) => (
+            <div class="context-memory-details">
+              <div>
+                {language.t("conversationMemory.stats.composition", {
+                  eligible: fmt(status().composition.eligibleRawTokens),
+                  protected: fmt(status().composition.protectedRawTokens),
+                  summaries: String(status().composition.summaryItems),
+                })}
+              </div>
+              <div>
+                {language.t("conversationMemory.stats.state", {
+                  mode: status().mode,
+                  phase: status().background.phase,
+                  health: status().health,
+                })}
+              </div>
+              <Show when={!status().capacity.known}>
+                <div class="context-memory-warning">
+                  {status().issue?.message ?? language.t("conversationMemory.status.capacityUnknown")}
+                </div>
+              </Show>
+              <Show when={status().capacity.known && status().issue}>
+                <div class="context-memory-warning">{status().issue!.message}</div>
+              </Show>
+              <Show when={session.currentSessionID()}>
+                <button
+                  type="button"
+                  aria-label={language.t("conversationMemory.timeline.show")}
+                  title={language.t("conversationMemory.timeline.show")}
+                  onClick={() =>
+                    vscode.postMessage({
+                      type: "showLcmTimeline",
+                      sessionID: session.currentSessionID()!,
+                    })
+                  }
+                >
+                  {language.t("conversationMemory.action.timeline")}
+                </button>
               </Show>
             </div>
-          </Tooltip>
-          <span class="context-progress-count">{fmt(d().limit)}</span>
-          <Show when={d().memory && session.currentSessionID()}>
-            <button
-              type="button"
-              aria-label={language.t("conversationMemory.timeline.show")}
-              title={language.t("conversationMemory.timeline.show")}
-              onClick={() =>
-                vscode.postMessage({
-                  type: "showLcmTimeline",
-                  sessionID: session.currentSessionID()!,
-                })
-              }
-              style={{
-                border: "1px solid var(--border-weak-base)",
-                "border-radius": "4px",
-                background: "transparent",
-                color: "var(--text-weak-base, var(--vscode-descriptionForeground))",
-                cursor: "pointer",
-                "font-size": "10px",
-                padding: "1px 4px",
-              }}
-            >
-              {language.t("conversationMemory.title")} {d().memory!.composition.summaryItems}
-            </button>
-          </Show>
-        </div>
-      )}
+          )}
+        </Show>
+        <Show when={session.lcmStatusError()}>
+          {(error) => (
+            <div class="context-memory-warning">
+              {language.t("conversationMemory.status.loadFailed", { message: error() })}
+            </div>
+          )}
+        </Show>
+      </div>
     </Show>
   )
 }

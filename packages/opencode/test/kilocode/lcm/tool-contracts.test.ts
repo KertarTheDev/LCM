@@ -2,8 +2,33 @@ import { describe, expect, test } from "bun:test"
 import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
 import { regexSearch } from "@/kilocode/session/lcm/regex-search"
 import { textChunk } from "@/kilocode/tool/lcm-read"
+import { parseQueryAnswer, queryParts } from "@/kilocode/tool/lcm-expand-query"
 
 describe("LCM tool contracts", () => {
+  test("extracts stable handles and useful terms for bounded recovery queries", () => {
+    expect(queryParts("What did src_alpha decide about the release branch and release tag?")).toEqual({
+      handles: ["src_alpha"],
+      terms: ["decide", "release", "branch", "tag"],
+    })
+  })
+
+  test("accepts only structured query answers with selected citations", () => {
+    const allowed = new Set(["src_alpha", "sum_beta"])
+    expect(
+      parseQueryAnswer(
+        '```json\n{"answer":"Use the release branch.","citations":["src_alpha"],"coverage":"full"}\n```',
+        allowed,
+      ),
+    ).toEqual({
+      answer: "Use the release branch.",
+      citations: ["src_alpha"],
+      coverage: "full",
+    })
+    expect(
+      parseQueryAnswer('{"answer":"Invented","citations":["src_other"],"coverage":"full"}', allowed),
+    ).toBeUndefined()
+  })
+
   test("binds opaque cursors to the complete query", () => {
     const query = { pattern: "needle", mode: "literal", limit: 20 }
     const cursor = encodeCursor(query, 12)

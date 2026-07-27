@@ -72,6 +72,7 @@ import { AppProcess } from "@opencode-ai/core/process" // kilocode_change
 import { LcmGrepTool } from "@/kilocode/tool/lcm-grep" // kilocode_change
 import { LcmDescribeTool } from "@/kilocode/tool/lcm-describe" // kilocode_change
 import { LcmExpandTool } from "@/kilocode/tool/lcm-expand" // kilocode_change
+import { LcmExpandQueryTool } from "@/kilocode/tool/lcm-expand-query" // kilocode_change
 import { LcmReadTool } from "@/kilocode/tool/lcm-read" // kilocode_change
 import { ConversationMemory } from "@/kilocode/session/lcm/service" // kilocode_change
 
@@ -141,6 +142,7 @@ export const layer = Layer.effect(
     const lcmGrep = yield* LcmGrepTool
     const lcmDescribe = yield* LcmDescribeTool
     const lcmExpand = yield* LcmExpandTool
+    const lcmExpandQuery = yield* LcmExpandQueryTool
     const lcmRead = yield* LcmReadTool
     // kilocode_change end
     // kilocode_change start
@@ -265,6 +267,7 @@ export const layer = Layer.effect(
           lcmGrep: Tool.init(lcmGrep), // kilocode_change
           lcmDescribe: Tool.init(lcmDescribe), // kilocode_change
           lcmExpand: Tool.init(lcmExpand), // kilocode_change
+          lcmExpandQuery: Tool.init(lcmExpandQuery), // kilocode_change
           lcmRead: Tool.init(lcmRead), // kilocode_change
         })
 
@@ -302,6 +305,7 @@ export const layer = Layer.effect(
               tool.lcmGrep, // kilocode_change
               tool.lcmDescribe, // kilocode_change
               tool.lcmExpand, // kilocode_change
+              tool.lcmExpandQuery, // kilocode_change
               tool.lcmRead, // kilocode_change
               ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ],

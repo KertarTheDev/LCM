@@ -2,7 +2,7 @@ import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import { sha256, sourceID } from "./ids"
 import type { FinalSource, SourceKind } from "./types"
 
-const LCM_TOOLS = new Set(["lcm_grep", "lcm_describe", "lcm_expand", "lcm_read"])
+const LCM_TOOLS = new Set(["lcm_grep", "lcm_describe", "lcm_expand", "lcm_expand_query", "lcm_read"])
 const EXCERPT_BYTES = 320
 
 type WithParts = SessionV1.WithParts

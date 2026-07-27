@@ -8,6 +8,12 @@ export interface LcmStatusMessage {
   status?: LcmStatus
 }
 
+export interface LcmStatusErrorMessage {
+  type: "lcmStatusError"
+  sessionID: string
+  message: string
+}
+
 export type LcmActivity = EventSessionLcmActivity["properties"]["activity"]
 
 export interface LcmActivityMessage {

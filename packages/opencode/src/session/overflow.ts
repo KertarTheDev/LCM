@@ -26,11 +26,11 @@ export function isOverflow(input: {
   model: Provider.Model
   outputTokenMax?: number
 }) {
-  if (input.cfg.compaction?.auto === false) return false
   if (input.model.limit.context === 0) return false
 
   const count = KiloSessionOverflow.count(input.tokens) // kilocode_change
-  // kilocode_change start
+  // kilocode_change start - LCM owns active context pressure independently of the
+  // retained legacy compaction.auto switch.
   const cap = KiloSessionOverflow.limit({ cfg: input.cfg, model: input.model, usable: usable(input) })
   return count >= cap
   // kilocode_change end

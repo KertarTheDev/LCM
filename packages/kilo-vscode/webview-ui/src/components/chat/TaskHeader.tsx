@@ -282,9 +282,11 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
         </div>
       </Show>
       {/* Expanded graph section: timeline + context bar + token breakdown */}
-      <Show when={expanded() && hasTimeline()}>
+      <Show when={expanded()}>
         <div data-component="task-header-graph">
-          <TaskTimeline />
+          <Show when={hasTimeline()}>
+            <TaskTimeline />
+          </Show>
           <div data-slot="task-header-graph-row">
             <ContextProgress />
           </div>
