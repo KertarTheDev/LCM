@@ -457,13 +457,64 @@ it.live("session.processor effect tests stop after token overflow requests compa
 
         const parts = yield* MessageV2.parts(msg.id)
 
-        expect(value).toBe("compact")
+        expect(value).toBe("legacy_compact") // kilocode_change
         expect(parts.some((part) => part.type === "text" && part.text === "after")).toBe(true)
         expect(parts.some((part) => part.type === "step-finish")).toBe(true)
       }),
     { config: (url) => providerCfg(url) },
   ),
 )
+
+// kilocode_change start
+it.live("session.processor LCM policy preserves a successful response across legacy thresholds", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        yield* llm.text("kept response", { usage: { input: 60_000, output: 100 } })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "continue")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+          overflowPolicy: "lcm",
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "x".repeat(220_000) }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(1)
+        expect(parts.some((part) => part.type === "text" && part.text === "kept response")).toBe(true)
+      }),
+    {
+      config: (url) => ({
+        ...providerCfg(url),
+        compaction: { auto: true, threshold_percent: 50 },
+      }),
+    },
+  ),
+)
+// kilocode_change end
 
 // kilocode_change start - configured output ceiling must reach finish-step overflow accounting
 capped.live("session.processor respects the configured output token ceiling", () =>
@@ -753,6 +804,7 @@ it.live("session.processor effect tests publish retry status updates", () =>
   ),
 )
 
+// kilocode_change start
 it.live("session.processor effect tests compact on structured context overflow", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
@@ -788,13 +840,14 @@ it.live("session.processor effect tests compact on structured context overflow",
           tools: {},
         })
 
-        expect(value).toBe("compact")
+        expect(value).toBe("provider_overflow")
         expect(yield* llm.calls).toBe(1)
         expect(handle.message.error).toBeUndefined()
       }),
     { config: (url) => providerCfg(url) },
   ),
 )
+// kilocode_change end
 
 it.live("session.processor effect tests complete AI SDK tool calls when native flag is off", () =>
   provideTmpdirServer(

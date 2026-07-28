@@ -1470,7 +1470,13 @@ export const layer = Layer.effect(
       const envCache: KiloSessionPrompt.EnvCache = {}
       const memoryCache = KiloSessionPrompt.memoryCache() // kilocode_change
       closeReasons.delete(sessionID) // kilocode_change
-      let compactionAttempts = 0 // kilocode_change - cap compaction attempts per turn to avoid infinite loops
+      let overflowRetry:
+        | {
+            requestTokens: number
+            revisionID: string
+            lineageDigest: string
+          }
+        | undefined // kilocode_change - verify the one provider-overflow retry uses a newer, smaller frontier
       const ctx = yield* InstanceState.context
       let structured: unknown
       let step = 0
@@ -1643,6 +1649,7 @@ export const layer = Layer.effect(
             assistantMessage: msg,
             sessionID,
             model,
+            overflowPolicy: "lcm", // kilocode_change - normal prompts never enter the retained legacy thresholds
             telemetry, // kilocode_change
             snapshotInitialization: input.snapshotInitialization, // kilocode_change
           })
@@ -1829,6 +1836,7 @@ export const layer = Layer.effect(
             protectedMessages,
             requestID: msg.id,
             continuationID: msg.id,
+            reason: overflowRetry ? "hard" : "soft",
             measure,
             model,
           })
@@ -1844,6 +1852,26 @@ export const layer = Layer.effect(
             yield* events.publish(Session.Event.Error, { sessionID, error })
             closeReasons.set(sessionID, "error")
             return "break" as const
+          }
+          if (overflowRetry) {
+            const retryTokens = measure(projectedMessages)
+            const verified =
+              projection.type === "projected" &&
+              projection.revision.id === overflowRetry.revisionID &&
+              projection.revision.lineageDigest === overflowRetry.lineageDigest &&
+              retryTokens < overflowRetry.requestTokens
+            if (!verified) {
+              yield* conversationMemory.completeRequest({ sessionID, requestID: msg.id, success: false })
+              handle.message.error = new MessageV2.ContextOverflowError({
+                message:
+                  "lcm_hard_limit_unresolved: Conversation Memory could not produce a verified smaller request after the provider rejected the original request.",
+              }).toObject()
+              handle.message.finish = "error"
+              yield* sessions.updateMessage(handle.message)
+              yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+              closeReasons.set(sessionID, "error")
+              return "break" as const
+            }
           }
           // kilocode_change end
           const result = yield* handle.process({
@@ -1930,14 +1958,26 @@ export const layer = Layer.effect(
             return "break" as const
           }
           // kilocode_change end
-          if (result === "compact") {
+          if (result === "legacy_compact") {
+            yield* conversationMemory.completeRequest({ sessionID, requestID: msg.id, success: false })
+            handle.message.error = new MessageV2.ContextOverflowError({
+              message:
+                "lcm_hard_limit_unresolved: Normal Conversation Memory processing unexpectedly requested legacy compaction.",
+            }).toObject()
+            handle.message.finish = "error"
+            yield* sessions.updateMessage(handle.message)
+            yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+            closeReasons.set(sessionID, "error")
+            return "break" as const
+          }
+          if (result === "provider_overflow") {
             yield* conversationMemory.completeRequest({ sessionID, requestID: msg.id, success: false }) // kilocode_change
             // kilocode_change start - one stricter LCM retry after a provider
             // overflow, then fail closed without creating a legacy summary turn.
-            if (compactionAttempts >= 1) {
+            if (overflowRetry) {
               handle.message.error = new MessageV2.ContextOverflowError({
                 message:
-                  "lcm_hard_limit_unresolved: The provider still rejected the request after stricter Conversation Memory maintenance.",
+                  "lcm_hard_limit_unresolved: The provider rejected the verified smaller request after stricter Conversation Memory maintenance.",
               }).toObject()
               handle.message.finish = "error"
               yield* sessions.updateMessage(handle.message)
@@ -1945,7 +1985,7 @@ export const layer = Layer.effect(
               closeReasons.set(sessionID, "error")
               return "break" as const
             }
-            compactionAttempts++
+            const requestTokens = measure(projectedMessages)
             const maintenance = yield* conversationMemory.maintain({
               sessionID,
               model,
@@ -1955,12 +1995,21 @@ export const layer = Layer.effect(
               reason: "hard",
               strict: true,
             })
-            if (maintenance === "capacity_unknown" || maintenance === "unresolved") {
+            if (
+              maintenance.outcome === "capacity_unknown" ||
+              maintenance.outcome === "unresolved" ||
+              !maintenance.changed ||
+              maintenance.afterTokens >= maintenance.beforeTokens ||
+              !maintenance.revisionID ||
+              !maintenance.lineageDigest
+            ) {
               handle.message.error = new MessageV2.ContextOverflowError({
                 message:
-                  maintenance === "capacity_unknown"
+                  maintenance.outcome === "capacity_unknown"
                     ? "lcm_capacity_unknown: Conversation Memory cannot recover this request until the selected model has context and output token limits."
-                    : "lcm_hard_limit_unresolved: Conversation Memory could not complete stricter maintenance after the provider rejected the request.",
+                    : maintenance.outcome === "unresolved"
+                      ? "lcm_hard_limit_unresolved: Conversation Memory could not complete stricter maintenance after the provider rejected the request."
+                      : "lcm_hard_limit_unresolved: Conversation Memory found no smaller active frontier after the provider rejected the request.",
               }).toObject()
               handle.message.finish = "error"
               yield* sessions.updateMessage(handle.message)
@@ -1968,10 +2017,16 @@ export const layer = Layer.effect(
               closeReasons.set(sessionID, "error")
               return "break" as const
             }
+            overflowRetry = {
+              requestTokens,
+              revisionID: maintenance.revisionID,
+              lineageDigest: maintenance.lineageDigest,
+            }
             yield* sessions.removeMessage({ sessionID, messageID: handle.message.id })
             // kilocode_change end
             return "continue" as const
           }
+          overflowRetry = undefined
           // kilocode_change - only a successful terminal provider step proves
           // that the pre-request source frontier was actually consumed.
           yield* conversationMemory.completeRequest({ sessionID, requestID: msg.id, success: true })

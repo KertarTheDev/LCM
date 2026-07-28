@@ -21,6 +21,10 @@ const ContextTab: Component = () => {
   const [newPattern, setNewPattern] = createSignal("")
 
   const patterns = () => config().watcher?.ignore ?? []
+  const conversationMemorySessionID = () => {
+    const id = session.lcmStatus()?.sessionID
+    return id && !id.startsWith("cloud:") ? id : undefined
+  }
   const limit = () => {
     const value = config().conversation_memory?.soft_threshold_percent
     return value === null || value === undefined ? "" : String(value)
@@ -156,16 +160,18 @@ const ContextTab: Component = () => {
               variant="secondary"
               size="small"
               icon="eye"
-              disabled={!session.currentSessionID()}
-              onClick={() => vscode.postMessage({ type: "showLcmTimeline", sessionID: session.currentSessionID()! })}
+              disabled={!conversationMemorySessionID()}
+              onClick={() => vscode.postMessage({ type: "showLcmTimeline", sessionID: conversationMemorySessionID()! })}
             >
               {language.t("conversationMemory.action.timeline")}
             </Button>
             <Button
               variant="secondary"
               size="small"
-              disabled={!session.currentSessionID()}
-              onClick={() => vscode.postMessage({ type: "exportLcmContext", sessionID: session.currentSessionID()! })}
+              disabled={!conversationMemorySessionID()}
+              onClick={() =>
+                vscode.postMessage({ type: "exportLcmContext", sessionID: conversationMemorySessionID()! })
+              }
             >
               {language.t("conversationMemory.action.export")}
             </Button>

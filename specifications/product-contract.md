@@ -34,7 +34,9 @@ soft quantum and sessions receive fair opportunities between quanta.
 
 Hard maintenance runs when the complete outgoing request reaches usable input or after a provider overflow. It first
 summarizes eligible raw backlog, then promotes complete active frontier levels until LCM-owned context reaches the
-configured soft target when feasible. One stricter retry is allowed after a provider overflow. If irreducible fixed or
+configured soft target when feasible. One stricter retry is allowed after a provider overflow only when maintenance
+advanced the exact lineage and local measurement proves that the replacement request is smaller. The retry bypasses
+the ordinary continuation pin and uses that new active revision. If no smaller request exists, or irreducible fixed or
 protected input still cannot fit, the request fails closed with `lcm_hard_limit_unresolved`; legacy compaction is not
 used as fallback.
 
@@ -44,8 +46,9 @@ part and no synthetic assistant summary message. It succeeds as an observable no
 
 Kilo continues to own prompts, tools, permissions, Project Memory, editor/media context, queues, remote sessions,
 structured output, provider requests, retries, and timeouts. Conversation Memory never changes those lanes or creates
-a second provider protocol. Legacy compaction remains compiled for upstream compatibility but is unreachable from
-normal automatic and manual product flows.
+a second provider protocol. Legacy compaction remains compiled for upstream compatibility, including its own
+percentage preflight and post-response scheduling, but those checks are unreachable from normal Conversation Memory
+automatic and manual product flows.
 
 The supported recovery surface is exactly `lcm_grep`, `lcm_describe`, `lcm_expand_query`, `lcm_expand`, and
 `lcm_read`. They use trusted current-session context and Kilo's ordinary filtering and permission flow.

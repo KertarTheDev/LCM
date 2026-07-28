@@ -36,6 +36,11 @@ Hard and manual maintenance pre-empt queued soft work. Hard maintenance is block
 history. If the configured target is impossible but the complete request fits, status becomes `constrained`; if the
 complete request cannot fit, the provider call is not sent.
 
+Foreground maintenance returns its before/after LCM-owned token counts, target, lineage, revision, target completion,
+and whether a strict reduction occurred. Status combines a frontier only with a matching-lineage frame; after
+maintenance and before the next projection it recomputes active composition instead of joining a new revision to old
+pressure.
+
 All sidecar/model/tree boundaries are cancellation-aware and typed. An LCM fault below the hard limit leaves the
 ordinary request unchanged and records degraded health. At the hard limit it must fail closed rather than silently
 send an oversized request or create a legacy compaction turn.

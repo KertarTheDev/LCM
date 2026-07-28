@@ -16,13 +16,17 @@ Acceptance must prove:
   compression;
 - optimistic provider overlap, observed single-flight blocking, fair session quanta, and hard/manual priority;
 - irreducible constrained state and fail-closed `lcm_hard_limit_unresolved`;
-- no legacy automatic compaction scheduling in normal product flow;
+- no legacy threshold preflight or post-success automatic compaction scheduling in normal product flow for every
+  `compaction.auto`/`threshold_percent` combination;
+- provider overflow maintenance selecting the new exact-lineage revision, a locally verified smaller one-shot retry,
+  and rejection before an identical retry can be sent;
 - explicit unknown-capacity status/activity/manual behavior plus persisted custom-model context/output limits;
 - VS Code, `/compact`, TUI, remote, HTTP, and SDK manual affordances each invoke exactly one LCM cycle and create no
   compaction/summary transcript turn;
 - all five real tool handlers, cancellation/cursors/current-session isolation, reachable `active`, direct `frontier`,
   and one-call cited `lcm_expand_query` recovery;
-- status lane/phase fields, UI rendering, events, export redaction/hashes, and generated contract stability; and
+- coherent status lane/phase/frame fields, UI rendering and reopened-session actions, frontier-only timeline events,
+  export redaction/hashes, and generated contract stability; and
 - unchanged v7.4.16 queue, remote, Project Memory, permissions, structured output, request identity, skill, timeout,
   JSONC, and SQLite behavior outside the deliberate seams.
 

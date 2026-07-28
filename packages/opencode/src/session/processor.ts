@@ -41,7 +41,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ToolOutput, Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
-export type Result = "compact" | "stop" | "continue"
+export type Result = "legacy_compact" | "provider_overflow" | "stop" | "continue" // kilocode_change
 
 export interface Handle {
   readonly message: SessionV1.Assistant
@@ -73,6 +73,7 @@ type Input = {
   sessionID: SessionID
   model: Provider.Model
   // kilocode_change start
+  overflowPolicy?: "legacy" | "lcm"
   telemetry?: ReviewTelemetry
   snapshotInitialization?: "wait"
   // kilocode_change end
@@ -99,6 +100,7 @@ interface ProcessorContext extends Input {
   snapshot: string | undefined
   blocked: boolean
   needsCompaction: boolean
+  compactionCause: "legacy_threshold" | "provider_overflow" | undefined // kilocode_change
   compactionError: ReturnType<typeof MessageV2.ContextOverflowError.prototype.toObject> | undefined // kilocode_change
   currentText: SessionV1.TextPart | undefined
   currentTextID: string | undefined
@@ -154,6 +156,7 @@ export const layer = Layer.effect(
         snapshot: initialSnapshot,
         blocked: false,
         needsCompaction: false,
+        compactionCause: undefined, // kilocode_change
         compactionError: undefined, // kilocode_change
         currentText: undefined,
         currentTextID: undefined,
@@ -980,24 +983,24 @@ export const layer = Layer.effect(
                 messageID: ctx.assistantMessage.parentID,
               })
               .pipe(Effect.ignore, Effect.forkIn(scope))
+            // kilocode_change start
             if (
+              input.overflowPolicy !== "lcm" &&
               !ctx.assistantMessage.summary &&
-              // kilocode_change start
               isOverflow({
                 cfg: yield* config.get(),
                 tokens: usage.tokens,
                 model: ctx.model,
                 outputTokenMax: flags.outputTokenMax,
               })
-              // kilocode_change end
             ) {
               ctx.needsCompaction = true
-              // kilocode_change start
+              ctx.compactionCause = "legacy_threshold"
               ctx.compactionError = new MessageV2.ContextOverflowError({
                 message: "Input exceeds context window of this model",
               }).toObject()
-              // kilocode_change end
             }
+            // kilocode_change end
             return
           }
 
@@ -1178,6 +1181,7 @@ export const layer = Layer.effect(
         // kilocode_change start - internal preflight signal, not a provider error
         if (e instanceof KiloSessionOverflow.PreflightError) {
           ctx.needsCompaction = true
+          ctx.compactionCause = "legacy_threshold"
           return
         }
         // kilocode_change end
@@ -1196,11 +1200,13 @@ export const layer = Layer.effect(
         if (MessageV2.ContextOverflowError.isInstance(error)) {
           // kilocode_change start - provider overflow requests one bounded LCM hard
           // retry. compaction.auto controls only the retained legacy subsystem.
-          // kilocode_change end
           ctx.needsCompaction = true
-          yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+          ctx.compactionCause = "provider_overflow"
+          if (input.overflowPolicy !== "lcm")
+            yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
         }
+        // kilocode_change end
         if (!ctx.assistantMessage.summary) {
           // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
           if (mirrorAssistant) {
@@ -1241,9 +1247,12 @@ export const layer = Layer.effect(
         )
         if (!exists) return "stop"
         // kilocode_change end
+        // kilocode_change start
         ctx.needsCompaction = false
-        ctx.compactionError = undefined // kilocode_change
+        ctx.compactionCause = undefined
+        ctx.compactionError = undefined
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+        // kilocode_change end
 
         return yield* Effect.gen(function* () {
           // kilocode_change start - publish retry state consistently for provider and empty-response retries
@@ -1288,7 +1297,7 @@ export const layer = Layer.effect(
               ctx.step = { reasoning: false, text: false, tool: false }
               const stream = llm.stream({
                 ...streamInput,
-                preflight: !ctx.assistantMessage.summary,
+                preflight: input.overflowPolicy !== "lcm" && !ctx.assistantMessage.summary, // kilocode_change
               })
 
               yield* stream.pipe(
@@ -1383,7 +1392,10 @@ export const layer = Layer.effect(
           )
           // kilocode_change end
 
-          if (ctx.needsCompaction) return "compact"
+          // kilocode_change start
+          if (ctx.needsCompaction)
+            return ctx.compactionCause === "provider_overflow" ? "provider_overflow" : "legacy_compact"
+          // kilocode_change end
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"
           return "continue"
         })

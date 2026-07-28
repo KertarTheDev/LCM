@@ -210,6 +210,18 @@ export interface LcmStatus {
   issue?: MemoryState["issue"]
 }
 
+export interface MaintenanceResult {
+  outcome: "maintained" | "noop" | "constrained" | "capacity_unknown" | "unresolved"
+  changed: boolean
+  beforeTokens: number
+  afterTokens: number
+  targetTokens: number
+  targetReached: boolean
+  reducible: boolean
+  lineageDigest?: string
+  revisionID?: string
+}
+
 export interface ProjectionInput {
   sessionID: string
   lineage: TranscriptLineage

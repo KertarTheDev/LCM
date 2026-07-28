@@ -17,13 +17,16 @@ required model configuration.
 
 Activity is newest-first and records frontier advancement, interventions/no-ops, degraded fallback below hard
 pressure, and cache rebuild. Frontier activity identifies the direct summary roots and whether the cause was
-`soft_leaf`, `hard_level`, or `manual`.
+`soft_leaf`, `hard_level`, or `manual`. Reusing an existing summary frontier for an ordinary provider request is a
+diagnostic frame, not timeline activity.
 
 VS Code shows lane pressure, composition, health, and maintenance phase in the task context header and Context
 preferences. The old Auto Compaction toggle/limit is not presented as the active control. Context preferences expose
 the LCM soft threshold, default 40%; legacy tool-output pruning remains separate. TUI/CLI `/lcm status` shows the same
 lane and phase fields. Expanded task stats remain visible without timeline activity or known capacity, and route
 failures are displayed instead of being converted into an empty status.
+Timeline and export actions use the local session identity carried by the displayed status, so a reopened session's
+controls remain available even when the transient compose-session signal is absent.
 
 All existing manual compact/summarize affordances retain their request and success contracts but invoke forced manual
 LCM maintenance. A no-op is successful and observable.

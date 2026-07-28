@@ -23,9 +23,11 @@ import { rollForwardItems, SummaryTree } from "./summary-tree"
 import type {
   ActivityRecord,
   ConversationMemoryStore,
+  ContextFrame,
   FinalSource,
   FrontierRevision,
   LcmStatus,
+  MaintenanceResult,
   MemoryState,
   MaintenancePhase,
   ProjectionResult,
@@ -71,6 +73,7 @@ export interface HostProjectionInput {
   protectedMessages: ModelMessage[]
   requestID?: string
   continuationID?: string
+  reason?: "soft" | "hard"
   measure(messages: ModelMessage[]): number
   model: ProviderType.Model
   signal?: AbortSignal
@@ -113,7 +116,7 @@ export interface Interface {
     reason: "hard" | "manual"
     strict?: boolean
     signal?: AbortSignal
-  }) => Effect.Effect<"maintained" | "noop" | "constrained" | "capacity_unknown" | "unresolved">
+  }) => Effect.Effect<MaintenanceResult>
   readonly inspect: (sessionID: string) => Effect.Effect<MemoryState>
   readonly activity: (sessionID: string, input?: { before?: number; limit?: number }) => Effect.Effect<ActivityRecord[]>
   readonly status: (sessionID: string) => Effect.Effect<LcmStatus>
@@ -188,6 +191,52 @@ export function providerRequiresBlocking(error: unknown) {
   )
 }
 
+type ModelTask = {
+  run: () => Promise<unknown>
+  signal: AbortSignal
+  resolve: (value: unknown) => void
+  reject: (error: unknown) => void
+}
+
+export class MaintenanceModelQueue {
+  private readonly foreground: ModelTask[] = []
+  private readonly soft: ModelTask[] = []
+  private running = false
+
+  enqueue<T>(input: { priority: "foreground" | "soft"; signal: AbortSignal; run: () => Promise<T> }) {
+    return new Promise<T>((resolve, reject) => {
+      const task: ModelTask = {
+        run: input.run,
+        signal: input.signal,
+        resolve: (value) => resolve(value as T),
+        reject,
+      }
+      const queue = input.priority === "foreground" ? this.foreground : this.soft
+      queue.push(task)
+      this.pump()
+    })
+  }
+
+  private pump() {
+    if (this.running) return
+    const task = this.foreground.shift() ?? this.soft.shift()
+    if (!task) return
+    if (task.signal.aborted) {
+      task.reject(task.signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
+      this.pump()
+      return
+    }
+    this.running = true
+    void task
+      .run()
+      .then(task.resolve, task.reject)
+      .finally(() => {
+        this.running = false
+        this.pump()
+      })
+  }
+}
+
 export function conversationLanes(input: {
   sources: FinalSource[]
   consumedThrough: number
@@ -216,6 +265,55 @@ export function conversationLanes(input: {
     eligibleRawItems: eligible.length,
     protectedRawTokens: protectedRaw.reduce((total, source) => total + source.tokens, 0),
     protectedRawItems: protectedRaw.length,
+  }
+}
+
+async function frontierTokens(input: {
+  store: ConversationMemoryStore
+  sessionID: string
+  revision?: FrontierRevision
+  sources: FinalSource[]
+}) {
+  if (!input.revision) return input.sources.reduce((total, source) => total + source.tokens, 0)
+  let total = 0
+  for (const item of input.revision.items) {
+    total +=
+      item.kind === "source"
+        ? ((await input.store.getSource(input.sessionID, item.id))?.tokens ?? 0)
+        : ((await input.store.getSummary(input.sessionID, item.id))?.tokens ?? 0)
+  }
+  return total
+}
+
+export function matchingContextFrame(input: { frames: ContextFrame[]; revision?: FrontierRevision }) {
+  return input.revision
+    ? input.frames.findLast(
+        (item) =>
+          item.active && item.revisionID === input.revision!.id && item.lineageDigest === input.revision!.lineageDigest,
+      )
+    : input.frames.findLast((item) => item.active && !item.revisionID)
+}
+
+export function maintenanceCompletion(input: {
+  beforeTokens: number
+  afterTokens: number
+  targetTokens: number
+  revisionChanged: boolean
+  lineageDigest?: string
+  revisionID?: string
+}): MaintenanceResult {
+  const changed = input.revisionChanged && input.afterTokens < input.beforeTokens
+  const targetReached = input.afterTokens <= input.targetTokens
+  return {
+    outcome: targetReached ? (changed ? "maintained" : "noop") : "constrained",
+    changed,
+    beforeTokens: input.beforeTokens,
+    afterTokens: input.afterTokens,
+    targetTokens: input.targetTokens,
+    targetReached,
+    reducible: input.afterTokens < input.beforeTokens,
+    ...(input.lineageDigest ? { lineageDigest: input.lineageDigest } : {}),
+    ...(input.revisionID ? { revisionID: input.revisionID } : {}),
   }
 }
 
@@ -251,7 +349,7 @@ export const layer: Layer.Layer<
     const blockingProviders = new Set<string>()
     const rebuildRecorded = new Set<string>()
     const shutdown = new AbortController()
-    let modelQueue: Promise<void> = Promise.resolve()
+    const modelQueue = new MaintenanceModelQueue()
     let readStatus: Interface["status"] | undefined
     const publishCurrentStatus = async (sessionID: string) => {
       if (!readStatus) return
@@ -292,18 +390,8 @@ export const layer: Layer.Layer<
       })
     }
 
-    const serialized = <T>(run: () => Promise<T>, signal: AbortSignal) => {
-      const start = () => {
-        if (signal.aborted) throw signal.reason ?? new DOMException("The operation was aborted", "AbortError")
-        return run()
-      }
-      const result = modelQueue.then(start, start)
-      modelQueue = result.then(
-        () => undefined,
-        () => undefined,
-      )
-      return abortable(result, signal)
-    }
+    const serialized = <T>(run: () => Promise<T>, signal: AbortSignal, priority: "foreground" | "soft") =>
+      abortable(modelQueue.enqueue({ run, signal, priority }), signal)
 
     const close = () => {
       store?.close()
@@ -482,10 +570,12 @@ export const layer: Layer.Layer<
         expiresAt: Date.now() + 30 * 60_000,
       })
       if (!acquired) return synced.store.activeRevision(synced.lineage.sessionID, synced.lineage.digest)
+      const serializedForBuild = <T>(run: () => Promise<T>) =>
+        serialized(run, signal, input.reason === "soft" ? "soft" : "foreground")
       const generator: SummaryGenerator = {
         generate: (request) => {
           const started = Date.now()
-          return serialized(() => {
+          return serializedForBuild(() => {
             const running = bridge.promise(
               Effect.gen(function* () {
                 const configured = yield* agents.get("compaction")
@@ -594,7 +684,7 @@ export const layer: Layer.Layer<
             )
             input.onModelStart?.()
             return running
-          }, signal).catch((error) => {
+          }).catch((error) => {
             if (signal.aborted) throw error
             if (providerRequiresBlocking(error)) {
               blockingProviders.add(`${input.model.providerID}:${input.model.id}`)
@@ -811,9 +901,18 @@ export const layer: Layer.Layer<
           measure: input.measure,
           signal: input.signal,
         })
-      let result = yield* Effect.promise(() => projectCurrent("soft"))
+      let result = yield* Effect.promise(() => projectCurrent(input.reason ?? "soft"))
       const hard =
         input.measure(result.type === "projected" ? result.messages : input.messages) >= input.usableInputTokens
+      if (hard && input.reason === "hard") {
+        yield* Effect.promise(() => setPhase(input.sessionID, "constrained"))
+        return {
+          type: "unavailable",
+          messages: input.messages,
+          pressure,
+          code: "lcm_hard_limit_unresolved",
+        } satisfies ProjectionResult
+      }
       if (hard) {
         const running = background.get(input.sessionID)
         if (running) {
@@ -867,21 +966,9 @@ export const layer: Layer.Layer<
         recentTailTokens: input.recentTailTokens,
         revision: result.revision,
       })
-      const activity = yield* Effect.promise(async () => {
+      yield* Effect.promise(async () => {
         const createdAt = Date.now()
-        const [written, frame] = await Promise.allSettled([
-          synced.store.appendActivity({
-            id: sortableID("activity"),
-            sessionID: input.sessionID,
-            kind: "intervention",
-            pressureBefore: result.pressureBefore,
-            pressureAfter: result.pressureAfter,
-            rawTokens: result.rawTokens,
-            summaryTokens: result.summaryTokens,
-            summaryIDs: result.revision.items.filter((item) => item.kind === "summary").map((item) => item.id),
-            message: "Conversation Memory represented earlier conversation with summaries.",
-            createdAt,
-          }),
+        const frame = await Promise.allSettled([
           synced.store.recordFrame({
             id: sortableID("frame"),
             sessionID: input.sessionID,
@@ -889,7 +976,7 @@ export const layer: Layer.Layer<
             revisionID: result.revision.id,
             lineageDigest: synced.lineage.digest,
             active: true,
-            reason: hard ? "hard_built" : "soft_ready",
+            reason: input.reason === "hard" || hard ? "hard_built" : "soft_ready",
             pre: normalizeModelInput({ system: input.system, messages: input.messages, tools: input.tools }),
             post: normalizeModelInput({ system: input.system, messages: result.messages, tools: input.tools }),
             pressureBefore: result.pressureBefore,
@@ -904,7 +991,7 @@ export const layer: Layer.Layer<
             createdAt,
           }),
         ])
-        if (written.status === "rejected" || frame.status === "rejected") {
+        if (frame[0]?.status === "rejected") {
           log.warn("context audit capture unavailable", { code: "lcm_audit_gap" })
           const now = Date.now()
           await synced.store
@@ -918,13 +1005,7 @@ export const layer: Layer.Layer<
         } else {
           await synced.store.setIssue(input.sessionID).catch(() => undefined)
         }
-        return written.status === "fulfilled" ? written.value : undefined
       })
-      if (activity) {
-        yield* events
-          .publish(LcmEvent.Activity, { sessionID: input.sessionID as SessionID, activity })
-          .pipe(Effect.catch(() => Effect.void))
-      }
       yield* status(input.sessionID).pipe(
         Effect.flatMap((current) =>
           events.publish(LcmEvent.Status, { sessionID: input.sessionID as SessionID, status: current }),
@@ -1034,6 +1115,7 @@ export const layer: Layer.Layer<
 
     const maintain: Interface["maintain"] = (input) =>
       Effect.tryPromise(async () => {
+        const targetTokens = Math.floor(input.usableInputTokens * input.thresholdRatio * (input.strict ? 0.75 : 1))
         const running = background.get(input.sessionID)
         if (running) {
           running.controller.abort(new DOMException("Superseded by foreground maintenance", "AbortError"))
@@ -1052,8 +1134,23 @@ export const layer: Layer.Layer<
         if (!hasKnownCapacity(input.usableInputTokens)) {
           await publishCapacityUnknown(input.sessionID)
           await setPhase(input.sessionID, "constrained")
-          return "capacity_unknown" as const
+          return {
+            outcome: "capacity_unknown",
+            changed: false,
+            beforeTokens: 0,
+            afterTokens: 0,
+            targetTokens,
+            targetReached: false,
+            reducible: false,
+          } satisfies MaintenanceResult
         }
+        const before = await synced.store.activeRevision(input.sessionID, synced.lineage.digest)
+        const beforeTokens = await frontierTokens({
+          store: synced.store,
+          sessionID: input.sessionID,
+          revision: before,
+          sources: synced.sources,
+        })
         if (synced.maxEligibleOrdinal < 0) {
           const activity = await synced.store.appendActivity({
             id: sortableID("activity"),
@@ -1065,10 +1162,17 @@ export const layer: Layer.Layer<
           await bridge
             .promise(events.publish(LcmEvent.Activity, { sessionID: input.sessionID as SessionID, activity }))
             .catch(() => undefined)
-          await setPhase(input.sessionID, "idle")
-          return "noop" as const
+          const completion = maintenanceCompletion({
+            beforeTokens,
+            afterTokens: beforeTokens,
+            targetTokens,
+            lineageDigest: synced.lineage.digest,
+            revisionChanged: false,
+            ...(before ? { revisionID: before.id } : {}),
+          })
+          await setPhase(input.sessionID, completion.outcome === "constrained" ? "constrained" : "idle")
+          return completion
         }
-        const before = await synced.store.activeRevision(input.sessionID, synced.lineage.digest)
         const revision = await build(synced, {
           usableInputTokens: input.usableInputTokens,
           thresholdRatio: input.thresholdRatio,
@@ -1077,27 +1181,38 @@ export const layer: Layer.Layer<
           strict: input.strict,
           signal: input.signal,
         })
-        const changed = revision && revision.id !== before?.id
+        const active = revision ?? before
+        const afterTokens = await frontierTokens({
+          store: synced.store,
+          sessionID: input.sessionID,
+          revision: active,
+          sources: synced.sources,
+        })
+        const completion = maintenanceCompletion({
+          beforeTokens,
+          afterTokens,
+          targetTokens,
+          revisionChanged: Boolean(active && active.id !== before?.id),
+          lineageDigest: synced.lineage.digest,
+          ...(active ? { revisionID: active.id } : {}),
+        })
         const activity = await synced.store.appendActivity({
           id: sortableID("activity"),
           sessionID: input.sessionID,
-          kind: changed ? "frontier_advanced" : "intervention",
-          summaryIDs: revision?.items.filter((item) => item.kind === "summary").map((item) => item.id),
-          message: changed
-            ? `Conversation Memory completed ${input.reason} maintenance.`
+          kind: completion.changed ? "frontier_advanced" : "intervention",
+          summaryIDs: active?.items.filter((item) => item.kind === "summary").map((item) => item.id),
+          message: completion.changed
+            ? completion.targetReached
+              ? `Conversation Memory completed ${input.reason} maintenance at the configured target.`
+              : `Conversation Memory reduced ${input.reason} context but could not reach the configured target.`
             : "Conversation Memory maintenance found no further reducible history.",
           createdAt: Date.now(),
         })
         await bridge
           .promise(events.publish(LcmEvent.Activity, { sessionID: input.sessionID as SessionID, activity }))
           .catch(() => undefined)
-        const result = changed
-          ? ("maintained" as const)
-          : input.reason === "manual"
-            ? ("noop" as const)
-            : ("constrained" as const)
-        await setPhase(input.sessionID, result === "constrained" ? "constrained" : "idle")
-        return result
+        await setPhase(input.sessionID, completion.outcome === "constrained" ? "constrained" : "idle")
+        return completion
       }).pipe(
         Effect.catch((error) =>
           Effect.promise(async () => {
@@ -1106,7 +1221,15 @@ export const layer: Layer.Layer<
             })
             await publishFallback(input.sessionID, "lcm_maintenance_unavailable").catch(() => undefined)
             await setPhase(input.sessionID, "constrained")
-            return input.reason === "hard" ? ("unresolved" as const) : ("constrained" as const)
+            return {
+              outcome: input.reason === "hard" ? ("unresolved" as const) : ("constrained" as const),
+              changed: false,
+              beforeTokens: 0,
+              afterTokens: 0,
+              targetTokens: Math.floor(input.usableInputTokens * input.thresholdRatio * (input.strict ? 0.75 : 1)),
+              targetReached: false,
+              reducible: false,
+            } satisfies MaintenanceResult
           }),
         ),
       )
@@ -1250,14 +1373,17 @@ export const layer: Layer.Layer<
           target.metrics(sessionID),
           target.listActivity(sessionID, { limit: 100 }),
         ])
-        const frame = frames.findLast((item) => item.active) ?? frames.at(-1)
         const revision = state.lineageDigest ? await target.activeRevision(sessionID, state.lineageDigest) : undefined
+        const latestFrame = frames.findLast((item) => item.active) ?? frames.at(-1)
+        const frame = matchingContextFrame({ frames, revision })
+        const capacityFrame = frame ?? latestFrame
         const sources = await target.listSources(sessionID)
         const currentLanes = conversationLanes({
           sources,
           consumedThrough: state.consumedThrough,
           recentTailTokens:
-            frame?.recentTailTokens ?? recentTailTokens({ usableInputTokens: frame?.usableInputTokens ?? 0 }),
+            capacityFrame?.recentTailTokens ??
+            recentTailTokens({ usableInputTokens: capacityFrame?.usableInputTokens ?? 0 }),
           revision,
         })
         let rawItems = revision?.items.filter((item) => item.kind === "source").length ?? state.sourceCount
@@ -1274,16 +1400,19 @@ export const layer: Layer.Layer<
           rawItems = sources.length
           summaryItems = 0
         }
-        if (frame) summaryTokens = frame.summaryTokens || summaryTokens
-        const usableInputTokens = frame?.usableInputTokens
+        const usableInputTokens = capacityFrame?.usableInputTokens
         const rawLaneTokens = currentLanes.eligibleRawTokens + currentLanes.protectedRawTokens
-        const fixedInputTokens = frame?.fixedInputTokens
+        const fixedInputTokens = capacityFrame?.fixedInputTokens
         const activeInputTokens =
           frame && usableInputTokens !== undefined
             ? Math.round((frame.pressureAfter ?? frame.pressureBefore ?? 0) * usableInputTokens)
-            : undefined
+            : usableInputTokens !== undefined && fixedInputTokens !== undefined
+              ? fixedInputTokens + rawTokens + summaryTokens
+              : undefined
+        const pressureRatio =
+          usableInputTokens && activeInputTokens !== undefined ? activeInputTokens / usableInputTokens : undefined
         const lastInterventionAt = activities.find((item) => item.kind === "intervention")?.createdAt
-        const knownCapacity = hasKnownCapacity(frame?.usableInputTokens)
+        const knownCapacity = hasKnownCapacity(capacityFrame?.usableInputTokens)
         return {
           sessionID,
           sequence: state.sequence,
@@ -1291,25 +1420,26 @@ export const layer: Layer.Layer<
           health: state.health,
           capacity: {
             known: knownCapacity,
-            ...(frame && knownCapacity
+            ...(capacityFrame && knownCapacity
               ? {
-                  usableInputTokens: frame.usableInputTokens,
-                  rawInputTokens: frame.rawTokens,
+                  usableInputTokens: capacityFrame.usableInputTokens,
+                  rawInputTokens: capacityFrame.rawTokens,
                   activeInputTokens,
                   freeTokens:
                     activeInputTokens === undefined
                       ? undefined
-                      : Math.max(0, frame.usableInputTokens - activeInputTokens),
-                  pressureRatio: frame.pressureAfter ?? frame.pressureBefore,
-                  thresholdRatio: frame.thresholdRatio,
-                  softThresholdTokens: Math.floor(frame.usableInputTokens * frame.thresholdRatio),
+                      : Math.max(0, capacityFrame.usableInputTokens - activeInputTokens),
+                  pressureRatio,
+                  thresholdRatio: capacityFrame.thresholdRatio,
+                  softThresholdTokens: Math.floor(capacityFrame.usableInputTokens * capacityFrame.thresholdRatio),
                   rawLaneTokens,
-                  rawLaneRatio: frame.usableInputTokens > 0 ? rawLaneTokens / frame.usableInputTokens : 0,
+                  rawLaneRatio:
+                    capacityFrame.usableInputTokens > 0 ? rawLaneTokens / capacityFrame.usableInputTokens : 0,
                   fixedInputTokens,
                 }
-              : frame
+              : capacityFrame
                 ? {
-                    rawInputTokens: frame.rawTokens,
+                    rawInputTokens: capacityFrame.rawTokens,
                     fixedInputTokens,
                   }
                 : {}),

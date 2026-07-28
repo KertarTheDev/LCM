@@ -80,7 +80,7 @@ const summary = Layer.succeed(
 
 // Pass-through plugin mock. Lets every plugin trigger proceed with its default
 // output so compaction's `experimental.compaction.autocontinue` stays on (the
-// "compact" result path uses replay mode and the loop re-enters without the
+// The provider-overflow result path uses replay mode and the loop re-enters without the
 // synthetic continue prompt anyway).
 const plugin = Layer.mock(Plugin.Service)({
   trigger: <Name extends string, Input, Output>(_name: Name, _input: Input, output: Output) => Effect.succeed(output),

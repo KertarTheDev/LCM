@@ -110,7 +110,7 @@ export class Projector {
       pressureAfter,
       revision,
       rawTokens,
-      summaryTokens: input.measure([memory]),
+      summaryTokens: Math.max(0, input.measure([memory]) - input.measure([])),
     }
   }
 }

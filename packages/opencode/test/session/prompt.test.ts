@@ -733,7 +733,8 @@ it.instance("loop surfaces content-filter finishes as session errors", () =>
   }),
 )
 
-it.instance("loop stops provider overflow instead of auto-compacting when disabled", () =>
+// kilocode_change start
+it.instance("loop fails closed without resending an identical provider-overflow request", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig((url) => ({
       ...providerCfg(url),
@@ -758,10 +759,13 @@ it.instance("loop stops provider overflow instead of auto-compacting when disabl
     if (result.info.role === "assistant") {
       expect(result.info.error?.name).toBe("ContextOverflowError")
       expect(result.info.finish).toBe("error")
+      expect(result.info.error?.data.message).toContain("found no smaller active frontier")
     }
+    expect(yield* llm.calls).toBe(1)
     expect(messages.some((message) => message.parts.some((part) => part.type === "compaction"))).toBe(false)
   }),
 )
+// kilocode_change end
 
 noLLMServer.instance.skip(
   "prompt emits v2 prompted and synthetic events (v2 projector disabled)",

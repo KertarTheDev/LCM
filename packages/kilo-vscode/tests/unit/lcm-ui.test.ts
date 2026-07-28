@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
 import { routeLcmMessage, updateLcmActivity, updateLcmStatus } from "../../webview-ui/src/context/lcm-state"
 import type { LcmActivity, LcmStatus } from "../../webview-ui/src/types/messages"
 
@@ -102,5 +103,19 @@ describe("Conversation Memory webview state", () => {
     expect(error).toBeUndefined()
     route("ses_active")
     expect(error).toBe("route failed")
+  })
+
+  test("binds timeline and export controls to the displayed local LCM status", async () => {
+    const root = path.resolve(import.meta.dir, "../../webview-ui/src/components")
+    const settings = await Bun.file(path.join(root, "settings/ContextTab.tsx")).text()
+    const progress = await Bun.file(path.join(root, "chat/ContextProgress.tsx")).text()
+    const timeline = await Bun.file(path.join(root, "chat/TaskTimeline.tsx")).text()
+
+    expect(settings).toContain("session.lcmStatus()?.sessionID")
+    expect(settings).toContain("disabled={!conversationMemorySessionID()}")
+    expect(settings).not.toContain("disabled={!session.currentSessionID()}")
+    expect(progress).toContain("sessionID: status().sessionID")
+    expect(timeline).toContain("session.lcmStatus()?.sessionID")
+    expect([settings, progress, timeline].every((source) => source.includes('startsWith("cloud:")'))).toBe(true)
   })
 })

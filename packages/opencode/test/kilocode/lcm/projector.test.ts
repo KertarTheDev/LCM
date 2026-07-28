@@ -83,6 +83,7 @@ describe("LCM projector", () => {
     expect(isConversationMemoryMessage(result.messages[0]!)).toBe(true)
     expect(result.messages.slice(1)).toEqual(messages.slice(10))
     expect(result.revision.id).toBe(revision!.id)
+    expect(result.summaryTokens).toBe(measure([result.messages[0]!]) - measure([]))
 
     await store.commitRevision({
       ...revision!,

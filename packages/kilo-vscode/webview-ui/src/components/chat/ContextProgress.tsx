@@ -146,7 +146,7 @@ export const ContextProgress: Component = () => {
               <Show when={status().capacity.known && status().issue}>
                 <div class="context-memory-warning">{status().issue!.message}</div>
               </Show>
-              <Show when={session.currentSessionID()}>
+              <Show when={status().sessionID && !status().sessionID.startsWith("cloud:")}>
                 <button
                   type="button"
                   aria-label={language.t("conversationMemory.timeline.show")}
@@ -154,7 +154,7 @@ export const ContextProgress: Component = () => {
                   onClick={() =>
                     vscode.postMessage({
                       type: "showLcmTimeline",
-                      sessionID: session.currentSessionID()!,
+                      sessionID: status().sessionID,
                     })
                   }
                 >

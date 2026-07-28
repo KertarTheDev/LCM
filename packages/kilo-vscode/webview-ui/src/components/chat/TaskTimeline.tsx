@@ -221,8 +221,9 @@ export const TaskTimeline: Component = () => {
     const bar = bars()[idx]
     if (!bar) return
     setActive(idx)
-    if (bar.activity && session.currentSessionID()) {
-      vscode.postMessage({ type: "showLcmTimeline", sessionID: session.currentSessionID()! })
+    const memorySessionID = session.lcmStatus()?.sessionID
+    if (bar.activity && memorySessionID && !memorySessionID.startsWith("cloud:")) {
+      vscode.postMessage({ type: "showLcmTimeline", sessionID: memorySessionID })
     } else {
       window.dispatchEvent(new CustomEvent("scrollToMessage", { detail: { id: bar.msgId, partId: bar.partId } }))
     }

@@ -2,10 +2,13 @@ import { describe, expect, test } from "bun:test"
 import {
   conversationLanes,
   hasKnownCapacity,
+  maintenanceCompletion,
+  MaintenanceModelQueue,
+  matchingContextFrame,
   providerRequiresBlocking,
   recentTailTokens,
 } from "@/kilocode/session/lcm/service"
-import type { FinalSource, FrontierRevision } from "@/kilocode/session/lcm/types"
+import type { ContextFrame, FinalSource, FrontierRevision } from "@/kilocode/session/lcm/types"
 
 describe("LCM maintenance policy", () => {
   test("requires a positive usable input capacity before maintenance", () => {
@@ -76,6 +79,123 @@ describe("LCM maintenance policy", () => {
       eligibleRawItems: 1,
       protectedRawTokens: 100,
       protectedRawItems: 1,
+    })
+  })
+
+  test("runs queued foreground maintenance before pending soft work", async () => {
+    const queue = new MaintenanceModelQueue()
+    const order: string[] = []
+    let releaseFirst = () => {}
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    const softOne = queue.enqueue({
+      priority: "soft",
+      signal: new AbortController().signal,
+      run: async () => {
+        order.push("soft-1")
+        await firstGate
+      },
+    })
+    await Promise.resolve()
+    const softTwo = queue.enqueue({
+      priority: "soft",
+      signal: new AbortController().signal,
+      run: async () => {
+        order.push("soft-2")
+      },
+    })
+    const hard = queue.enqueue({
+      priority: "foreground",
+      signal: new AbortController().signal,
+      run: async () => {
+        order.push("hard")
+      },
+    })
+
+    releaseFirst()
+    await Promise.all([softOne, softTwo, hard])
+    expect(order).toEqual(["soft-1", "hard", "soft-2"])
+  })
+
+  test("does not join an active revision to stale pressure from another frame", () => {
+    const frame = (id: string, revisionID: string, lineageDigest: string): ContextFrame => ({
+      id,
+      sessionID: "ses_frame",
+      revisionID,
+      lineageDigest,
+      active: true,
+      reason: "soft_ready",
+      pre: { system: [], messages: [], tools: {} },
+      post: { system: [], messages: [], tools: {} },
+      usableInputTokens: 10_000,
+      thresholdRatio: 0.4,
+      rawTokens: 5_000,
+      rawLaneTokens: 2_000,
+      fixedInputTokens: 1_000,
+      recentTailTokens: 2_000,
+      summaryTokens: 500,
+      createdAt: 1,
+    })
+    const revision: FrontierRevision = {
+      id: "rev_new",
+      sessionID: "ses_frame",
+      lineageDigest: "lineage_new",
+      reason: "hard_level",
+      items: [],
+      createdAt: 2,
+    }
+
+    expect(matchingContextFrame({ frames: [frame("old", "rev_old", "lineage_old")], revision })).toBeUndefined()
+    expect(
+      matchingContextFrame({
+        frames: [frame("old", "rev_old", "lineage_old"), frame("new", "rev_new", "lineage_new")],
+        revision,
+      })?.id,
+    ).toBe("new")
+  })
+
+  test("reports target completion separately from frontier advancement", () => {
+    expect(
+      maintenanceCompletion({
+        beforeTokens: 50_000,
+        afterTokens: 35_000,
+        targetTokens: 40_000,
+        revisionChanged: true,
+        revisionID: "rev_reached",
+        lineageDigest: "lineage",
+      }),
+    ).toMatchObject({
+      outcome: "maintained",
+      changed: true,
+      targetReached: true,
+      reducible: true,
+    })
+    expect(
+      maintenanceCompletion({
+        beforeTokens: 50_000,
+        afterTokens: 45_000,
+        targetTokens: 40_000,
+        revisionChanged: true,
+      }),
+    ).toMatchObject({
+      outcome: "constrained",
+      changed: true,
+      targetReached: false,
+      reducible: true,
+    })
+    expect(
+      maintenanceCompletion({
+        beforeTokens: 45_000,
+        afterTokens: 45_000,
+        targetTokens: 40_000,
+        revisionChanged: false,
+      }),
+    ).toMatchObject({
+      outcome: "constrained",
+      changed: false,
+      targetReached: false,
+      reducible: false,
     })
   })
 })

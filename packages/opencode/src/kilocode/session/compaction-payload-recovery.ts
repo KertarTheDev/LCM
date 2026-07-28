@@ -85,10 +85,17 @@ export namespace KiloCompactionPayloadRecovery {
 
     return run(input.messages, input.prompt).pipe(
       Effect.flatMap((result) => {
-        if (result !== "compact" && (result !== "stop" || !matches(input.processor.message.error))) {
+        if (
+          result !== "legacy_compact" &&
+          result !== "provider_overflow" &&
+          (result !== "stop" || !matches(input.processor.message.error))
+        ) {
           return Effect.succeed(result)
         }
-        if (result === "compact" && !matches(input.processor.compactError?.())) {
+        if (
+          (result === "legacy_compact" || result === "provider_overflow") &&
+          !matches(input.processor.compactError?.())
+        ) {
           return Effect.succeed(result)
         }
         return Effect.gen(function* () {
