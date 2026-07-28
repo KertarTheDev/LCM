@@ -759,7 +759,8 @@ it.instance("loop fails closed without resending an identical provider-overflow 
     if (result.info.role === "assistant") {
       expect(result.info.error?.name).toBe("ContextOverflowError")
       expect(result.info.finish).toBe("error")
-      expect(result.info.error?.data.message).toContain("found no smaller active frontier")
+      if (result.info.error?.name !== "ContextOverflowError") throw new Error("expected context overflow")
+      expect(result.info.error.data.message).toContain("found no smaller active frontier")
     }
     expect(yield* llm.calls).toBe(1)
     expect(messages.some((message) => message.parts.some((part) => part.type === "compaction"))).toBe(false)

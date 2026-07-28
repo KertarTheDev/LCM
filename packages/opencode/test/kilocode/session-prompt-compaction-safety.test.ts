@@ -463,7 +463,8 @@ describe("SessionPrompt compaction safety", () => {
         expect(result.info.role).toBe("assistant")
         if (result.info.role === "assistant") {
           expect(result.info.error?.name).toBe("ContextOverflowError")
-          expect(result.info.error?.data.message).toContain("provider rejected the verified smaller request")
+          if (result.info.error?.name !== "ContextOverflowError") throw new Error("expected context overflow")
+          expect(result.info.error.data.message).toContain("provider rejected the verified smaller request")
         }
       }),
       {

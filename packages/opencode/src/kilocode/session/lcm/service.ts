@@ -1351,6 +1351,7 @@ export const layer: Layer.Layer<
               }),
             ),
           signal,
+          "foreground",
         )
       })
 
