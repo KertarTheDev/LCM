@@ -2,6 +2,29 @@
 
 Kilo Code uses a fully automated CI pipeline triggered via GitHub Actions `workflow_dispatch`. A single workflow handles version bumping, building all artifacts, publishing to every distribution channel, and updating package registries.
 
+## LCM fork prereleases
+
+The `KertarTheDev/LCM` fork has a separate guarded job in this workflow. It runs only for a manual dispatch from
+`kilocode-lcm-prerelease`; all upstream npm, Marketplace, Open VSX, container, Homebrew, and AUR jobs remain disabled in
+the fork.
+
+The fork job verifies exact product ancestry and a six-file release-only overlay, then runs the current storage, tree,
+projection, five-tool, API, export, upstream-compatibility, long-context, contract, documentation, UI, compiler, and
+generated-drift gates. It builds 12 CLI archives and eight VSIX files, runs smoke against the extracted Linux VSIX, and
+only then creates a draft release targeting the exact workflow SHA.
+
+Uploads are bound to the captured numeric release ID and its upload URL. The exact 20-file non-empty manifest is
+validated before the captured draft is published and its tag is resolved back to the workflow SHA. Failed-run cleanup
+can delete only that captured draft and can delete its tag only when the tag peels to the same SHA. Identity mismatches
+are left intact for investigation.
+
+Build release evidence only from a clean committed SHA. Reconstruct the prerelease branch directly on the verified
+product head; do not replay the previous product or prerelease commits.
+
+Replacing a known-bad prerelease is destructive and requires explicit authorization. Publish and verify the next
+prerelease tag first. Then capture and re-resolve the obsolete release ID, tag, and SHA, and delete only that release
+and matching tag. Failed-run cleanup remains limited to the captured failed draft/release and its matching tag.
+
 ## How to Trigger a Release
 
 1. Go to the [`publish` workflow](https://github.com/Kilo-Org/kilocode/actions/workflows/publish.yml) in GitHub Actions.
