@@ -17,8 +17,9 @@ function digest(bytes: Uint8Array) {
   return hash.digest("hex")
 }
 
-async function run(binary: string, args: string[], root: string) {
+async function run(binary: string, args: string[], root: string, env: Record<string, string> = {}) {
   const proc = Bun.spawn([binary, ...args], {
+    cwd: root,
     env: {
       ...process.env,
       XDG_DATA_HOME: path.join(root, "data"),
@@ -27,6 +28,10 @@ async function run(binary: string, args: string[], root: string) {
       XDG_STATE_HOME: path.join(root, "state"),
       KILO_DISABLE_MODELS_FETCH: "1",
       KILO_DISABLE_PROJECT_CONFIG: "1",
+      KILO_DISABLE_AUTOUPDATE: "1",
+      KILO_PURE: "1",
+      KILO_AUTH_CONTENT: "{}",
+      ...env,
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -38,7 +43,39 @@ async function run(binary: string, args: string[], root: string) {
     proc.exited,
   ])
   if (code !== 0) throw new Error(`Packaged CLI failed (${args.join(" ")}): ${stderr || stdout}`)
-  return stdout + stderr
+  return { stdout, stderr }
+}
+
+function providerConfig(conversationMemory: boolean) {
+  return {
+    model: "test/test-model",
+    formatter: false,
+    lsp: false,
+    experimental: { conversation_memory: conversationMemory },
+    provider: {
+      test: {
+        name: "Packaged smoke",
+        id: "test",
+        env: [],
+        npm: "@ai-sdk/openai-compatible",
+        models: {
+          "test-model": {
+            id: "test-model",
+            name: "Packaged smoke model",
+            attachment: false,
+            reasoning: false,
+            temperature: false,
+            tool_call: true,
+            release_date: "2025-01-01",
+            limit: { context: 100_000, output: 10_000 },
+            cost: { input: 0, output: 0 },
+            options: {},
+          },
+        },
+        options: { apiKey: "packaged-smoke", baseURL: "http://127.0.0.1:1/v1" },
+      },
+    },
+  }
 }
 
 const cliOption = option("cli") ?? process.env.LCM_PACKAGED_CLI
@@ -78,10 +115,27 @@ try {
   }
 
   if (!binary) throw new Error("No packaged CLI was resolved")
-  const version = (await run(binary, ["--version"], temporary)).trim()
-  const help = await run(binary, ["lcm", "--help"], temporary)
+  const version = (await run(binary, ["--version"], temporary)).stdout.trim()
+  const help = (await run(binary, ["lcm", "--help"], temporary)).stdout
   for (const command of ["status", "timeline", "export"]) {
     if (!help.includes(command)) throw new Error(`Packaged CLI help is missing the LCM ${command} command`)
+  }
+  const lcmTools = ["lcm_grep", "lcm_describe", "lcm_expand_query", "lcm_expand", "lcm_read"]
+  const agents = ["ask", "plan", "explore", "orchestrator"]
+  const enabledConfig = JSON.stringify(providerConfig(true))
+  for (const agent of agents) {
+    const output = await run(binary, ["debug", "agent", agent], temporary, { KILO_CONFIG_CONTENT: enabledConfig })
+    const parsed = JSON.parse(output.stdout) as { tools?: Record<string, boolean> }
+    for (const tool of lcmTools) {
+      if (parsed.tools?.[tool] !== true) throw new Error(`Packaged ${agent} agent does not expose ${tool}`)
+    }
+  }
+  const disabled = await run(binary, ["debug", "agent", "ask"], temporary, {
+    KILO_CONFIG_CONTENT: JSON.stringify(providerConfig(false)),
+  })
+  const disabledTools = (JSON.parse(disabled.stdout) as { tools?: Record<string, boolean> }).tools ?? {}
+  for (const tool of lcmTools) {
+    if (tool in disabledTools) throw new Error(`Packaged disabled agent still exposes ${tool}`)
   }
   const cliBytes = new Uint8Array(await Bun.file(binary).arrayBuffer())
   console.log(
@@ -91,6 +145,9 @@ try {
         cliSha256: digest(cliBytes),
         ...(vsixDigest ? { vsixSha256: vsixDigest } : {}),
         lcmCommands: ["status", "timeline", "export"],
+        lcmTools,
+        verifiedAgents: agents,
+        disabledToolsHidden: true,
       },
       null,
       2,

@@ -37,14 +37,21 @@ const registry = await read("packages/opencode/src/tool/registry.ts")
 const toolFiles = {
   lcm_grep: "lcm-grep.ts",
   lcm_describe: "lcm-describe.ts",
+  lcm_expand_query: "lcm-expand-query.ts",
   lcm_expand: "lcm-expand.ts",
   lcm_read: "lcm-read.ts",
 } as const
+const lcmImports = [...registry.matchAll(/import \{ (Lcm\w+Tool) \} from "@\/kilocode\/tool\/lcm-/g)].map(
+  (match) => match[1],
+)
+if (lcmImports.length !== Object.keys(toolFiles).length) {
+  fail(`ordinary tool registry has ${lcmImports.length} LCM tool imports instead of exactly five`)
+}
 for (const [name, filename] of Object.entries(toolFiles)) {
   const source = await read(`packages/opencode/src/kilocode/tool/${filename}`)
   if (!source.includes(`"${name}"`)) fail(`${filename} does not define ${name}`)
 }
-for (const symbol of ["LcmGrepTool", "LcmDescribeTool", "LcmExpandTool", "LcmReadTool"]) {
+for (const symbol of ["LcmGrepTool", "LcmDescribeTool", "LcmExpandQueryTool", "LcmExpandTool", "LcmReadTool"]) {
   if (!registry.includes(symbol)) fail(`${symbol} is not registered through the ordinary tool registry`)
 }
 

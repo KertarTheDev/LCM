@@ -16,6 +16,18 @@ import PROMPT_ORCHESTRATOR from "../../agent/prompt/orchestrator.txt"
 import PROMPT_ASK from "../../agent/prompt/ask.txt"
 import PROMPT_EXPLORE from "../../agent/prompt/explore.txt"
 
+export const LCM_RECOVERY_TOOLS = [
+  "lcm_grep",
+  "lcm_describe",
+  "lcm_expand_query",
+  "lcm_expand",
+  "lcm_read",
+] as const
+
+export function lcmRecoveryPermissions() {
+  return Permission.fromConfig(Object.fromEntries(LCM_RECOVERY_TOOLS.map((tool) => [tool, "allow" as const])))
+}
+
 export const bash: Record<string, "allow" | "ask" | "deny"> = {
   "*": "ask",
   "cat *": "allow",
@@ -429,6 +441,7 @@ export function patchAgents(
       permission: Permission.merge(
         defaults,
         planGuard(worktree, kilo.mcpRules),
+        lcmRecoveryPermissions(),
         user,
         planEditGuard(worktree),
         restrictions(user),
@@ -464,6 +477,7 @@ export function patchAgents(
             ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
           },
         }),
+        lcmRecoveryPermissions(),
         user,
       ),
       prompt: cfg.experimental?.codebase_search
@@ -519,6 +533,7 @@ export function patchAgents(
           [Truncate.GLOB]: "allow",
         },
       }),
+      lcmRecoveryPermissions(),
       user,
       // Enforce bash deny after user so user config cannot re-enable shell
       Permission.fromConfig({
@@ -536,7 +551,14 @@ export function patchAgents(
     description: "Get answers and explanations without making changes to the codebase.",
     prompt: PROMPT_ASK,
     options: {},
-    permission: Permission.merge(defaults, askGuard(kilo.mcpRules), user, askEditGuard(), denies(user)),
+    permission: Permission.merge(
+      defaults,
+      askGuard(kilo.mcpRules),
+      lcmRecoveryPermissions(),
+      user,
+      askEditGuard(),
+      denies(user),
+    ),
     mode: "primary",
     native: true,
   }

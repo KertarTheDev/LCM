@@ -2,7 +2,7 @@ import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import { Effect, Exit, Layer, Result, Schema } from "effect" // kilocode_change
+import { Cause, Effect, Exit, Layer, Result, Schema } from "effect" // kilocode_change
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
@@ -15,12 +15,27 @@ import { Agent } from "@/agent/agent"
 import { InstanceState } from "@/effect/instance-state"
 
 import { ToolJsonSchema } from "@/tool/json-schema"
-import { MessageID, SessionID } from "@/session/schema"
+import { MessageID, PartID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as SandboxNetwork from "@/kilocode/sandbox/network" // kilocode_change
 import { run as runSandbox, type Profile } from "@kilocode/sandbox" // kilocode_change
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Permission } from "@/permission"
+import { Session } from "@/session/session"
+import { MessageV2 } from "@/session/message-v2"
+import { ConversationMemory } from "@/kilocode/session/lcm/service"
+import { nodeKey, sha256, summaryID } from "@/kilocode/session/lcm/ids"
+import type { SummaryChild } from "@/kilocode/session/lcm/types"
+import { Database } from "@opencode-ai/core/database/database"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import * as Truncate from "@/tool/truncate"
+import { LcmGrepTool } from "@/kilocode/tool/lcm-grep"
+import { LcmDescribeTool } from "@/kilocode/tool/lcm-describe"
+import { LcmExpandQueryTool } from "@/kilocode/tool/lcm-expand-query"
+import { LcmExpandTool } from "@/kilocode/tool/lcm-expand"
+import { LcmReadTool } from "@/kilocode/tool/lcm-read"
 
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".kilo")])), // kilocode_change
@@ -56,12 +71,20 @@ const brokenPluginLayer = Layer.succeed(
   }),
 )
 
-const root = LayerNode.group([ToolRegistry.node, Agent.node])
+const root = LayerNode.group([
+  ToolRegistry.node,
+  Agent.node,
+  Session.node,
+  ConversationMemory.node,
+  Database.node,
+  Truncate.node,
+])
 const registryLayer = (opts: RegistryLayerOptions = {}) =>
   LayerNode.buildLayer(root, {
     replacements: [
       LayerNode.replace(Config.node, opts.config ?? configLayer), // kilocode_change
       LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer(opts.flags ?? {})),
+      LayerNode.replace(Database.node, Database.defaultLayer),
       ...(opts.plugin ? [LayerNode.replace(Plugin.node, opts.plugin)] : []),
     ],
   })
@@ -111,6 +134,206 @@ describe("tool.registry", () => {
       const ids = yield* (yield* ToolRegistry.Service).ids()
       for (const id of ["lcm_grep", "lcm_describe", "lcm_expand_query", "lcm_expand", "lcm_read"])
       expect(ids).not.toContain(id)
+    }),
+  )
+
+  it.instance("executes all five Conversation Memory handlers against current-session state", () =>
+    Effect.gen(function* () {
+      const memory = yield* ConversationMemory.Service
+      const agents = yield* Agent.Service
+      const database = yield* Database.Service
+      const instance = yield* InstanceState.context
+      const current = SessionID.make("ses_lcm_tool_current")
+      const other = SessionID.make("ses_lcm_tool_other")
+      yield* database.db
+        .insert(ProjectTable)
+        .values({
+          id: instance.project.id,
+          worktree: instance.worktree,
+          sandboxes: [],
+          time_created: 1,
+          time_updated: 1,
+        })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      yield* database.db
+        .insert(SessionTable)
+        .values(
+          [current, other].map((id) => ({
+            id,
+            project_id: instance.project.id,
+            slug: id,
+            directory: instance.directory,
+            title: "LCM tool handler test",
+            version: "7.4.17-test",
+            time_created: 1,
+            time_updated: 1,
+          })),
+        )
+        .run()
+        .pipe(Effect.orDie)
+      const userID = MessageID.ascending()
+      yield* database.db
+        .insert(MessageTable)
+        .values({
+          id: userID,
+          session_id: current,
+          time_created: 1,
+          time_updated: 1,
+          data: {
+            role: "user",
+            time: { created: 1 },
+            agent: "ask",
+            model: { providerID: "test", modelID: "test" },
+            tools: {},
+            mode: "ask",
+          } as never,
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* database.db
+        .insert(PartTable)
+        .values({
+          id: PartID.ascending(),
+          session_id: current,
+          message_id: userID,
+          time_created: 1,
+          time_updated: 1,
+          data: { type: "text", text: "The release decision is to keep the verified product branch." },
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const assistantID = MessageID.ascending()
+      yield* database.db
+        .insert(MessageTable)
+        .values({
+          id: assistantID,
+          session_id: current,
+          time_created: 2,
+          time_updated: 2,
+          data: {
+            role: "assistant",
+            time: { created: 2 },
+            parentID: userID,
+            modelID: "test",
+            providerID: "test",
+            mode: "ask",
+            agent: "ask",
+            path: { cwd: "/", root: "/" },
+            cost: 0,
+            tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+            finish: "stop",
+          } as never,
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* database.db
+        .insert(PartTable)
+        .values({
+          id: PartID.ascending(),
+          session_id: current,
+          message_id: assistantID,
+          time_created: 2,
+          time_updated: 2,
+          data: { type: "text", text: "Confirmed the release decision." },
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const transcript = yield* MessageV2.stream(current)
+      expect(transcript).toHaveLength(2)
+      const indexed = yield* memory.index({ sessionID: current, transcript })
+      if (!indexed) return yield* Effect.die(new Error("Conversation Memory did not index the test session"))
+      const sources = yield* Effect.promise(() => indexed.store.listSources(current))
+      expect(sources).toHaveLength(2)
+      const children: SummaryChild[] = sources.map((source, ordinal) => ({
+        summaryID: "",
+        kind: "source",
+        id: source.id,
+        ordinal,
+      }))
+      const key = nodeKey(children, indexed.lineage.digest, "tool-handler-test")
+      const summaryText = "The current session decided to keep the verified product branch."
+      const activeSummaryID = summaryID({ nodeKey: key, text: summaryText })
+      for (const child of children) child.summaryID = activeSummaryID
+      yield* Effect.promise(() =>
+        indexed.store.commitSummary({
+          summary: {
+            id: activeSummaryID,
+            nodeKey: key,
+            sessionID: current,
+            level: 0,
+            text: summaryText,
+            digest: sha256(summaryText),
+            sourceDigest: indexed.lineage.digest,
+            tokens: 15,
+            bytes: Buffer.byteLength(summaryText),
+            firstOrdinal: sources[0]!.ordinal,
+            lastOrdinal: sources.at(-1)!.ordinal,
+            generationMode: "deterministic",
+            createdAt: 3,
+          },
+          children,
+        }),
+      )
+      yield* Effect.promise(() =>
+        indexed.store.commitRevision({
+          id: "rev_tool_handler_test",
+          sessionID: current,
+          lineageDigest: indexed.lineage.digest,
+          reason: "soft_leaf",
+          items: [{ kind: "summary", id: activeSummaryID, ordinal: sources[0]!.ordinal }],
+          createdAt: 4,
+        }),
+      )
+
+      const ask = yield* agents.get("ask")
+      if (!ask) return yield* Effect.die(new Error("ask agent not found"))
+      const infos = yield* Effect.all([LcmGrepTool, LcmDescribeTool, LcmExpandQueryTool, LcmExpandTool, LcmReadTool])
+      const tools = yield* Effect.all(infos.map((info) => Tool.init(info)))
+      const get = (id: string) => {
+        const tool = tools.find((item) => item.id === id)
+        if (!tool) throw new Error(`missing ${id}`)
+        return tool
+      }
+      const requested = new Set<string>()
+      const context = (sessionID: SessionID) => ({
+        sessionID,
+        messageID: MessageID.ascending(),
+        agent: "ask",
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: (input: { permission: string }) => Effect.sync(() => requested.add(input.permission)),
+        extra: {
+          model: {
+            id: "test",
+            providerID: "test",
+            limit: { context: 100_000, input: 100_000, output: 10_000 },
+          },
+        },
+      })
+      const parse = (output: string) => JSON.parse(output.slice(output.indexOf("{"))) as Record<string, unknown>
+      const sourceID = sources[0]!.id
+
+      const grep = yield* get("lcm_grep").execute({ pattern: "release" }, context(current))
+      expect(grep.output).toContain(sourceID)
+      const describeSource = yield* get("lcm_describe").execute({ id: sourceID }, context(current))
+      expect(parse(describeSource.output).kind).toBe("source")
+      const describeSummary = yield* get("lcm_describe").execute({ id: activeSummaryID }, context(current))
+      expect(parse(describeSummary.output).kind).toBe("summary")
+      const expand = yield* get("lcm_expand").execute({ summaryID: activeSummaryID }, context(current))
+      expect(expand.output).toContain(sourceID)
+      const read = yield* get("lcm_read").execute({ sourceID }, context(current))
+      expect(read.output).toContain("verified product branch")
+      const query = yield* get("lcm_expand_query").execute({ query: "zzzz_unmatched_recovery_term" }, context(current))
+      expect(parse(query.output).noAnswerReason).toBe("no_relevant_memory")
+
+      const isolated = yield* get("lcm_read").execute({ sourceID }, context(other)).pipe(Effect.exit)
+      expect(Exit.isFailure(isolated)).toBe(true)
+      if (Exit.isFailure(isolated)) expect(Cause.pretty(isolated.cause)).toContain("lcm_not_found")
+      expect(requested).toEqual(new Set(["lcm_grep", "lcm_describe", "lcm_expand_query", "lcm_expand", "lcm_read"]))
     }),
   )
   // kilocode_change end
@@ -163,6 +386,17 @@ describe("tool.registry", () => {
 
       expect(ids).toContain("repo_clone")
       expect(ids).toContain("repo_overview")
+    }),
+  )
+
+  scout.instance("keeps Conversation Memory recovery tools available to scout", () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      const item = yield* agent.get("scout")
+      if (!item) return yield* Effect.die(new Error("scout agent not found"))
+      const ids = ["lcm_grep", "lcm_describe", "lcm_expand_query", "lcm_expand", "lcm_read"]
+
+      expect(Permission.disabled(ids, item.permission)).toEqual(new Set())
     }),
   )
 

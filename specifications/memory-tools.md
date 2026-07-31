@@ -7,6 +7,10 @@ tools. Explicit `false` registers none of them. The trusted tool context supplie
 cannot select a session. Each enabled execution refreshes the finalized transcript, checks the derived lineage, and
 authorizes only current-lineage sources and summaries.
 
+The five tools remain available in Kilo's built-in Ask, Plan, Explore, Scout, and Orchestrator allowlists so every
+user-facing agent that may need older current-session detail can recover it. Ordinary permission precedence still
+applies: explicit global or per-agent denies remove a tool, and hidden system utility agents expose none of them.
+
 ## `lcm_grep`
 
 Search retained current-session source excerpts and summary text. Inputs are `pattern`, optional `mode` (`literal` or
