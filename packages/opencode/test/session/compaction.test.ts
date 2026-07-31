@@ -196,7 +196,7 @@ function createCompactionMarker(sessionID: SessionID) {
 
 function fake(
   input: Parameters<SessionProcessorModule.SessionProcessor.Interface["create"]>[0],
-  result: "continue" | "compact",
+  result: "continue" | "legacy_compact", // kilocode_change
 ) {
   const msg = input.assistantMessage
   return {
@@ -210,7 +210,8 @@ function fake(
   } satisfies SessionProcessorModule.SessionProcessor.Handle
 }
 
-function layer(result: "continue" | "compact") {
+// kilocode_change start - retained legacy compaction processor result
+function layer(result: "continue" | "legacy_compact") {
   return Layer.succeed(
     SessionProcessorModule.SessionProcessor.Service,
     SessionProcessorModule.SessionProcessor.Service.of({
@@ -218,6 +219,7 @@ function layer(result: "continue" | "compact") {
     }),
   )
 }
+// kilocode_change end
 
 function cfg(compaction?: ConfigV1.Info["compaction"]) {
   const base = Schema.decodeUnknownSync(ConfigV1.Info)({}) as ConfigV1.Info
@@ -257,7 +259,7 @@ const compactionEnv = Layer.mergeAll(
 const itCompaction = testEffect(compactionEnv)
 
 type CompactionProcessOptions = {
-  result?: "continue" | "compact"
+  result?: "continue" | "legacy_compact" // kilocode_change
   llm?: Layer.Layer<LLM.Service>
   plugin?: Layer.Layer<Plugin.Service>
   provider?: ReturnType<typeof ProviderTest.fake>
@@ -565,15 +567,16 @@ describe("session.compaction.isOverflow", () => {
     ),
   )
 
+  // kilocode_change start - LCM overflow detection is independent of the retained legacy switch.
   it.live(
-    "returns false when compaction.auto is disabled",
+    "still detects overflow when legacy compaction.auto is disabled",
     provideTmpdirInstance(
       () =>
         Effect.gen(function* () {
           const compact = yield* SessionCompaction.Service
           const model = createModel({ context: 100_000, output: 32_000 })
           const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
-          expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+          expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
         }),
       {
         config: {
@@ -582,6 +585,7 @@ describe("session.compaction.isOverflow", () => {
       },
     ),
   )
+  // kilocode_change end
 })
 
 describe("session.compaction.create", () => {
@@ -918,11 +922,13 @@ describe("session.compaction.process", () => {
 
       expect(result).toBe("stop")
       expect(summary?.info.role).toBe("assistant")
+      // kilocode_change start
       if (summary?.info.role === "assistant") {
         expect(summary.info.finish).toBe("error")
         expect(JSON.stringify(summary.info.error)).toContain("Session too large to compact")
       }
-    }).pipe(withCompaction({ result: "compact" })),
+    }).pipe(withCompaction({ result: "legacy_compact" })),
+    // kilocode_change end
   )
 
   it.instance(

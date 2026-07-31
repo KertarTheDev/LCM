@@ -61,7 +61,7 @@ export namespace KiloCompactionChunks {
   }
 
   export function eligible(input: { result: SessionProcessor.Result; error: MessageV2.Assistant["error"] }) {
-    if (input.result === "compact") return true
+    if (input.result === "legacy_compact" || input.result === "provider_overflow") return true
     return input.result === "stop" && input.error?.name === "ContextOverflowError"
   }
 
@@ -377,7 +377,7 @@ export namespace KiloCompactionChunks {
       const failed = partial.find(fatal) ?? partial.find((item) => item.result !== "continue" || !item.output)
       if (failed) {
         if (yield* fail(input, failed)) return "stop" as const
-        return "compact" as const
+        return "legacy_compact" as const
       }
 
       const final =
@@ -386,7 +386,7 @@ export namespace KiloCompactionChunks {
           : yield* reduce({ ...input, summaries: partial.map((item) => item.output!), depth: 0 })
       if (!final || final.result !== "continue" || !final.output) {
         if (yield* fail(input, final)) return "stop" as const
-        return "compact" as const
+        return "legacy_compact" as const
       }
 
       yield* input.updatePart({

@@ -39,6 +39,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
+import { ConversationMemory } from "../../src/kilocode/session/lcm/service"
 import { SessionRunState } from "../../src/session/run-state"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
@@ -150,6 +151,7 @@ function makeHttp() {
     status,
     MemoryService.layer,
   ).pipe(Layer.provideMerge(infra))
+  const conversationMemory = ConversationMemory.layer.pipe(Layer.provideMerge(deps))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
   const registry = ToolRegistry.layer.pipe(
@@ -188,6 +190,7 @@ function makeHttp() {
       Layer.provideMerge(question),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(SystemPrompt.defaultLayer),
+      Layer.provideMerge(conversationMemory),
       Layer.provideMerge(deps),
     ),
   ).pipe(
@@ -349,7 +352,7 @@ const file = Effect.fn("prompt-safety.file")(function* (
 })
 
 describe("SessionPrompt compaction safety", () => {
-  it.live("compacts estimated outgoing context before the provider request", () =>
+  it.live("uses LCM soft maintenance without creating a legacy compaction turn", () =>
     provideTmpdirServer(
       Effect.fnUntraced(function* ({ llm }) {
         const prompt = yield* SessionPrompt.Service
@@ -363,20 +366,18 @@ describe("SessionPrompt compaction safety", () => {
         yield* assistant(chat.id, old.id, { text: "old answer" })
         const current = yield* user(chat.id, "continue")
         yield* file(chat.id, current.id, { mime: "image/png", name: "current.png", body: "CURRENTIMAGE" })
-        yield* llm.text("compacted history")
         yield* llm.text("final answer")
 
         const result = yield* prompt.loop({ sessionID: chat.id })
 
-        expect(yield* llm.calls).toBe(2)
+        expect(yield* llm.calls).toBe(1)
+        expect(result.parts.some((part) => part.type === "text" && part.text === "final answer")).toBe(true)
         expect(result.parts.some((part) => part.type === "text" && part.text === "final answer")).toBe(true)
         const inputs = yield* llm.inputs
         expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("CURRENTIMAGE")
         const msgs = yield* sessions.messages({ sessionID: chat.id })
-        expect(msgs.some((msg) => msg.info.role === "assistant" && msg.info.summary === true)).toBe(true)
-        const marker = msgs.flatMap((msg) => msg.parts).find((part) => part.type === "compaction")
-        expect(marker?.type).toBe("compaction")
-        if (marker?.type === "compaction") expect(marker.overflow).toBe(false)
+        expect(msgs.some((msg) => msg.info.role === "assistant" && msg.info.summary === true)).toBe(false)
+        expect(msgs.some((msg) => msg.parts.some((part) => part.type === "compaction"))).toBe(false)
       }),
       {
         git: true,
@@ -388,6 +389,94 @@ describe("SessionPrompt compaction safety", () => {
             tail_turns: 0,
             preserve_recent_tokens: 0,
           },
+        }),
+      },
+    ),
+  )
+
+  it.live("retries provider overflow once with the new smaller LCM revision", () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({
+          title: "Verified LCM overflow retry",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+
+        const old = yield* user(chat.id, "binding history ".repeat(6_000))
+        yield* assistant(chat.id, old.id, { text: "old successful answer" })
+        yield* user(chat.id, "continue with the same constraints")
+        yield* llm.error(400, { type: "error", error: { code: "context_length_exceeded" } })
+        yield* llm.text("recovered answer")
+
+        const result = yield* prompt.loop({ sessionID: chat.id })
+        const inputs = yield* llm.inputs
+        const first = JSON.stringify(inputs[0]?.messages)
+        const retry = JSON.stringify(inputs[1]?.messages)
+
+        expect(yield* llm.calls).toBe(2)
+        expect(result.parts.some((part) => part.type === "text" && part.text === "recovered answer")).toBe(true)
+        expect(first).not.toContain("<conversation-memory>")
+        expect(retry).toContain("<conversation-memory>")
+        expect(retry.length).toBeLessThan(first.length)
+        const msgs = yield* sessions.messages({ sessionID: chat.id })
+        expect(msgs.some((msg) => msg.parts.some((part) => part.type === "compaction"))).toBe(false)
+        expect(msgs.some((msg) => msg.info.role === "assistant" && msg.info.summary === true)).toBe(false)
+      }),
+      {
+        git: true,
+        config: (url) => ({
+          ...providerCfg(url),
+          compaction: {
+            auto: true,
+            threshold_percent: 50,
+            preserve_recent_tokens: 0,
+          },
+          conversation_memory: { soft_threshold_percent: 40 },
+        }),
+      },
+    ),
+  )
+
+  it.live("fails closed when the provider rejects the verified smaller retry", () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({
+          title: "Rejected LCM overflow retry",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+
+        const old = yield* user(chat.id, "binding history ".repeat(6_000))
+        yield* assistant(chat.id, old.id, { text: "old successful answer" })
+        yield* user(chat.id, "continue with the same constraints")
+        yield* llm.error(400, { type: "error", error: { code: "context_length_exceeded" } })
+        yield* llm.error(400, { type: "error", error: { code: "context_length_exceeded" } })
+
+        const result = yield* prompt.loop({ sessionID: chat.id })
+        const inputs = yield* llm.inputs
+
+        expect(yield* llm.calls).toBe(2)
+        expect(JSON.stringify(inputs[1]?.messages).length).toBeLessThan(JSON.stringify(inputs[0]?.messages).length)
+        expect(result.info.role).toBe("assistant")
+        if (result.info.role === "assistant") {
+          expect(result.info.error?.name).toBe("ContextOverflowError")
+          if (result.info.error?.name !== "ContextOverflowError") throw new Error("expected context overflow")
+          expect(result.info.error.data.message).toContain("provider rejected the verified smaller request")
+        }
+      }),
+      {
+        git: true,
+        config: (url) => ({
+          ...providerCfg(url),
+          compaction: {
+            auto: true,
+            threshold_percent: 50,
+            preserve_recent_tokens: 0,
+          },
+          conversation_memory: { soft_threshold_percent: 40 },
         }),
       },
     ),

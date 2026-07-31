@@ -69,6 +69,13 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache" // kilocode_change
 import { RipgrepBinary } from "@opencode-ai/core/ripgrep/binary" // kilocode_change
 import { AppProcess } from "@opencode-ai/core/process" // kilocode_change
+import { LcmGrepTool } from "@/kilocode/tool/lcm-grep" // kilocode_change
+import { LcmDescribeTool } from "@/kilocode/tool/lcm-describe" // kilocode_change
+import { LcmExpandTool } from "@/kilocode/tool/lcm-expand" // kilocode_change
+import { LcmExpandQueryTool } from "@/kilocode/tool/lcm-expand-query" // kilocode_change
+import { LcmReadTool } from "@/kilocode/tool/lcm-read" // kilocode_change
+import { ConversationMemory } from "@/kilocode/session/lcm/service" // kilocode_change
+import * as ConversationMemoryFeature from "@/kilocode/session/lcm/feature" // kilocode_change
 
 export function webSearchEnabled(
   providerID: ProviderV2.ID,
@@ -132,6 +139,13 @@ export const layer = Layer.effect(
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
+    // kilocode_change start - current-session Conversation Memory tools use the ordinary registry and permissions
+    const lcmGrep = yield* LcmGrepTool
+    const lcmDescribe = yield* LcmDescribeTool
+    const lcmExpand = yield* LcmExpandTool
+    const lcmExpandQuery = yield* LcmExpandQueryTool
+    const lcmRead = yield* LcmReadTool
+    // kilocode_change end
     // kilocode_change start
     const suggesttool = yield* SuggestTool
     const manager = Option.getOrUndefined(yield* Effect.serviceOption(AgentManager.Service))
@@ -251,6 +265,11 @@ export const layer = Layer.effect(
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
           suggest: Tool.init(suggesttool), // kilocode_change
+          lcmGrep: Tool.init(lcmGrep), // kilocode_change
+          lcmDescribe: Tool.init(lcmDescribe), // kilocode_change
+          lcmExpand: Tool.init(lcmExpand), // kilocode_change
+          lcmExpandQuery: Tool.init(lcmExpandQuery), // kilocode_change
+          lcmRead: Tool.init(lcmRead), // kilocode_change
         })
 
         // kilocode_change start
@@ -284,6 +303,9 @@ export const layer = Layer.effect(
               tool.plan,
               ...(["cli", "vscode"].includes(flags.client) ? [tool.suggest] : []),
               ...KiloToolRegistry.extra(kilo, cfg),
+              ...(ConversationMemoryFeature.enabled(cfg)
+                ? [tool.lcmGrep, tool.lcmDescribe, tool.lcmExpand, tool.lcmExpandQuery, tool.lcmRead]
+                : []), // kilocode_change - explicit opt-out removes all model-facing LCM tools
               ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ],
             kilo,
@@ -437,6 +459,7 @@ export const defaultLayer: Layer.Layer<Service> = Layer.suspend(
         Layer.provide(RuntimeFlags.defaultLayer),
         Layer.provide(SessionStatus.defaultLayer),
         Layer.provide(RepositoryCache.defaultLayer),
+        Layer.provide(ConversationMemory.defaultLayer), // kilocode_change
         Layer.provide(Truncate.defaultLayer), // kilocode_change - split the pipe to stay within Effect's overload limit
       )
       .pipe(Layer.provide(Auth.defaultLayer))
@@ -553,6 +576,7 @@ export const node = LayerNode.suspend(() =>
     SessionStatus.node,
     notebookNode,
     repositoryCacheNode,
+    ConversationMemory.node, // kilocode_change
     KiloSessions.node, // kilocode_change - satisfy the notify_user tool's KiloSessions dependency in the runtime node graph
   ]),
 )

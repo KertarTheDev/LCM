@@ -56,6 +56,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 // kilocode_change start
 import { Notebook } from "@/kilocode/notebook/service"
 import { AgentManager } from "@/kilocode/agent-manager/service"
+import { ConversationMemory } from "@/kilocode/session/lcm/service"
 // kilocode_change end
 import { EventV2Bridge } from "@/event-v2-bridge"
 // kilocode_change start
@@ -92,6 +93,7 @@ const CoreLayer = Layer.mergeAll( // kilocode_change
 // kilocode_change start
 const SessionLayer = Layer.mergeAll(
   AgentManager.defaultLayer,
+  ConversationMemory.defaultLayer, // kilocode_change - expose status/activity/export to the headless Kilo CLI
 // kilocode_change end
   Question.defaultLayer,
   Notebook.defaultLayer, // kilocode_change

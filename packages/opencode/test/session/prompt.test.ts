@@ -40,6 +40,7 @@ import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
+import { ConversationMemory } from "../../src/kilocode/session/lcm/service" // kilocode_change
 import { SessionRunState } from "../../src/session/run-state"
 import { KiloSession } from "../../src/kilocode/session"
 import { KiloSessions } from "../../src/kilo-sessions/kilo-sessions"
@@ -215,6 +216,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Bus.layer,
     MemoryService.layer,
   ).pipe(Layer.provideMerge(infra))
+  const conversationMemory = ConversationMemory.layer.pipe(Layer.provideMerge(deps)) // kilocode_change
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
   const registry = ToolRegistry.layer.pipe(
@@ -260,6 +262,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(SystemPrompt.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provideMerge(conversationMemory), // kilocode_change
     Layer.provideMerge(deps),
     Layer.provide(summary),
   )
@@ -730,7 +733,8 @@ it.instance("loop surfaces content-filter finishes as session errors", () =>
   }),
 )
 
-it.instance("loop stops provider overflow instead of auto-compacting when disabled", () =>
+// kilocode_change start
+it.instance("loop fails closed without resending an identical provider-overflow request", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig((url) => ({
       ...providerCfg(url),
@@ -755,10 +759,14 @@ it.instance("loop stops provider overflow instead of auto-compacting when disabl
     if (result.info.role === "assistant") {
       expect(result.info.error?.name).toBe("ContextOverflowError")
       expect(result.info.finish).toBe("error")
+      if (result.info.error?.name !== "ContextOverflowError") throw new Error("expected context overflow")
+      expect(result.info.error.data.message).toContain("found no smaller active frontier")
     }
+    expect(yield* llm.calls).toBe(1)
     expect(messages.some((message) => message.parts.some((part) => part.type === "compaction"))).toBe(false)
   }),
 )
+// kilocode_change end
 
 noLLMServer.instance.skip(
   "prompt emits v2 prompted and synthetic events (v2 projector disabled)",

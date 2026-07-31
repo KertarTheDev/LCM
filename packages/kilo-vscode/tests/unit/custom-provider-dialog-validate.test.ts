@@ -13,7 +13,15 @@ function base(): FormState {
     baseURL: "https://example.com/v1",
     apiKey: "",
     models: [
-      { id: "model-1", name: "Model One", reasoning: false, supportsImages: false, modalities: {}, variants: [] },
+      {
+        id: "model-1",
+        name: "Model One",
+        reasoning: false,
+        supportsImages: false,
+        modalities: {},
+        limit: { context: "131072", input: "", output: "32768" },
+        variants: [],
+      },
     ],
     headers: [],
     saving: false,
@@ -169,8 +177,24 @@ describe("validateCustomProvider – variant name validation", () => {
   it("treats model IDs differing only in case as duplicates", () => {
     const form = base()
     form.models = [
-      { id: "qwen2.5-coder:14b", name: "Qwen", reasoning: false, variants: [] },
-      { id: "QWEN2.5-CODER:14B", name: "Qwen Upper", reasoning: false, variants: [] },
+      {
+        id: "qwen2.5-coder:14b",
+        name: "Qwen",
+        reasoning: false,
+        supportsImages: false,
+        modalities: {},
+        limit: { context: "131072", input: "", output: "32768" },
+        variants: [],
+      },
+      {
+        id: "QWEN2.5-CODER:14B",
+        name: "Qwen Upper",
+        reasoning: false,
+        supportsImages: false,
+        modalities: {},
+        limit: { context: "131072", input: "", output: "32768" },
+        variants: [],
+      },
     ]
     const out = validateCustomProvider(args(form))
     expect(out.result).toBeUndefined()
@@ -263,5 +287,31 @@ describe("validateCustomProvider – variant name validation", () => {
     expect(out.result).toBeDefined()
     const saved = out.result!.config.models["model-1"] as Record<string, unknown>
     expect(saved.modalities).toEqual({ input: ["text", "audio", "video", "pdf"], output: ["text", "audio"] })
+  })
+
+  it("serializes explicit model capacity", () => {
+    const out = validateCustomProvider(args(base()))
+    const saved = out.result!.config.models["model-1"] as Record<string, unknown>
+    expect(saved.limit).toEqual({ context: 131072, output: 32768 })
+  })
+
+  it("requires a usable context and output limit", () => {
+    const form = base()
+    form.models[0].limit = { context: "", input: "", output: "" }
+    const out = validateCustomProvider(args(form))
+    expect(out.result).toBeUndefined()
+    expect(out.errors.models[0].limit).toEqual({
+      context: "provider.custom.error.required",
+      output: "provider.custom.error.required",
+    })
+  })
+
+  it("rejects limits that leave no usable input", () => {
+    const form = base()
+    form.models[0].limit = { context: "32768", input: "32000", output: "32768" }
+    const out = validateCustomProvider(args(form))
+    expect(out.result).toBeUndefined()
+    expect(out.errors.models[0].limit?.output).toBe("provider.custom.error.limit.outputBelowContext")
+    expect(out.errors.models[0].limit?.input).toBe("provider.custom.error.limit.inputAboveOutput")
   })
 })

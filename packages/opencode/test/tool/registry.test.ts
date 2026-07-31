@@ -29,6 +29,7 @@ const configLayer = TestConfig.layer({
 type RegistryLayerOptions = {
   flags?: Partial<RuntimeFlags.Info>
   plugin?: Layer.Layer<Plugin.Service>
+  config?: Layer.Layer<Config.Service> // kilocode_change
 }
 
 // Fake Plugin.Service that returns a single plugin whose `tool` map contains
@@ -59,7 +60,7 @@ const root = LayerNode.group([ToolRegistry.node, Agent.node])
 const registryLayer = (opts: RegistryLayerOptions = {}) =>
   LayerNode.buildLayer(root, {
     replacements: [
-      LayerNode.replace(Config.node, configLayer),
+      LayerNode.replace(Config.node, opts.config ?? configLayer), // kilocode_change
       LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer(opts.flags ?? {})),
       ...(opts.plugin ? [LayerNode.replace(Plugin.node, opts.plugin)] : []),
     ],
@@ -68,6 +69,15 @@ const registryLayer = (opts: RegistryLayerOptions = {}) =>
 const it = testEffect(registryLayer())
 const scout = testEffect(registryLayer({ flags: { experimentalScout: true } })) // kilocode_change
 const withBrokenPlugin = testEffect(registryLayer({ plugin: brokenPluginLayer }))
+// kilocode_change start
+const withoutConversationMemory = testEffect(
+  registryLayer({
+    config: TestConfig.layer({
+      get: () => Effect.succeed({ experimental: { conversation_memory: false } }),
+    }),
+  }),
+)
+// kilocode_change end
 // kilocode_change start
 const sandboxed = testEffect(registryLayer({ flags: { experimentalLspTool: true } }))
 // kilocode_change end
@@ -87,6 +97,24 @@ function sandboxProfile(): Profile {
 // kilocode_change end
 
 describe("tool.registry", () => {
+  // kilocode_change start
+  it.instance("exposes the five Conversation Memory tools by default", () =>
+    Effect.gen(function* () {
+      const ids = yield* (yield* ToolRegistry.Service).ids()
+      for (const id of ["lcm_grep", "lcm_describe", "lcm_expand_query", "lcm_expand", "lcm_read"])
+        expect(ids).toContain(id)
+    }),
+  )
+
+  withoutConversationMemory.instance("hides every Conversation Memory tool after explicit opt-out", () =>
+    Effect.gen(function* () {
+      const ids = yield* (yield* ToolRegistry.Service).ids()
+      for (const id of ["lcm_grep", "lcm_describe", "lcm_expand_query", "lcm_expand", "lcm_read"])
+      expect(ids).not.toContain(id)
+    }),
+  )
+  // kilocode_change end
+
   // kilocode_change start
   sandboxed.instance("preserves built-in network classification through production tool definition processing", () =>
     Effect.gen(function* () {

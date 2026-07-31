@@ -49,6 +49,8 @@ import type {
   McpStatusEntry,
   MessageLoadMode,
   ToolPart,
+  LcmActivity,
+  LcmStatus,
 } from "../types/messages"
 import { removeSessionPermissions, upsertPermission } from "./permission-queue"
 import {
@@ -71,6 +73,7 @@ import { resolveMessagePrefs } from "./session-preferences"
 import { errorIDs } from "./session-errors"
 import { PartStash } from "./part-stash"
 import { mergeParts, sameParts } from "./session-parts"
+import { routeLcmMessage } from "./lcm-state"
 import { state as todoState } from "./todo-revert"
 import { getVariant, sessionVariantKeys, transferVariants, variantKey } from "./session-variant-store"
 import { KILO_AUTO, KILO_PROVIDER_ID, parseModelString } from "../../../src/shared/provider-model"
@@ -208,6 +211,9 @@ interface SessionContextValue {
   // Cost and context usage for the current session
   costBreakdown: Accessor<Array<{ label: string; cost: number }>>
   contextUsage: Accessor<ContextUsage | undefined>
+  lcmActivity: Accessor<LcmActivity[]>
+  lcmStatus: Accessor<LcmStatus | undefined>
+  lcmStatusError: Accessor<string | undefined>
   modelUsage: Accessor<SessionModelUsage | undefined>
 
   // Skills loaded from the CLI backend
@@ -319,6 +325,21 @@ export const SessionProvider: ParentComponent = (props) => {
   const [currentSessionID, setCurrentSessionID] = createSignal<string | undefined>()
   const [draftSessionID, setDraftSessionID] = createSignal<string | undefined>()
   const [userClearedSession, setUserClearedSession] = createSignal(false)
+  const [lcmActivity, setLcmActivity] = createSignal<LcmActivity[]>([])
+  const [lcmStatus, setLcmStatus] = createSignal<LcmStatus | undefined>()
+  const [lcmStatusError, setLcmStatusError] = createSignal<string | undefined>()
+  const conversationMemoryEnabled = () => config().experimental?.conversation_memory !== false
+
+  createEffect(() => {
+    const id = currentSessionID()
+    const connected = server.isConnected()
+    const enabled = conversationMemoryEnabled()
+    setLcmStatus(undefined)
+    setLcmStatusError(undefined)
+    setLcmActivity([])
+    if (!enabled || !id || id.startsWith("cloud:") || !connected) return
+    vscode.postMessage({ type: "requestLcmStatus", sessionID: id })
+  })
 
   // Per-session status map — keyed by sessionID
   const [statusMap, setStatusMap] = createStore<Record<string, SessionStatusInfo>>({})
@@ -1073,6 +1094,17 @@ export const SessionProvider: ParentComponent = (props) => {
   function handleExtensionMessage(message: ExtensionMessage): void {
     // Route suggestion messages (extracted to stay within complexity limit)
     routeSuggestionMessage(message)
+    routeLcmMessage({
+      message,
+      enabled: conversationMemoryEnabled(),
+      activeSessionID: currentSessionID(),
+      requestStatus: (sessionID) => {
+        if (conversationMemoryEnabled()) vscode.postMessage({ type: "requestLcmStatus", sessionID })
+      },
+      setStatus: setLcmStatus,
+      setError: setLcmStatusError,
+      setActivity: setLcmActivity,
+    })
     if (handleModelUsageMessage(message)) return
     refreshModelUsageForMessage(message)
     if (handleStreamMessage(message)) return
@@ -2951,6 +2983,9 @@ export const SessionProvider: ParentComponent = (props) => {
     clearModelOverride,
     costBreakdown,
     contextUsage,
+    lcmActivity,
+    lcmStatus,
+    lcmStatusError,
     modelUsage,
     agents,
     allAgents,

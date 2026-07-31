@@ -16,6 +16,7 @@ import type {
   StartMigrationMessage,
 } from "./migration"
 import type { MemoryShowMessage, MemoryOperationMessage, RequestMemoryMessage } from "./memory"
+import type { LcmRequest } from "./lcm"
 
 // ============================================
 // Messages FROM webview TO extension
@@ -1283,6 +1284,7 @@ export type WebviewMessage =
   | DeleteSessionRequest
   | RenameSessionRequest
   | ExportSessionTranscriptRequest
+  | LcmRequest
   | RequestAutocompleteSettingsMessage
   | RequestChatCompletionMessage
   | SpeechToTextPrewarmMessage

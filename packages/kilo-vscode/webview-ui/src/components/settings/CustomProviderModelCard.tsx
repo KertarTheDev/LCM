@@ -21,6 +21,12 @@ export type Modalities = {
   output?: Modality[]
 }
 
+export type ModelLimitEntry = {
+  context: string
+  input: string
+  output: string
+}
+
 export type VariantEntry = {
   name: string
   enableThinking: EnableThinkingValue
@@ -37,6 +43,7 @@ export type ModelEntry = {
   reasoning: boolean
   supportsImages: boolean
   modalities: Modalities
+  limit: ModelLimitEntry
   variants: VariantEntry[]
 }
 
@@ -298,11 +305,19 @@ function VariantRow(props: VariantRowProps) {
 type ModelCardProps = {
   m: ModelEntry
   i: () => number
-  errors: { id?: string; name?: string; variants?: Array<{ name?: string }> }
+  errors: {
+    id?: string
+    name?: string
+    limit?: { context?: string; input?: string; output?: string }
+    variants?: Array<{ name?: string }>
+  }
   t: Translator
   canRemove: boolean
   onChangeId: (val: string) => void
   onChangeName: (val: string) => void
+  onChangeContextLimit: (val: string) => void
+  onChangeInputLimit: (val: string) => void
+  onChangeOutputLimit: (val: string) => void
   onChangeReasoning: (val: boolean) => void
   onChangeSupportsImages: (val: boolean) => void
   onRemove: () => void
@@ -360,6 +375,45 @@ export function ModelCard(props: ModelCardProps) {
           aria-label={props.t("provider.custom.models.remove")}
           style={{ "margin-bottom": "4px" }}
         />
+      </div>
+
+      <div style={{ display: "flex", gap: "8px", "align-items": "flex-start", "flex-wrap": "wrap" }}>
+        <div style={{ flex: "1 1 140px" }}>
+          <TextField
+            type="number"
+            label={props.t("provider.custom.models.limit.context.label")}
+            placeholder={props.t("provider.custom.models.limit.context.placeholder")}
+            description={props.t("provider.custom.models.limit.context.description")}
+            value={props.m.limit.context}
+            onChange={props.onChangeContextLimit}
+            validationState={props.errors.limit?.context ? "invalid" : undefined}
+            error={props.errors.limit?.context}
+          />
+        </div>
+        <div style={{ flex: "1 1 140px" }}>
+          <TextField
+            type="number"
+            label={props.t("provider.custom.models.limit.output.label")}
+            placeholder={props.t("provider.custom.models.limit.output.placeholder")}
+            description={props.t("provider.custom.models.limit.output.description")}
+            value={props.m.limit.output}
+            onChange={props.onChangeOutputLimit}
+            validationState={props.errors.limit?.output ? "invalid" : undefined}
+            error={props.errors.limit?.output}
+          />
+        </div>
+        <div style={{ flex: "1 1 140px" }}>
+          <TextField
+            type="number"
+            label={props.t("provider.custom.models.limit.input.label")}
+            placeholder={props.t("provider.custom.models.limit.input.placeholder")}
+            description={props.t("provider.custom.models.limit.input.description")}
+            value={props.m.limit.input}
+            onChange={props.onChangeInputLimit}
+            validationState={props.errors.limit?.input ? "invalid" : undefined}
+            error={props.errors.limit?.input}
+          />
+        </div>
       </div>
 
       {/* Reasoning toggle */}

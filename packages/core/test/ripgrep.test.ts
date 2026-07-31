@@ -61,4 +61,30 @@ describe("Ripgrep", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+
+  it.live("returns ordinary long-line matches and omits extreme records without failing the search", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(path.join(tmp.path, "long.txt"), `needle ${"a".repeat(70 * 1024)}\n`),
+          )
+          yield* Effect.promise(() =>
+            fs.writeFile(path.join(tmp.path, "extreme.txt"), `needle ${"b".repeat(1_100_000)}\n`),
+          )
+          const result = yield* (yield* Ripgrep.Service).grep({
+            cwd: tmp.path,
+            pattern: "needle",
+            limit: 10,
+          })
+          expect(result.items.map((item) => item.entry.path)).toContain(RelativePath.make("long.txt"))
+          expect(result.items.find((item) => item.entry.path === "long.txt")?.text.length).toBe(2_003)
+          expect(result.items.map((item) => item.entry.path)).not.toContain(RelativePath.make("extreme.txt"))
+          expect(result.partial).toBe(true)
+          expect(result.oversizedRecords).toBe(1)
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })

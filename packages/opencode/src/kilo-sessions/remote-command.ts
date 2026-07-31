@@ -6,6 +6,7 @@ import type { SessionPrompt } from "@/session/prompt"
 import type { Info as SessionInfo } from "@/session/session"
 import { MessageID, type SessionID } from "@/session/schema"
 import { RemoteExit } from "@/kilo-sessions/remote-exit"
+import { Effect } from "effect"
 import z from "zod"
 
 export namespace RemoteCommand {
@@ -191,6 +192,7 @@ export namespace RemoteCommand {
         auto: boolean
       }) => Promise<void>
     }
+    conversationMemory?: { enabled: () => Promise<boolean> }
     prompt: { loop: (sessionID: SessionID) => Promise<void> }
   }
 
@@ -238,6 +240,7 @@ export namespace RemoteCommand {
               ? { providerID: user.info.model.providerID, modelID: user.info.model.modelID }
               : undefined) ??
             (await services.provider.default())
+          const lcmEnabled = (await services.conversationMemory?.enabled()) ?? true
           await services.compaction.create({
             sessionID: input.sessionID,
             agent,
@@ -247,7 +250,7 @@ export namespace RemoteCommand {
             },
             auto: false,
           })
-          await services.prompt.loop(input.sessionID)
+          if (!lcmEnabled) await services.prompt.loop(input.sessionID)
           return
         }
         await services.command({
@@ -321,11 +324,68 @@ export namespace RemoteCommand {
       },
       compaction: {
         create: async (input) => {
-          const [{ AppRuntime }, { SessionCompaction }] = await Promise.all([
+          const [
+            { AppRuntime },
+            { ConversationMemory },
+            ConversationMemoryFeature,
+            { Config },
+            { Provider },
+            { RuntimeFlags },
+            { SessionCompaction },
+            { usable },
+          ] = await Promise.all([
             import("@/effect/app-runtime"),
+            import("@/kilocode/session/lcm/service"),
+            import("@/kilocode/session/lcm/feature"),
+            import("@/config/config"),
+            import("@/provider/provider"),
+            import("@/effect/runtime-flags"),
             import("@/session/compaction"),
+            import("@/session/overflow"),
           ])
-          await AppRuntime.runPromise(SessionCompaction.Service.use((service) => service.create(input)))
+          await AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const cfg = yield* config.get()
+              if (!ConversationMemoryFeature.enabled(cfg)) {
+                const compaction = yield* SessionCompaction.Service
+                yield* compaction.create(input)
+                return
+              }
+              const service = yield* ConversationMemory.Service
+              const provider = yield* Provider.Service
+              const flags = yield* RuntimeFlags.Service
+              const model = yield* provider.getModel(input.model.providerID, input.model.modelID)
+              const usableInputTokens = usable({ cfg, model, outputTokenMax: flags.outputTokenMax })
+              const thresholdRatio =
+                typeof cfg.conversation_memory?.soft_threshold_percent === "number"
+                  ? cfg.conversation_memory.soft_threshold_percent / 100
+                  : 0.4
+              yield* service.maintain({
+                sessionID: input.sessionID,
+                model,
+                usableInputTokens,
+                thresholdRatio,
+                recentTailTokens: ConversationMemory.recentTailTokens({
+                  usableInputTokens,
+                  configured: cfg.compaction?.preserve_recent_tokens,
+                }),
+                reason: "manual",
+              })
+            }),
+          )
+        },
+      },
+      conversationMemory: {
+        enabled: async () => {
+          const [{ AppRuntime }, ConversationMemoryFeature, { Config }] = await Promise.all([
+            import("@/effect/app-runtime"),
+            import("@/kilocode/session/lcm/feature"),
+            import("@/config/config"),
+          ])
+          return AppRuntime.runPromise(
+            Config.Service.use((service) => service.get().pipe(Effect.map(ConversationMemoryFeature.enabled))),
+          )
         },
       },
       prompt: {
