@@ -28,8 +28,10 @@ import { ConversationMemory } from "@/kilocode/session/lcm/service"
 import { nodeKey, sha256, summaryID } from "@/kilocode/session/lcm/ids"
 import type { SummaryChild } from "@/kilocode/session/lcm/types"
 import { Database } from "@opencode-ai/core/database/database"
+import { ProjectV2 } from "@opencode-ai/core/project" // kilocode_change
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema" // kilocode_change
 import * as Truncate from "@/tool/truncate"
 import { LcmGrepTool } from "@/kilocode/tool/lcm-grep"
 import { LcmDescribeTool } from "@/kilocode/tool/lcm-describe"
@@ -133,7 +135,7 @@ describe("tool.registry", () => {
     Effect.gen(function* () {
       const ids = yield* (yield* ToolRegistry.Service).ids()
       for (const id of ["lcm_grep", "lcm_describe", "lcm_expand_query", "lcm_expand", "lcm_read"])
-      expect(ids).not.toContain(id)
+        expect(ids).not.toContain(id)
     }),
   )
 
@@ -148,8 +150,8 @@ describe("tool.registry", () => {
       yield* database.db
         .insert(ProjectTable)
         .values({
-          id: instance.project.id,
-          worktree: instance.worktree,
+          id: ProjectV2.ID.make(instance.project.id),
+          worktree: AbsolutePath.make(instance.worktree),
           sandboxes: [],
           time_created: 1,
           time_updated: 1,
@@ -200,7 +202,7 @@ describe("tool.registry", () => {
           message_id: userID,
           time_created: 1,
           time_updated: 1,
-          data: { type: "text", text: "The release decision is to keep the verified product branch." },
+          data: { type: "text", text: "The release decision is to keep the verified product branch." } as never,
         })
         .run()
         .pipe(Effect.orDie)
@@ -236,7 +238,7 @@ describe("tool.registry", () => {
           message_id: assistantID,
           time_created: 2,
           time_updated: 2,
-          data: { type: "text", text: "Confirmed the release decision." },
+          data: { type: "text", text: "Confirmed the release decision." } as never,
         })
         .run()
         .pipe(Effect.orDie)
@@ -290,13 +292,16 @@ describe("tool.registry", () => {
 
       const ask = yield* agents.get("ask")
       if (!ask) return yield* Effect.die(new Error("ask agent not found"))
-      const infos = yield* Effect.all([LcmGrepTool, LcmDescribeTool, LcmExpandQueryTool, LcmExpandTool, LcmReadTool])
-      const tools = yield* Effect.all(infos.map((info) => Tool.init(info)))
-      const get = (id: string) => {
-        const tool = tools.find((item) => item.id === id)
-        if (!tool) throw new Error(`missing ${id}`)
-        return tool
-      }
+      const grepInfo = yield* LcmGrepTool
+      const describeInfo = yield* LcmDescribeTool
+      const expandQueryInfo = yield* LcmExpandQueryTool
+      const expandInfo = yield* LcmExpandTool
+      const readInfo = yield* LcmReadTool
+      const grepTool = yield* Tool.init(grepInfo)
+      const describeTool = yield* Tool.init(describeInfo)
+      const expandQueryTool = yield* Tool.init(expandQueryInfo)
+      const expandTool = yield* Tool.init(expandInfo)
+      const readTool = yield* Tool.init(readInfo)
       const requested = new Set<string>()
       const context = (sessionID: SessionID) => ({
         sessionID,
@@ -317,20 +322,20 @@ describe("tool.registry", () => {
       const parse = (output: string) => JSON.parse(output.slice(output.indexOf("{"))) as Record<string, unknown>
       const sourceID = sources[0]!.id
 
-      const grep = yield* get("lcm_grep").execute({ pattern: "release" }, context(current))
+      const grep = yield* grepTool.execute({ pattern: "release" }, context(current))
       expect(grep.output).toContain(sourceID)
-      const describeSource = yield* get("lcm_describe").execute({ id: sourceID }, context(current))
+      const describeSource = yield* describeTool.execute({ id: sourceID }, context(current))
       expect(parse(describeSource.output).kind).toBe("source")
-      const describeSummary = yield* get("lcm_describe").execute({ id: activeSummaryID }, context(current))
+      const describeSummary = yield* describeTool.execute({ id: activeSummaryID }, context(current))
       expect(parse(describeSummary.output).kind).toBe("summary")
-      const expand = yield* get("lcm_expand").execute({ summaryID: activeSummaryID }, context(current))
+      const expand = yield* expandTool.execute({ summaryID: activeSummaryID }, context(current))
       expect(expand.output).toContain(sourceID)
-      const read = yield* get("lcm_read").execute({ sourceID }, context(current))
+      const read = yield* readTool.execute({ sourceID }, context(current))
       expect(read.output).toContain("verified product branch")
-      const query = yield* get("lcm_expand_query").execute({ query: "zzzz_unmatched_recovery_term" }, context(current))
+      const query = yield* expandQueryTool.execute({ query: "zzzz_unmatched_recovery_term" }, context(current))
       expect(parse(query.output).noAnswerReason).toBe("no_relevant_memory")
 
-      const isolated = yield* get("lcm_read").execute({ sourceID }, context(other)).pipe(Effect.exit)
+      const isolated = yield* readTool.execute({ sourceID }, context(other)).pipe(Effect.exit)
       expect(Exit.isFailure(isolated)).toBe(true)
       if (Exit.isFailure(isolated)) expect(Cause.pretty(isolated.cause)).toContain("lcm_not_found")
       expect(requested).toEqual(new Set(["lcm_grep", "lcm_describe", "lcm_expand_query", "lcm_expand", "lcm_read"]))
