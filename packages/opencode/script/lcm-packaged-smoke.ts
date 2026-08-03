@@ -116,7 +116,8 @@ try {
 
   if (!binary) throw new Error("No packaged CLI was resolved")
   const version = (await run(binary, ["--version"], temporary)).stdout.trim()
-  const help = (await run(binary, ["lcm", "--help"], temporary)).stdout
+  const helpResult = await run(binary, ["lcm", "--help"], temporary)
+  const help = helpResult.stdout + helpResult.stderr
   for (const command of ["status", "timeline", "export"]) {
     if (!help.includes(command)) throw new Error(`Packaged CLI help is missing the LCM ${command} command`)
   }
