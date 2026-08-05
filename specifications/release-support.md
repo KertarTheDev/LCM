@@ -6,43 +6,50 @@ The product branch remains a direct, narrow augmentation of upstream tag `v7.4.2
 (`62baedd258fbeb738929767258349f76d7f8a48d`). Correct the product branch with ordinary reviewable commits; do not
 rewrite its published history or replay old LCM branches.
 
-Until its v7.4.20 successor is verified, the current public prerelease remains `v7.4.17-lcm.2`. It was published on
-2026-08-03 from candidate
-`f44368ca82defa4aeeb2dd822e95b96061132a0a`, containing verified product
-`d934b8332a81dacd9617a6a0be8dad362b35f96e`. Exact-SHA workflow run
-[`30789485003`](https://github.com/KertarTheDev/LCM/actions/runs/30789485003) completed successfully, including focused
-v7.4.17 adaptation and LCM tool-visibility tests, canonical affected-package typechecks, stable contract generation,
-all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory runtime smoke. Release
-[`364019885`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.17-lcm.2) is a non-draft prerelease targeting the
-candidate SHA. Its exact GitHub-reported asset manifest is:
+The current public prerelease is `v7.4.20-lcm.1`. It was published on 2026-08-05 from candidate
+`682beec3b0b823e3cfee509be358734dc1691845`, containing verified product
+`ce062e57f1748bf76070e0cd072792ed3a532ab6`. Exact-SHA workflow run
+[`31002184691`](https://github.com/KertarTheDev/LCM/actions/runs/31002184691) completed successfully, including exact
+six-file overlay verification, focused v7.4.20 adaptation tests and lint, canonical affected-package typechecks,
+stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory runtime
+smoke. Release [`365487957`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.20-lcm.1) is a non-draft prerelease
+whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
-|`kilo-darwin-arm64.zip`|49,783,069|`295c79bc0f36382ca9c6125de9dd31017a89a7d3b8e093b1d837ff5475edafe3`|
-|`kilo-darwin-x64-baseline.zip`|52,115,596|`aab7252119181d4383363d279935b321b90a3163c86d9b1f8dc8e5065291f829`|
-|`kilo-darwin-x64.zip`|52,115,596|`f8a6ca5481b84adf0e021f5574f500ad442b0089a96b568938ccaa666930c9f5`|
-|`kilo-linux-arm64-musl.tar.gz`|62,177,087|`e9de836eead9681b7b37476ce210707e3e3690892fab1fb0d42f7df9abc3a7da`|
-|`kilo-linux-arm64.tar.gz`|63,582,381|`70bfa72958c615da4c21b8be29744324d71bb665b70407293324924249746d3a`|
-|`kilo-linux-x64-baseline-musl.tar.gz`|62,601,190|`a34b087c9f69151d1e2941da9a05d415893296b2eb2cb4897e33172fc54ed9ab`|
-|`kilo-linux-x64-baseline.tar.gz`|63,830,180|`4bc59371c54dfde65457ba4f05fe61819d38bcb31bb4346c9169782408f8f678`|
-|`kilo-linux-x64-musl.tar.gz`|62,601,413|`645c76a90105992a8b1f09074008387c74880c9dce98fbe461c828fd13f6d8ad`|
-|`kilo-linux-x64.tar.gz`|63,830,520|`b54156523abbd327e136348f498f94ce420fe35460a902273090fc616a580dd2`|
-|`kilo-vscode-alpine-arm64.vsix`|102,439,710|`e6a98b4f2a793dcc3cb4959179eff7d170c0728a5db5352e17de3736f89e4730`|
-|`kilo-vscode-alpine-x64.vsix`|109,595,173|`d148e56652363b1d88fd2c71415e672df5f71270f829d29f70cb8a6b024dca0f`|
-|`kilo-vscode-darwin-arm64.vsix`|89,604,898|`9f7bd65b3c7cec9043cd949e958412dad7c14780e47cbbc2cb1fc55638924ad6`|
-|`kilo-vscode-darwin-x64.vsix`|97,753,302|`292ae1cbcf53c34df0746feb06a8b273867a5726dbad7dfbe58e82888cc012ee`|
-|`kilo-vscode-linux-arm64.vsix`|103,866,254|`0804bef2e9e629c4dd011e3c2d0ed6288434b4f0f8fa1a3f0fd147a76ca23885`|
-|`kilo-vscode-linux-x64.vsix`|110,806,065|`7cdf842ba9fe7b1a691f5c8c147685984849d3788ebbb2c8f4ae2416adc37e10`|
-|`kilo-vscode-win32-arm64.vsix`|86,594,437|`571e0ea99f07655fa066d23ac1e7d0d3d375275878e0249696827e0a18cb76e9`|
-|`kilo-vscode-win32-x64.vsix`|110,617,651|`2ebdcefb75952d94322b017dd297e7d02316c093505758b53c392b616ad7ef9b`|
-|`kilo-windows-arm64.zip`|62,489,543|`8fa319efc56fd4082008f1e5e58c21b01e7e5a02163eb148a48f2e0e807760f2`|
-|`kilo-windows-x64-baseline.zip`|64,139,665|`4c0f38f29deed1603ca3597f94bde8afbe76d0531854f099e2c7428dc2f45adf`|
-|`kilo-windows-x64.zip`|64,139,665|`37d54d8746da12570d1de78c69a5898aedc3e10ca9faf1048ddc88ce69d935b7`|
+|`kilo-darwin-arm64.zip`|49,957,773|`582c7b7e826b373a3f610bce209465b7a258b83e37222e4d133db575fad53fe8`|
+|`kilo-darwin-x64-baseline.zip`|52,292,215|`0df0fdd318fa2f8632e6a1de3b112e6f7ed809319c5c3db5badae6bc53a43ca1`|
+|`kilo-darwin-x64.zip`|52,292,215|`7faef8cfd239e0568e50fcd8fed0177b203ae4b5f75e149b98820f43b5cbed8a`|
+|`kilo-linux-arm64-musl.tar.gz`|62,339,920|`1b9f300943df10a9c9320e78be4362689ed09b047d37f32f1c805e103d424f2d`|
+|`kilo-linux-arm64.tar.gz`|63,749,800|`9ccc578bbc37ff6bf55cb24a10d4746f36fa878c6ba89c486edb5dd436cfea7d`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|62,763,670|`9473f84064683615cf1c695e2feef980ac665cc7b1a3923a7671c9c75093879c`|
+|`kilo-linux-x64-baseline.tar.gz`|64,004,508|`edb51fbea016f2876541948155274e5dd068efd7b3b05c19718f4528769302c2`|
+|`kilo-linux-x64-musl.tar.gz`|62,763,346|`9807cf4011060b3b94f9fed6d7f58f5715e68eb1512186735bd7620305553f63`|
+|`kilo-linux-x64.tar.gz`|63,999,321|`c6e2cecc9edbaa734cb59eaaad0641f169a079ca3fbe67ec8b16421e2ecdaa26`|
+|`kilo-vscode-alpine-arm64.vsix`|103,006,506|`a76cb227ccb20872a4e42abada13b2a0b8493d7f218e335b4d7c627d53a19110`|
+|`kilo-vscode-alpine-x64.vsix`|110,169,888|`7427d7b7503b5bd61bc51283eb5f8610b341d6b994f8c04c32b4155a3e50bac1`|
+|`kilo-vscode-darwin-arm64.vsix`|90,188,649|`a1afbbb237b93774aa7a742074357e69d7b7e82fafce6448782470ea9617e60c`|
+|`kilo-vscode-darwin-x64.vsix`|98,333,535|`641cdb1a2f6a613ee55474cb431853e605c216026768f8a15e4fe28bda47e1e0`|
+|`kilo-vscode-linux-arm64.vsix`|104,438,848|`732975378df80353f81ba0227311ad38ddd622c1200b0624054ddead1b211078`|
+|`kilo-vscode-linux-x64.vsix`|111,384,174|`1302d53dcb81a0035560c8da2c1100868d4773adc4ea73aac6bedff4797a2754`|
+|`kilo-vscode-win32-arm64.vsix`|87,171,422|`9e4d95f95720caa8e621b2554d01a32759ac84e0749785708f975951ba80b22a`|
+|`kilo-vscode-win32-x64.vsix`|111,194,300|`1d81957d2fe7d638ee36f7c9fcbe03b12406a368721ca19e1aeb423182cf74ad`|
+|`kilo-windows-arm64.zip`|62,646,592|`381fa125d57e147424dd44cdecf1451b61c23642cc94e0796b248c059f8d72da`|
+|`kilo-windows-x64-baseline.zip`|64,305,683|`25784af26d325797929a13027d0418bc3c1e7061890bf398596e37a5447c8a59`|
+|`kilo-windows-x64.zip`|64,305,683|`b793a5ace98e39368179495c18949940aa099f3c305a917e8a377657713317d0`|
 
-The obsolete `v7.4.17-lcm.1` release ID `362945030` and its matching tag were deleted on 2026-08-03 only after the
-replacement's exact workflow, non-draft prerelease, tag, candidate SHA, 20-asset manifest, and packaged runtime were
-verified. Release [`360907867`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.16-lcm.3) remains published as
-retained history. The incompatible v7.4.16 `.1` and faulty `.2` releases and tags remain absent.
+Release [`364019885`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.17-lcm.2) and release
+[`360907867`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.16-lcm.3) remain published as retained history. The
+obsolete `v7.4.17-lcm.1` release ID `362945030` and its matching tag remain absent, as do the incompatible v7.4.16
+`.1` and faulty `.2` releases and tags.
+
+Two v7.4.20 audit runs failed safely before draft creation and created no release or tag. Run
+[`31000761855`](https://github.com/KertarTheDev/LCM/actions/runs/31000761855) exposed the missing Conversation Memory
+layer in the v7.4.20 `ensure-title-mark` integration fixture during canonical typecheck. Run
+[`31001269592`](https://github.com/KertarTheDev/LCM/actions/runs/31001269592) exposed upstream lint-budget overruns in
+the adapted VS Code early-message router and session context during VSIX packaging. Both defects were corrected in the
+single product port commit before publication, their Actions audit history is retained, and unrelated upstream
+version/build/publish jobs remained skipped.
 
 Two replacement audit runs failed safely before draft creation and created no release or tag. Run
 [`30787770063`](https://github.com/KertarTheDev/LCM/actions/runs/30787770063) exposed invalid branded-ID and
