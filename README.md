@@ -21,6 +21,24 @@
 
 ---
 
+### KiloCode-LCM prerelease
+
+This branch adds Conversation Memory to upstream Kilo Code `v7.4.20`. It incrementally replaces consumed older history
+with a recoverable summary tree while current work, an exact recent tail, and ordinary Kilo prompt features remain
+intact. When omitted detail is needed, the model can search, inspect, ask one bounded cited question, expand, and read
+it through five current-session tools.
+
+Kilo's SQLite transcript remains the raw source of truth. LCM keeps a separate private derived SQLite cache that can be
+rebuilt. Raw-history maintenance starts at a configurable 40% of usable input by default. Failures below the hard limit
+leave the request unchanged; unresolved hard overflow fails closed without creating a legacy compaction turn. Existing
+manual compact controls request one forced LCM maintenance cycle.
+
+This is a prerelease. Download a platform-specific CLI archive or VSIX from the
+[KiloCode-LCM releases](https://github.com/KertarTheDev/LCM/releases). Marketplace and npm packages remain the upstream
+Kilo releases. The separately versioned JetBrains plugin is not built or published by this LCM prerelease. See the
+[current specifications](specifications/README.md) and
+[fork release process](RELEASING.md#lcm-fork-prereleases) for details.
+
 Kilo Code is an AI coding agent that meets you everywhere you work: [VS Code](https://kilo.ai/landing/vs-code), [JetBrains](https://kilo.ai/features/jetbrains-native), and the [CLI](https://kilo.ai/cli). It's open source with open pricing. You pick from 500+ models, switch between them mid-task, and pay the model provider's rate with zero markup. No API keys required to start.
 
 ### Installation
@@ -104,7 +122,7 @@ Spin up your always-on AI agent at [app.kilo.ai/claw](https://app.kilo.ai/claw).
 <details>
 <summary>Install the CLI from GitHub Releases (binaries)</summary>
 
-Download the latest binary from the [Releases page](https://github.com/Kilo-Org/kilocode/releases).
+Download the latest LCM binary from the [fork releases page](https://github.com/KertarTheDev/LCM/releases).
 
 | Platform | Asset |
 |---|---|
