@@ -6,12 +6,14 @@ import type { SuggestionContext } from "./handlers/suggestion"
 import type { KiloClient } from "@kilocode/sdk/v2/client"
 import { buildChatSettingsMessage } from "./chat-settings"
 import { buildThroughputSettingMessage } from "./throughput-settings"
+import { routeConversationMemoryMessage } from "./conversation-memory"
 
 type Ctx = {
   question: SuggestionContext
   client: KiloClient | null
   connection: KiloConnectionService
   dir: string
+  resolveDir: (sessionID?: string) => string
   post: (msg: unknown) => void
   browserSettings: () => void
   exportTranscript: (sessionID: string) => Promise<void>
@@ -20,28 +22,33 @@ type Ctx = {
   speechToTextModels: () => Promise<void>
 }
 
-export async function routeEarlyMessage(
-  message: { type: string; id?: unknown; text?: unknown },
-  ctx: Ctx,
-): Promise<boolean> {
-  if (message.type === "copyToClipboard") {
-    if (typeof message.id !== "string") return true
-    if (typeof message.text !== "string") {
-      ctx.post({ type: "clipboardWriteResult", id: message.id, ok: false, error: "Invalid clipboard text" })
-      return true
-    }
-    await ctx.copy(message.text).then(
-      () => ctx.post({ type: "clipboardWriteResult", id: message.id, ok: true }),
-      (err) =>
-        ctx.post({
-          type: "clipboardWriteResult",
-          id: message.id,
-          ok: false,
-          error: err instanceof Error ? err.message : String(err),
-        }),
-    )
+type EarlyMessage = { type: string; id?: unknown; text?: unknown }
+
+async function routeClipboardMessage(message: EarlyMessage, ctx: Pick<Ctx, "copy" | "post">): Promise<boolean> {
+  if (message.type !== "copyToClipboard") return false
+  if (typeof message.id !== "string") return true
+  if (typeof message.text !== "string") {
+    ctx.post({ type: "clipboardWriteResult", id: message.id, ok: false, error: "Invalid clipboard text" })
     return true
   }
+  await ctx.copy(message.text).then(
+    () => ctx.post({ type: "clipboardWriteResult", id: message.id, ok: true }),
+    (err) =>
+      ctx.post({
+        type: "clipboardWriteResult",
+        id: message.id,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+  )
+  return true
+}
+
+export async function routeEarlyMessage(
+  message: EarlyMessage,
+  ctx: Ctx,
+): Promise<boolean> {
+  if (await routeClipboardMessage(message, ctx)) return true
   await routeSuggestionWebviewMessage(ctx.question, message)
   if (await ModelState.handleMessage(message.type, message, ctx.client, ctx.post)) return true
   if (message.type === "exportSessionTranscript") {
@@ -49,6 +56,7 @@ export async function routeEarlyMessage(
     if (typeof input.sessionID === "string") await ctx.exportTranscript(input.sessionID)
     return true
   }
+  if (await routeConversationMemoryMessage(message, ctx)) return true
   if (message.type === "sidebar.openSessions") {
     const input = message as { sessionIDs?: unknown }
     const ids = Array.isArray(input.sessionIDs)

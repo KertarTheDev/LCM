@@ -24,6 +24,7 @@ import { EventV2Bridge } from "../../../src/event-v2-bridge"
 import { Format } from "../../../src/format"
 import { Git } from "../../../src/git"
 import { Image } from "../../../src/image/image"
+import { ConversationMemory } from "../../../src/kilocode/session/lcm/service"
 import { clearAll as clearRenameMarks, consumeAutoTitle, markAutoTitle } from "../../../src/kilo-sessions/rename-adoptions"
 import { KiloSessions } from "../../../src/kilo-sessions/kilo-sessions"
 import { LSP } from "../../../src/lsp/lsp"
@@ -192,6 +193,7 @@ function makePrompt() {
     Bus.layer,
     MemoryService.layer,
   ).pipe(Layer.provideMerge(infra))
+  const conversationMemory = ConversationMemory.layer.pipe(Layer.provideMerge(deps))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
   const registry = ToolRegistry.layer.pipe(
@@ -234,6 +236,7 @@ function makePrompt() {
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(SystemPrompt.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provideMerge(conversationMemory),
     Layer.provideMerge(deps),
     Layer.provide(summary),
   )

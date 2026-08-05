@@ -87,6 +87,9 @@ import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache" // kilocode_change
+import { ConversationMemory } from "@/kilocode/session/lcm/service" // kilocode_change
+import * as ConversationMemoryFeature from "@/kilocode/session/lcm/feature" // kilocode_change
+import { usable as usableContext } from "./overflow" // kilocode_change
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -166,6 +169,7 @@ export const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const cache = Option.getOrUndefined(yield* Effect.serviceOption(RepositoryCache.Service)) // kilocode_change
+    const conversationMemory = yield* ConversationMemory.Service // kilocode_change
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
@@ -1505,7 +1509,14 @@ export const layer = Layer.effect(
       const envCache: KiloSessionPrompt.EnvCache = {}
       const memoryCache = KiloSessionPrompt.memoryCache() // kilocode_change
       closeReasons.delete(sessionID) // kilocode_change
-      let compactionAttempts = 0 // kilocode_change - cap compaction attempts per turn to avoid infinite loops
+      let compactionAttempts = 0 // kilocode_change - bound the restored legacy path when experimental LCM is disabled
+      let overflowRetry:
+        | {
+            requestTokens: number
+            revisionID: string
+            lineageDigest: string
+          }
+        | undefined // kilocode_change - verify the one provider-overflow retry uses a newer, smaller frontier
       const ctx = yield* InstanceState.context
       let structured: unknown
       let step = 0
@@ -1514,6 +1525,9 @@ export const layer = Layer.effect(
       while (true) {
         yield* status.set(sessionID, { type: "busy" })
         yield* Effect.logInfo("loop", { "session.id": sessionID, step })
+        const iterationConfig = yield* config.get() // kilocode_change - snapshot the experimental LCM mode for this step
+        const lcmEnabled = ConversationMemoryFeature.enabled(iterationConfig) // kilocode_change
+        if (!lcmEnabled) overflowRetry = undefined // kilocode_change - never carry an LCM retry into legacy mode
 
         // kilocode_change start - provide the upstream Effect database to Kilo's retained prompt loop
         let msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
@@ -1628,12 +1642,14 @@ export const layer = Layer.effect(
           continue
         }
 
+        // kilocode_change start - explicit LCM opt-out restores the upstream
+        // reported-usage automatic compaction checkpoint.
         if (
+          !lcmEnabled &&
           lastFinished &&
           lastFinished.summary !== true &&
           (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
         ) {
-          // kilocode_change start
           const guard = KiloSessionPrompt.guardCompactionAttempt({
             sessionID,
             attempts: compactionAttempts,
@@ -1641,17 +1657,15 @@ export const layer = Layer.effect(
             message: lastFinished,
           })
           if (guard.exhausted) {
-            // lastFinished is a prior turn's assistant — record exhaustion on the
-            // message whose size tipped us past the compaction cap.
             yield* sessions.updateMessage(lastFinished)
             yield* events.publish(Session.Event.Error, { sessionID, error: guard.error })
             break
           }
           compactionAttempts++
-          // kilocode_change end
           yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
           continue
         }
+        // kilocode_change end
 
         const agent = yield* agents.get(lastUser.agent)
         if (!agent) {
@@ -1699,12 +1713,15 @@ export const layer = Layer.effect(
             assistantMessage: msg,
             sessionID,
             model,
+            overflowPolicy: lcmEnabled ? "lcm" : "legacy", // kilocode_change - explicit opt-out restores upstream thresholds
             telemetry, // kilocode_change
             snapshotInitialization: input.snapshotInitialization, // kilocode_change
           })
           .pipe(Effect.onInterrupt(() => finalize))
 
         const outcome: "break" | "continue" = yield* Effect.gen(function* () {
+          const completeMemory = (success: boolean) =>
+            lcmEnabled ? conversationMemory.completeRequest({ sessionID, requestID: msg.id, success }) : Effect.void // kilocode_change - disabled mode performs no LCM lifecycle work
           const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
           const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
           const promptOps = yield* ops()
@@ -1786,6 +1803,125 @@ export const layer = Layer.effect(
           const system = [...env, ...mem, ...instructions, ...(skills ? [skills] : [])] // kilocode_change
           const format = lastUser.format ?? { type: "text" as const }
           if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+          // kilocode_change start - project only the eligible historical prefix after upstream finalized the request
+          const finalStepMessages: typeof modelMsgs = isLastStep
+            ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }]
+            : []
+          const requestMessages = [...modelMsgs, ...finalStepMessages]
+          const cfg = iterationConfig
+          const measure = (messages: typeof requestMessages) =>
+            KiloSessionOverflow.measure({
+              messages: [{ role: "system" as const, content: system.join("\n") }, ...messages],
+              tools,
+            }).normalized
+          const usableInputTokens = usableContext({ cfg, model, outputTokenMax: flags.outputTokenMax })
+          const thresholdRatio =
+            typeof cfg.conversation_memory?.soft_threshold_percent === "number"
+              ? cfg.conversation_memory.soft_threshold_percent / 100
+              : 0.4
+          const recentTailTokens = ConversationMemory.recentTailTokens({
+            usableInputTokens,
+            configured: cfg.compaction?.preserve_recent_tokens,
+          })
+          const rawTokens = measure(requestMessages)
+          const fixedInputTokens = measure([])
+          let projectedMessages = requestMessages
+          if (lcmEnabled) {
+            const transcript = yield* MessageV2.stream(sessionID).pipe(
+              Effect.provideService(Database.Service, database),
+            )
+            const indexed = yield* conversationMemory.index({
+              sessionID,
+              transcript,
+              recentTailTokens,
+            })
+            const rawLaneTokens = indexed
+              ? indexed.eligibleRawTokens + indexed.protectedRawTokens
+              : Math.max(0, rawTokens - fixedInputTokens)
+            let protectedMessages = requestMessages
+            if (indexed && !indexed.firstProtectedMessageID) {
+              protectedMessages = finalStepMessages
+            } else if (indexed?.firstProtectedMessageID) {
+              const protectedIndex = msgs.findIndex((message) => message.info.id === indexed.firstProtectedMessageID)
+              if (protectedIndex >= 0) {
+                const converted = Option.getOrUndefined(
+                  yield* MessageV2.toModelMessagesEffect(msgs.slice(protectedIndex), model).pipe(
+                    Effect.provideService(Database.Service, database),
+                    Effect.option,
+                  ),
+                )
+                if (converted) {
+                  const expected = [...converted, ...finalStepMessages]
+                  const start = requestMessages.length - expected.length
+                  if (start >= 0 && JSON.stringify(requestMessages.slice(start)) === JSON.stringify(expected))
+                    protectedMessages = requestMessages.slice(start)
+                }
+              }
+            }
+            yield* conversationMemory.capture({
+              sessionID,
+              requestID: msg.id,
+              system,
+              messages: requestMessages,
+              tools,
+              rawTokens,
+              rawLaneTokens,
+              fixedInputTokens,
+              recentTailTokens,
+              usableInputTokens,
+              thresholdRatio,
+            })
+            const projection = yield* conversationMemory.project({
+              sessionID,
+              transcript,
+              messages: requestMessages,
+              system,
+              tools,
+              usableInputTokens,
+              thresholdRatio,
+              recentTailTokens,
+              protectedMessages,
+              requestID: msg.id,
+              continuationID: msg.id,
+              reason: overflowRetry ? "hard" : "soft",
+              measure,
+              model,
+            })
+            projectedMessages = projection.messages
+            if (usableInputTokens > 0 && rawTokens >= usableInputTokens && projection.type !== "projected") {
+              // No provider step started. Hard maintenance is fail-closed: legacy
+              // compaction is retained in the binary but is not a normal fallback.
+              yield* sessions.removeMessage({ sessionID, messageID: handle.message.id })
+              const error = new MessageV2.ContextOverflowError({
+                message:
+                  "lcm_hard_limit_unresolved: Conversation Memory could not reduce the eligible history enough for this provider request.",
+              }).toObject()
+              yield* events.publish(Session.Event.Error, { sessionID, error })
+              closeReasons.set(sessionID, "error")
+              return "break" as const
+            }
+            if (overflowRetry) {
+              const retryTokens = measure(projectedMessages)
+              const verified =
+                projection.type === "projected" &&
+                projection.revision.id === overflowRetry.revisionID &&
+                projection.revision.lineageDigest === overflowRetry.lineageDigest &&
+                retryTokens < overflowRetry.requestTokens
+              if (!verified) {
+                yield* completeMemory(false)
+                handle.message.error = new MessageV2.ContextOverflowError({
+                  message:
+                    "lcm_hard_limit_unresolved: Conversation Memory could not produce a verified smaller request after the provider rejected the original request.",
+                }).toObject()
+                handle.message.finish = "error"
+                yield* sessions.updateMessage(handle.message)
+                yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+                closeReasons.set(sessionID, "error")
+                return "break" as const
+              }
+            }
+          }
+          // kilocode_change end
           const result = yield* handle.process({
             // kilocode_change start - keep Ask/Plan tool filtering hardened against session allows
             user: lastUser,
@@ -1795,7 +1931,7 @@ export const layer = Layer.effect(
             sessionID,
             parentSessionID: session.parentID,
             system,
-            messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : [])],
+            messages: projectedMessages, // kilocode_change - unchanged upstream input or a verified LCM projection
             tools,
             model,
             toolChoice: format.type === "json_schema" ? "required" : undefined,
@@ -1817,6 +1953,8 @@ export const layer = Layer.effect(
           // kilocode_change end
 
           if (structured !== undefined) {
+            // kilocode_change - structured success is still a consumed provider step
+            yield* completeMemory(!handle.message.error && result === "continue")
             handle.message.structured = structured
             handle.message.finish = handle.message.finish ?? "stop"
             yield* sessions.updateMessage(handle.message)
@@ -1826,6 +1964,8 @@ export const layer = Layer.effect(
           const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
           if (finished && !handle.message.error) {
             if (handle.message.finish === "content-filter") {
+              // kilocode_change - rejected responses do not advance consumption
+              yield* completeMemory(false)
               handle.message.error = new SessionV1.ContentFilterError({
                 message: "The response was blocked by the provider's content filter",
               }).toObject()
@@ -1835,6 +1975,8 @@ export const layer = Layer.effect(
               return "break" as const
             }
             if (format.type === "json_schema") {
+              // kilocode_change - invalid structured responses do not advance consumption
+              yield* completeMemory(false)
               handle.message.error = new MessageV2.StructuredOutputError({
                 message: "Model did not produce structured output",
                 retries: 0,
@@ -1844,6 +1986,7 @@ export const layer = Layer.effect(
             }
             // kilocode_change start
             if (handle.message.finish === "error") {
+              yield* completeMemory(false)
               KiloSessionProcessor.providerFinishError(handle.message)
               yield* sessions.updateMessage(handle.message)
               closeReasons.set(sessionID, "error")
@@ -1854,12 +1997,24 @@ export const layer = Layer.effect(
 
           // kilocode_change start
           if (result === "stop") {
+            yield* completeMemory(false)
             if (handle.message.error) closeReasons.set(sessionID, "error")
             return "break" as const
           }
           // kilocode_change end
-          if (result === "compact") {
-            // kilocode_change start
+          if (result === "legacy_compact") {
+            yield* completeMemory(false)
+            if (lcmEnabled) {
+              handle.message.error = new MessageV2.ContextOverflowError({
+                message:
+                  "lcm_hard_limit_unresolved: Normal Conversation Memory processing unexpectedly requested legacy compaction.",
+              }).toObject()
+              handle.message.finish = "error"
+              yield* sessions.updateMessage(handle.message)
+              yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+              closeReasons.set(sessionID, "error")
+              return "break" as const
+            }
             const guard = KiloSessionPrompt.guardCompactionAttempt({
               sessionID,
               attempts: compactionAttempts,
@@ -1872,16 +2027,74 @@ export const layer = Layer.effect(
               return "break" as const
             }
             compactionAttempts++
-            // kilocode_change end
             yield* compaction.create({
               sessionID,
               agent: lastUser.agent,
               model: lastUser.model,
               auto: true,
-              // kilocode_change - preflight compaction replays the pending turn without treating media as provider overflow
-              overflow: !handle.message.finish && handle.compactError?.() !== undefined, // kilocode_change
+              overflow: !handle.message.finish && handle.compactError?.() !== undefined,
             })
           }
+          if (result === "provider_overflow") {
+            yield* completeMemory(false)
+            // kilocode_change start - one stricter LCM retry after a provider
+            // overflow, then fail closed without creating a legacy summary turn.
+            if (overflowRetry) {
+              handle.message.error = new MessageV2.ContextOverflowError({
+                message:
+                  "lcm_hard_limit_unresolved: The provider rejected the verified smaller request after stricter Conversation Memory maintenance.",
+              }).toObject()
+              handle.message.finish = "error"
+              yield* sessions.updateMessage(handle.message)
+              yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+              closeReasons.set(sessionID, "error")
+              return "break" as const
+            }
+            const requestTokens = measure(projectedMessages)
+            const maintenance = yield* conversationMemory.maintain({
+              sessionID,
+              model,
+              usableInputTokens,
+              thresholdRatio,
+              recentTailTokens,
+              reason: "hard",
+              strict: true,
+            })
+            if (
+              maintenance.outcome === "capacity_unknown" ||
+              maintenance.outcome === "unresolved" ||
+              !maintenance.changed ||
+              maintenance.afterTokens >= maintenance.beforeTokens ||
+              !maintenance.revisionID ||
+              !maintenance.lineageDigest
+            ) {
+              handle.message.error = new MessageV2.ContextOverflowError({
+                message:
+                  maintenance.outcome === "capacity_unknown"
+                    ? "lcm_capacity_unknown: Conversation Memory cannot recover this request until the selected model has context and output token limits."
+                    : maintenance.outcome === "unresolved"
+                      ? "lcm_hard_limit_unresolved: Conversation Memory could not complete stricter maintenance after the provider rejected the request."
+                      : "lcm_hard_limit_unresolved: Conversation Memory found no smaller active frontier after the provider rejected the request.",
+              }).toObject()
+              handle.message.finish = "error"
+              yield* sessions.updateMessage(handle.message)
+              yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+              closeReasons.set(sessionID, "error")
+              return "break" as const
+            }
+            overflowRetry = {
+              requestTokens,
+              revisionID: maintenance.revisionID,
+              lineageDigest: maintenance.lineageDigest,
+            }
+            yield* sessions.removeMessage({ sessionID, messageID: handle.message.id })
+            // kilocode_change end
+            return "continue" as const
+          }
+          overflowRetry = undefined
+          // kilocode_change - only a successful terminal provider step proves
+          // that the pre-request source frontier was actually consumed.
+          yield* completeMemory(true)
           // kilocode_change start — break out so a newer queued prompt can take over
           // instead of starting another LLM step for the now-superseded turn. The
           // current handle.process has fully drained (tokens + inline tool calls) by
@@ -1899,11 +2112,10 @@ export const layer = Layer.effect(
           // a finishReason, the loop-exit check at the top of the next iteration
           // sees a falsy `finish` (loaded from storage via filterCompactedEffect)
           // and keeps stepping forever. Default to "unknown" and persist so the
-          // regular break condition fires when there are no tool calls. Skipped
-          // for the compact path so guardCompactionAttempt can still fill in
-          // "error" on exhaustion. Tool-call turns already get "tool-calls" from
-          // the AI SDK; even without it, !hasToolCalls keeps the break gated.
-          if (result !== "compact" && !handle.message.finish) {
+          // regular break condition fires when there are no tool calls. The
+          // legacy compact path keeps an unfinished assistant so the
+          // generated control turn can be processed on the next iteration.
+          if (result !== "legacy_compact" && !handle.message.finish) {
             handle.message.finish = "unknown"
             yield* sessions.updateMessage(handle.message)
           }
@@ -2208,6 +2420,7 @@ export const defaultLayer: Layer.Layer<Service> = Layer.suspend(() =>
       Layer.provide(ToolRegistry.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
       Layer.provide(RepositoryCache.defaultLayer), // kilocode_change
+      Layer.provide(ConversationMemory.defaultLayer), // kilocode_change
     )
     .pipe(
       Layer.provide(Provider.defaultLayer),
@@ -2398,6 +2611,7 @@ export const node = LayerNode.make(layer, [
   Database.node,
   Question.node, // kilocode_change
   repositoryCacheNode, // kilocode_change
+  ConversationMemory.node, // kilocode_change
 ])
 
 export * as SessionPrompt from "./prompt"

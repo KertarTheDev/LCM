@@ -440,7 +440,7 @@ export const layer = Layer.effect(
       })
       // kilocode_change start
       const result = KiloCompactionChunks.needed({ cfg, model, tokens, outputTokenMax: flags.outputTokenMax })
-        ? "compact"
+        ? "legacy_compact"
         : yield* KiloCompactionPayloadRecovery.process({
             processor,
             user: userMessage,
@@ -474,7 +474,7 @@ export const layer = Layer.effect(
             updatePart: session.updatePart,
           }).pipe(Effect.provideService(Database.Service, database)) // kilocode_change
         : result
-      if (fallback === "compact") {
+      if (fallback === "legacy_compact" || fallback === "provider_overflow") {
         // kilocode_change end
         processor.message.error = new SessionV1.ContextOverflowError({
           message: replay

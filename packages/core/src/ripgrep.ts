@@ -19,7 +19,7 @@ import { RipgrepBinary } from "./ripgrep/binary"
  */
 
 const ERROR_BYTES = 8 * 1024
-const MAX_RECORD_BYTES = 64 * 1024
+const MAX_RECORD_BYTES = 1024 * 1024 // kilocode_change - tolerate ordinary long generated/minified lines
 const MAX_SUBMATCHES = 100
 
 const RawMatch = Schema.Struct({
@@ -92,6 +92,7 @@ export interface SearchResult<A> {
   readonly items: readonly A[]
   readonly truncated: boolean
   readonly partial: boolean
+  readonly oversizedRecords?: number
 }
 // kilocode_change end
 
@@ -246,8 +247,9 @@ export const layer = Layer.effect(
           Effect.map((result) => result.items),
           Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
         ),
-      grep: (input) =>
-        run<RawMatchData>({
+      grep: (input) => {
+        let oversizedRecords = 0
+        return run<RawMatchData>({
           ...input,
           args: [
             "--no-config",
@@ -262,7 +264,10 @@ export const layer = Layer.effect(
           ],
           parse: (line) =>
             (Buffer.byteLength(line, "utf8") > MAX_RECORD_BYTES
-              ? Effect.fail(failure(`Ripgrep JSON record exceeded ${MAX_RECORD_BYTES} bytes`))
+              ? Effect.sync(() => {
+                  oversizedRecords++
+                  return undefined
+                })
               : Effect.try({
                   try: () => JSON.parse(line) as unknown,
                   catch: (cause) => failure("Invalid ripgrep JSON output", cause),
@@ -285,6 +290,8 @@ export const layer = Layer.effect(
           // kilocode_change start - retain spawn metadata after mapping matches
           Effect.map((result) => ({
             ...result,
+            partial: result.partial || oversizedRecords > 0,
+            ...(oversizedRecords > 0 ? { oversizedRecords } : {}),
             items: result.items.map((match) => {
               const relative = match.path.text
                 .replace(/^(?:\.[\\/])+/u, "")
@@ -309,7 +316,8 @@ export const layer = Layer.effect(
             }),
           })),
           // kilocode_change end
-        ),
+        )
+      },
     })
   }),
 )

@@ -26,7 +26,7 @@ export function isOverflow(input: {
   model: Provider.Model
   outputTokenMax?: number
 }) {
-  if (input.cfg.compaction?.auto === false) return false
+  if (input.cfg.compaction?.auto === false) return false // kilocode_change - explicit LCM opt-out restores upstream auto-compaction policy
   if (input.model.limit.context === 0) return false
 
   const count = KiloSessionOverflow.count(input.tokens) // kilocode_change
