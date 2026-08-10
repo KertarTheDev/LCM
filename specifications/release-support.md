@@ -68,3 +68,25 @@ Release evidence includes clean second generation, focused semantic-adaptation s
 compile/snapshot and install identity, extracted CLI/VSIX smoke, exact source/artifact hashes, and final clean status.
 JetBrains source and its separately versioned, signed Marketplace release pipeline remain upstream-owned and are
 excluded from the LCM prerelease test and asset profiles.
+
+## Public prerelease onboarding
+
+The public default branch is the friendly starting point for prerelease users, not an operator log. Its README must
+lead with a plain-language explanation, a prominent link to the original
+[LCM paper](https://arxiv.org/abs/2605.04050), and complete setup help for both VSIX and CLI users. It must make clear
+that Marketplace, Open VSX, npm, Homebrew, AUR, cloud, and JetBrains packages are upstream Kilo rather than LCM builds.
+
+The same marked LCM onboarding block must appear in every existing `translations/README.*.md` language. The English
+block is the semantic source. Translate the prose naturally and preserve commands, config keys, asset filenames, URLs,
+warnings, and the paper link exactly. Translation-only overlay changes are allowed only inside that block (plus the
+language navigation when necessary); unrelated upstream README translation churn remains excluded.
+
+Before each prerelease, check every onboarding block against the exact release asset profile, the VS Code engine
+requirement, current Conversation Memory settings/defaults, custom-model capacity fields, Ollama guidance, supported
+systems, verification, troubleshooting, upgrade, and rollback. Use short sentences, direct second-person language, and
+explain unavoidable terms such as x64, ARM64, baseline, glibc, and musl where they first appear.
+
+Generated release notes must use the same friendly summary, link the matching onboarding anchor and original paper,
+and retain the exact tag and candidate SHA. After a release is verified and its evidence commit lands on the product
+branch, rebuild the public default branch on that documentation head without dispatching another workflow so the
+published checksum manifest and onboarding stay current together.
