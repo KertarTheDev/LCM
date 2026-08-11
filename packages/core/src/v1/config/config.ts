@@ -282,11 +282,23 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  // kilocode_change start - Conversation Memory owns active-history maintenance independently of legacy compaction
+  conversation_memory: Schema.optional(
+    Schema.Struct({
+      soft_threshold_percent: Schema.optional(Schema.NullOr(Percent)).annotate({
+        description: "Raw conversation-lane pressure that starts Conversation Memory maintenance (default: 40%).",
+      }),
+    }),
+  ),
+  // kilocode_change end
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
       batch_tool: Schema.optional(Schema.Boolean).annotate({ description: "Enable the batch tool" }),
       // kilocode_change start
+      conversation_memory: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable experimental Conversation Memory context management (default: true)",
+      }),
       codebase_search: Schema.optional(Schema.Boolean).annotate({ description: "Enable AI-powered codebase search" }),
       image_generation: Schema.optional(Schema.Boolean).annotate({ description: "Enable AI image generation" }),
       image_generation_model: Schema.optional(Schema.String).annotate({

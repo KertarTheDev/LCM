@@ -81,7 +81,7 @@ describe("Kilo post-step compaction safety", () => {
     expect(isOverflow({ cfg: conf, model: mdl, tokens: tokens(168_000) })).toBe(true)
   })
 
-  test("still respects disabled auto-compaction", () => {
+  test("restores upstream disabled auto-compaction for the explicit LCM opt-out", () => {
     const conf = cfg({ auto: false, threshold_percent: 75 })
     const mdl = model({ context: 200_000, output: 32_000 })
 

@@ -72,6 +72,8 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache" // kilocode_change
 import { RipgrepBinary } from "@opencode-ai/core/ripgrep/binary" // kilocode_change
 import { AppProcess } from "@opencode-ai/core/process" // kilocode_change
+import * as LcmToolRegistry from "@/kilocode/tool/lcm-registry" // kilocode_change
+import { ConversationMemory } from "@/kilocode/session/lcm/service" // kilocode_change
 
 export function webSearchEnabled(
   providerID: ProviderV2.ID,
@@ -140,6 +142,7 @@ const layer = Layer.effect(
     const manager = Option.getOrUndefined(yield* Effect.serviceOption(AgentManager.Service))
     const notebook = Option.getOrUndefined(yield* Effect.serviceOption(Notebook.Service))
     const kiloToolInfos = yield* KiloToolRegistry.infos(manager, notebook).pipe(Effect.provide(MemoryService.layer))
+    const lcmToolInfos = yield* LcmToolRegistry.infos
     // kilocode_change end
 
     const state = yield* InstanceState.make<State>(
@@ -262,6 +265,7 @@ const layer = Layer.effect(
           truncate,
           indexing: indexing ?? false,
         })
+        const lcm = yield* LcmToolRegistry.build(lcmToolInfos)
         // kilocode_change end
 
         return {
@@ -287,6 +291,7 @@ const layer = Layer.effect(
               tool.plan,
               ...(["cli", "vscode"].includes(flags.client) ? [tool.suggest] : []),
               ...KiloToolRegistry.extra(kilo, cfg),
+              ...LcmToolRegistry.extra(lcm, cfg),
               ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ],
             kilo,
@@ -512,6 +517,7 @@ export const node = LayerNode.suspend(() =>
       Notebook.node,
       RepositoryCache.node,
       KiloSessions.node,
+      ConversationMemory.node,
     ],
   }),
 )
