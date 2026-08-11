@@ -4,6 +4,9 @@ import { Provider } from "@/provider/provider"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { SessionCompaction } from "@/session/compaction"
 import { usable } from "@/session/overflow"
+import { SessionID } from "@/session/schema"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as ConversationMemoryFeature from "./feature"
 import { ConversationMemory } from "./service"
 
@@ -11,9 +14,9 @@ export type Route = "upstream" | "external"
 
 /** One routing point for every manual compact/summarize affordance. */
 export const run = Effect.fn("ConversationMemoryManual.run")(function* (input: {
-  sessionID: string
+  sessionID: SessionID
   agent: string
-  model: { providerID: string; modelID: string }
+  model: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
   auto: boolean
 }) {
   const config = yield* Config.Service

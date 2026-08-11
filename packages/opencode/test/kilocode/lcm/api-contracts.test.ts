@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { EventV2 } from "@opencode-ai/core/event"
 import { Schema } from "effect"
+import { EventManifest } from "@/event-manifest"
 import * as Contract from "@/kilocode/session/lcm/contracts"
+import { Event as ConversationMemoryEvent } from "@/kilocode/session/lcm/events"
 import { ConversationMemoryPaths } from "@/kilocode/server/httpapi/groups/conversation-memory"
 import { DISABLED_MESSAGE } from "@/kilocode/session/lcm/feature"
-import "@/kilocode/session/lcm/events"
 import path from "node:path"
 
 describe("LCM public contracts", () => {
@@ -81,8 +81,8 @@ describe("LCM public contracts", () => {
     ).toThrow()
   })
 
-  test("registers status and activity on the ordinary EventV2 stream", () => {
-    expect(EventV2.registry.has("session.lcm.status")).toBe(true)
-    expect(EventV2.registry.has("session.lcm.activity")).toBe(true)
+  test("registers status and activity on the application event manifest", () => {
+    expect(EventManifest.Latest.get("session.lcm.status")).toBe(ConversationMemoryEvent.Status)
+    expect(EventManifest.Latest.get("session.lcm.activity")).toBe(ConversationMemoryEvent.Activity)
   })
 })
