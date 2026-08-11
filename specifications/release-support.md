@@ -6,46 +6,50 @@ The product branch remains a direct, narrow augmentation of upstream tag `v7.4.2
 (`a5aaef74a81edaa9b5dac9b6b459d7700b973b62`). Correct the product branch with ordinary reviewable commits; do not
 rewrite its published history or replay old LCM branches.
 
-The reserved replacement identity is `v7.4.21-lcm.1`. It remains unpublished until the clean product SHA, release
-overlay, exact-SHA workflow, artifacts, and packaged runtime have been authorized and verified. Until then,
-`v7.4.20-lcm.1` remains the current public prerelease.
-
-The current public prerelease is `v7.4.20-lcm.1`. It was published on 2026-08-05 from candidate
-`682beec3b0b823e3cfee509be358734dc1691845`, containing verified product
-`ce062e57f1748bf76070e0cd072792ed3a532ab6`. Exact-SHA workflow run
-[`31002184691`](https://github.com/KertarTheDev/LCM/actions/runs/31002184691) completed successfully, including exact
-six-file overlay verification, focused v7.4.20 adaptation tests and lint, canonical affected-package typechecks,
-stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory runtime
-smoke. Release [`365487957`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.20-lcm.1) is a non-draft prerelease
-whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
+The current public prerelease is `v7.4.21-lcm.1`. It was published on 2026-08-12 from candidate
+`d7f5c2c59babb027fcbabdd08d9e34567344a484`, containing verified product
+`400cf2c116f482b5f9a84d338926bc4145f3fac0`. Exact-SHA workflow run
+[`31547434768`](https://github.com/KertarTheDev/LCM/actions/runs/31547434768) completed successfully, including exact
+27-path overlay verification, focused v7.4.21 adaptation tests, canonical affected-package typechecks, stable contract
+generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory runtime smoke. Release
+[`368913653`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.21-lcm.1) is a non-draft prerelease whose tag
+resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
-|`kilo-darwin-arm64.zip`|49,957,773|`582c7b7e826b373a3f610bce209465b7a258b83e37222e4d133db575fad53fe8`|
-|`kilo-darwin-x64-baseline.zip`|52,292,215|`0df0fdd318fa2f8632e6a1de3b112e6f7ed809319c5c3db5badae6bc53a43ca1`|
-|`kilo-darwin-x64.zip`|52,292,215|`7faef8cfd239e0568e50fcd8fed0177b203ae4b5f75e149b98820f43b5cbed8a`|
-|`kilo-linux-arm64-musl.tar.gz`|62,339,920|`1b9f300943df10a9c9320e78be4362689ed09b047d37f32f1c805e103d424f2d`|
-|`kilo-linux-arm64.tar.gz`|63,749,800|`9ccc578bbc37ff6bf55cb24a10d4746f36fa878c6ba89c486edb5dd436cfea7d`|
-|`kilo-linux-x64-baseline-musl.tar.gz`|62,763,670|`9473f84064683615cf1c695e2feef980ac665cc7b1a3923a7671c9c75093879c`|
-|`kilo-linux-x64-baseline.tar.gz`|64,004,508|`edb51fbea016f2876541948155274e5dd068efd7b3b05c19718f4528769302c2`|
-|`kilo-linux-x64-musl.tar.gz`|62,763,346|`9807cf4011060b3b94f9fed6d7f58f5715e68eb1512186735bd7620305553f63`|
-|`kilo-linux-x64.tar.gz`|63,999,321|`c6e2cecc9edbaa734cb59eaaad0641f169a079ca3fbe67ec8b16421e2ecdaa26`|
-|`kilo-vscode-alpine-arm64.vsix`|103,006,506|`a76cb227ccb20872a4e42abada13b2a0b8493d7f218e335b4d7c627d53a19110`|
-|`kilo-vscode-alpine-x64.vsix`|110,169,888|`7427d7b7503b5bd61bc51283eb5f8610b341d6b994f8c04c32b4155a3e50bac1`|
-|`kilo-vscode-darwin-arm64.vsix`|90,188,649|`a1afbbb237b93774aa7a742074357e69d7b7e82fafce6448782470ea9617e60c`|
-|`kilo-vscode-darwin-x64.vsix`|98,333,535|`641cdb1a2f6a613ee55474cb431853e605c216026768f8a15e4fe28bda47e1e0`|
-|`kilo-vscode-linux-arm64.vsix`|104,438,848|`732975378df80353f81ba0227311ad38ddd622c1200b0624054ddead1b211078`|
-|`kilo-vscode-linux-x64.vsix`|111,384,174|`1302d53dcb81a0035560c8da2c1100868d4773adc4ea73aac6bedff4797a2754`|
-|`kilo-vscode-win32-arm64.vsix`|87,171,422|`9e4d95f95720caa8e621b2554d01a32759ac84e0749785708f975951ba80b22a`|
-|`kilo-vscode-win32-x64.vsix`|111,194,300|`1d81957d2fe7d638ee36f7c9fcbe03b12406a368721ca19e1aeb423182cf74ad`|
-|`kilo-windows-arm64.zip`|62,646,592|`381fa125d57e147424dd44cdecf1451b61c23642cc94e0796b248c059f8d72da`|
-|`kilo-windows-x64-baseline.zip`|64,305,683|`25784af26d325797929a13027d0418bc3c1e7061890bf398596e37a5447c8a59`|
-|`kilo-windows-x64.zip`|64,305,683|`b793a5ace98e39368179495c18949940aa099f3c305a917e8a377657713317d0`|
+|`kilo-darwin-arm64.zip`|50,115,670|`61d66be2ae29380229dbae20c2ad8e5d7697cc4519db22f5f9a4eeada9063fc7`|
+|`kilo-darwin-x64-baseline.zip`|52,444,457|`d3ab213cbfa4ede9615116b9dd4ef859784d021965bed8158d96c353db8eae81`|
+|`kilo-darwin-x64.zip`|52,444,457|`3569bd45212ced578843d279b50ad5b8377d692754a52fdf7ea49f795f03026e`|
+|`kilo-linux-arm64-musl.tar.gz`|62,508,388|`058ee8f81b803150840acafd2d1412ad473d57a908f67e3ef73e913bb898fd26`|
+|`kilo-linux-arm64.tar.gz`|63,906,808|`7d2e88dee723a8677f82523841d7edb88c92bbfc83ff44decec509da37ddf61c`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|62,924,639|`b55cfd4c6c3c9b91640d6992e66738ad67368aec3d1ce64dfcb46a1ef4345a1f`|
+|`kilo-linux-x64-baseline.tar.gz`|64,161,165|`ea04ddd02d28a124cdc5961597d29097a71b91887f515399da8deb60e5ad0f5b`|
+|`kilo-linux-x64-musl.tar.gz`|62,925,483|`fe49b507d293abc540f58310e83878f3a2920b2c6374c273eb115c13626caf1d`|
+|`kilo-linux-x64.tar.gz`|64,165,375|`aee4ec30893758fc61ea7709141b58b2d38606928d46fb87f926fc980c51e69d`|
+|`kilo-vscode-alpine-arm64.vsix`|103,146,428|`90bc8a0d746ca6803aa1d34531d5d2af60270d8b5126499c865945a666dbb997`|
+|`kilo-vscode-alpine-x64.vsix`|110,304,529|`6cd3647f6901c902b17d8034c1f6297cce28d64a7dbf83fcf0644bd0c5d752b0`|
+|`kilo-vscode-darwin-arm64.vsix`|90,324,040|`dfdc488d797b653aaf1c87fea7fe2cc31ce05da6877b33e8a49241defebe2630`|
+|`kilo-vscode-darwin-x64.vsix`|98,464,313|`3af204aba586e72b34f036330e575b2bbb457321ff38d05e98413ed4fc789318`|
+|`kilo-vscode-linux-arm64.vsix`|104,566,369|`15ee721b8b844b2c0dd1ce99b3f7f4629048ddcd4c5994f1b062794eec97874f`|
+|`kilo-vscode-linux-x64.vsix`|111,527,950|`e5818b6fe741027597a459afe88951341f1a008f7dc636a28cbc5818b41693bd`|
+|`kilo-vscode-win32-arm64.vsix`|87,298,810|`9b97b0cc194b8244062b4cbc08e2ce01912134c979d08bd44590ffef2105cff7`|
+|`kilo-vscode-win32-x64.vsix`|111,324,326|`24d2f255174a8fbd6402cfdf20f90ce328a3867b1f8b0c8942f047ce9065a32b`|
+|`kilo-windows-arm64.zip`|62,801,646|`80c221dcba407a2664c803a597f07bf4e20344df7d9fd37b326b7847d2117028`|
+|`kilo-windows-x64-baseline.zip`|64,467,528|`8ce9e0e4b844add8bb10d0851db048097994a56a434adc61270790b9581b994f`|
+|`kilo-windows-x64.zip`|64,467,528|`0b8fd907908f1245ba4dd4d8a5bedabe4802f8fc3142cb073c8a3873918222c4`|
 
-Release [`364019885`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.17-lcm.2) and release
+Release [`365487957`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.20-lcm.1), release
+[`364019885`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.17-lcm.2), and release
 [`360907867`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.16-lcm.3) remain published as retained history. The
 obsolete `v7.4.17-lcm.1` release ID `362945030` and its matching tag remain absent, as do the incompatible v7.4.16
 `.1` and faulty `.2` releases and tags.
+
+One v7.4.21 audit run failed safely before draft creation and created no release or tag. Run
+[`31546846529`](https://github.com/KertarTheDev/LCM/actions/runs/31546846529) exposed the v7.4.21 branded manual-compaction
+input types, static application event manifest, and remote-command route return contract during canonical typecheck.
+Those narrow adapters and their focused tests were corrected in ordinary product commit
+`400cf2c116f482b5f9a84d338926bc4145f3fac0`; the failed run's Actions audit history is retained, and unrelated upstream
+version/build/publish jobs remained skipped.
 
 Two v7.4.20 audit runs failed safely before draft creation and created no release or tag. Run
 [`31000761855`](https://github.com/KertarTheDev/LCM/actions/runs/31000761855) exposed the missing Conversation Memory
