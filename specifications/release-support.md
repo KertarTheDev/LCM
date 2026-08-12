@@ -64,6 +64,12 @@ before versioning or draft creation and created no release or tag. Canonical Ope
 The fixture was narrowed in ordinary product commit `dfe6884946c2c20e587bc934023f2e9c81dfd424`; the failed run's Actions audit
 history is retained, and unrelated upstream version/build/publish jobs remained skipped.
 
+Replacement audit run [`31641865296`](https://github.com/KertarTheDev/LCM/actions/runs/31641865296) likewise failed
+safely before versioning or draft creation and created no release or tag. Canonical OpenCode typecheck then exposed
+plain string message and part IDs in the same recovery fixture's direct `WithParts` assertions. The fixture now uses
+the real branded ID types in ordinary product commit `c4b4c08338d0606aa78122032431d83ed44f32f3`; the failed run's Actions audit
+history is retained, and unrelated upstream version/build/publish jobs remained skipped.
+
 Two v7.4.20 audit runs failed safely before draft creation and created no release or tag. Run
 [`31000761855`](https://github.com/KertarTheDev/LCM/actions/runs/31000761855) exposed the missing Conversation Memory
 layer in the v7.4.20 `ensure-title-mark` integration fixture during canonical typecheck. Run
