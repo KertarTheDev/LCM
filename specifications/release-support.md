@@ -58,6 +58,12 @@ Those narrow adapters and their focused tests were corrected in ordinary product
 `400cf2c116f482b5f9a84d338926bc4145f3fac0`; the failed run's Actions audit history is retained, and unrelated upstream
 version/build/publish jobs remained skipped.
 
+Replacement audit run [`31641322213`](https://github.com/KertarTheDev/LCM/actions/runs/31641322213) also failed safely
+before versioning or draft creation and created no release or tag. Canonical OpenCode typecheck exposed a missing
+`ToolPart` union guard in the new successive-recovery-call fixture after every focused product and overlay gate passed.
+The fixture was narrowed in ordinary product commit `dfe6884946c2c20e587bc934023f2e9c81dfd424`; the failed run's Actions audit
+history is retained, and unrelated upstream version/build/publish jobs remained skipped.
+
 Two v7.4.20 audit runs failed safely before draft creation and created no release or tag. Run
 [`31000761855`](https://github.com/KertarTheDev/LCM/actions/runs/31000761855) exposed the missing Conversation Memory
 layer in the v7.4.20 `ensure-title-mark` integration fixture during canonical typecheck. Run
