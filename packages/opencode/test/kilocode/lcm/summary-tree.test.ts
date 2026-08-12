@@ -153,6 +153,61 @@ describe("LCM summary tree", () => {
     store.close()
   })
 
+  test("accepts a substantive summary that cites exact source lineage", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = [makeSource(0)]
+    const digest = lineageDigest(sources)
+    const lineage = { sessionID: "ses_tree", digest, sourceCount: 1, lastSourceID: sources[0]?.id }
+    await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
+    const revision = await new SummaryTree(store, {
+      generate: async (request) => ({
+        text: `${sources[0]!.id} preserves the binding implementation decision and its supporting detail.`,
+        mode: request.mode,
+      }),
+    }).build({
+      sessionID: "ses_tree",
+      lineage,
+      usableInputTokens: 8_000,
+      protectedSources: 0,
+      reason: "background",
+    })
+
+    const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
+    expect(summary?.generationMode).toBe("normal")
+    expect(summary?.text).toContain(sources[0]!.id)
+    store.close()
+  })
+
+  test("rejects summaries without a lineage citation or substantive text", async () => {
+    for (const candidate of [
+      "The binding implementation decision and supporting detail are preserved here.",
+      undefined,
+    ]) {
+      const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+      const sources = [makeSource(0)]
+      const digest = lineageDigest(sources)
+      const lineage = { sessionID: "ses_tree", digest, sourceCount: 1, lastSourceID: sources[0]?.id }
+      await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
+      const revision = await new SummaryTree(store, {
+        generate: async (request) => ({
+          text: candidate ?? `${sources[0]!.id} noted`,
+          mode: request.mode,
+        }),
+      }).build({
+        sessionID: "ses_tree",
+        lineage,
+        usableInputTokens: 8_000,
+        protectedSources: 0,
+        reason: "background",
+      })
+
+      const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
+      expect(summary?.generationMode).toBe("deterministic")
+      expect(summary?.text).toStartWith("Conversation memory index:")
+      store.close()
+    }
+  })
+
   test("hard maintenance strictly promotes a complete frontier toward the soft target", async () => {
     const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
     const sources = Array.from({ length: 30 }, (_, ordinal) => makeSource(ordinal))

@@ -19,6 +19,10 @@ function status(sessionID: string, sequence: number): LcmStatus {
       eligibleRawItems: 0,
       protectedRawTokens: 0,
       protectedRawItems: 0,
+      recentConsumedRawTokens: 0,
+      recentConsumedRawItems: 0,
+      unconsumedRawTokens: 0,
+      unconsumedRawItems: 0,
     },
     background: { summarizing: false, phase: "idle" },
     memoryWork: {

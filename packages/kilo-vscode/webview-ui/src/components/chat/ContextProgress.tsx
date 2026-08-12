@@ -91,6 +91,11 @@ export const ContextProgress: Component = () => {
           d.memory.composition.protectedRawTokens,
         )} protected`,
       )
+      lines.push(
+        `Protected raw: ${fmt(d.memory.composition.recentConsumedRawTokens)} recent consumed + ${fmt(
+          d.memory.composition.unconsumedRawTokens,
+        )} not yet consumed`,
+      )
       if (d.memory.capacity.fixedInputTokens !== undefined)
         lines.push(`Fixed upstream input: ${fmt(d.memory.capacity.fixedInputTokens)}`)
     }
@@ -130,6 +135,10 @@ export const ContextProgress: Component = () => {
                   protected: fmt(status().composition.protectedRawTokens),
                   summaries: String(status().composition.summaryItems),
                 })}
+              </div>
+              <div>
+                Protected: {fmt(status().composition.recentConsumedRawTokens)} recent consumed +{" "}
+                {fmt(status().composition.unconsumedRawTokens)} not yet consumed
               </div>
               <div>
                 {language.t("conversationMemory.stats.state", {

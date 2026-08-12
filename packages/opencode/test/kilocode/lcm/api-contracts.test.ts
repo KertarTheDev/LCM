@@ -59,6 +59,10 @@ describe("LCM public contracts", () => {
         eligibleRawItems: 1,
         protectedRawTokens: 1_250,
         protectedRawItems: 1,
+        recentConsumedRawTokens: 500,
+        recentConsumedRawItems: 1,
+        unconsumedRawTokens: 750,
+        unconsumedRawItems: 0,
       },
       background: { summarizing: false, phase: "idle" },
       memoryWork: {

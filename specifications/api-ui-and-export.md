@@ -14,8 +14,9 @@ the sidecar. Enabled success DTOs remain unchanged.
 
 Status includes usable/active/full capacity plus `softThresholdTokens`, `rawLaneTokens`, `rawLaneRatio`, and
 `fixedInputTokens`. Composition separately reports eligible-backlog and protected-raw token/item counts alongside
-active summary/raw composition. Maintenance phase is one of `idle`, `soft_queued`, `soft_running`, `hard_running`,
-`manual_running`, or `constrained`.
+active summary/raw composition. Protected raw is split into mutually exclusive recent-consumed and not-yet-consumed
+token/item counts; those two values sum to the protected total. Maintenance phase is one of `idle`, `soft_queued`,
+`soft_running`, `hard_running`, `manual_running`, or `constrained`.
 When usable capacity is zero or absent, `capacity.known` is false and issue code `lcm_capacity_unknown` explains the
 required model configuration.
 

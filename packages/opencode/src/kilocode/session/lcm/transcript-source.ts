@@ -2,7 +2,6 @@ import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import { sha256, sourceID } from "./ids"
 import type { FinalSource, SourceKind } from "./types"
 
-const LCM_TOOLS = new Set(["lcm_grep", "lcm_describe", "lcm_expand", "lcm_expand_query", "lcm_read"])
 const EXCERPT_BYTES = 320
 
 type WithParts = SessionV1.WithParts
@@ -133,7 +132,6 @@ function partContent(part: Part):
     return { kind: "reasoning", content: part.text }
   }
   if (part.type === "tool") {
-    if (LCM_TOOLS.has(part.tool)) return
     const content = toolContent(part)
     if (!content) return
     return { kind: "tool", content }

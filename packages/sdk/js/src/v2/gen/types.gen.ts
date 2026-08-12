@@ -2172,6 +2172,10 @@ export type GlobalEvent = {
               eligibleRawItems: number
               protectedRawTokens: number
               protectedRawItems: number
+              recentConsumedRawTokens: number
+              recentConsumedRawItems: number
+              unconsumedRawTokens: number
+              unconsumedRawItems: number
             }
             background: {
               summarizing: boolean
@@ -6333,6 +6337,10 @@ export type EventSessionLcmStatus = {
         eligibleRawItems: number
         protectedRawTokens: number
         protectedRawItems: number
+        recentConsumedRawTokens: number
+        recentConsumedRawItems: number
+        unconsumedRawTokens: number
+        unconsumedRawItems: number
       }
       background: {
         summarizing: boolean
@@ -9378,6 +9386,10 @@ export type SessionLcmStatus = {
         eligibleRawItems: number
         protectedRawTokens: number
         protectedRawItems: number
+        recentConsumedRawTokens: number
+        recentConsumedRawItems: number
+        unconsumedRawTokens: number
+        unconsumedRawItems: number
       }
       background: {
         summarizing: boolean
@@ -10479,6 +10491,10 @@ export type EventSessionLcmStatus1 = {
         eligibleRawItems: number
         protectedRawTokens: number
         protectedRawItems: number
+        recentConsumedRawTokens: number
+        recentConsumedRawItems: number
+        unconsumedRawTokens: number
+        unconsumedRawItems: number
       }
       background: {
         summarizing: boolean
@@ -15517,6 +15533,10 @@ export type ConversationMemoryStatusResponses = {
       eligibleRawItems: number
       protectedRawTokens: number
       protectedRawItems: number
+      recentConsumedRawTokens: number
+      recentConsumedRawItems: number
+      unconsumedRawTokens: number
+      unconsumedRawItems: number
     }
     background: {
       summarizing: boolean

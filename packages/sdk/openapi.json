@@ -11608,6 +11608,22 @@
                         "protectedRawItems": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "recentConsumedRawTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "recentConsumedRawItems": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "unconsumedRawTokens": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "unconsumedRawItems": {
+                          "type": "integer",
+                          "minimum": 0
                         }
                       },
                       "required": [
@@ -11618,7 +11634,11 @@
                         "eligibleRawTokens",
                         "eligibleRawItems",
                         "protectedRawTokens",
-                        "protectedRawItems"
+                        "protectedRawItems",
+                        "recentConsumedRawTokens",
+                        "recentConsumedRawItems",
+                        "unconsumedRawTokens",
+                        "unconsumedRawItems"
                       ],
                       "additionalProperties": false
                     },
@@ -33135,6 +33155,22 @@
                               "protectedRawItems": {
                                 "type": "integer",
                                 "minimum": 0
+                              },
+                              "recentConsumedRawTokens": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "recentConsumedRawItems": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "unconsumedRawTokens": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "unconsumedRawItems": {
+                                "type": "integer",
+                                "minimum": 0
                               }
                             },
                             "required": [
@@ -33145,7 +33181,11 @@
                               "eligibleRawTokens",
                               "eligibleRawItems",
                               "protectedRawTokens",
-                              "protectedRawItems"
+                              "protectedRawItems",
+                              "recentConsumedRawTokens",
+                              "recentConsumedRawItems",
+                              "unconsumedRawTokens",
+                              "unconsumedRawItems"
                             ],
                             "additionalProperties": false
                           },
@@ -46485,6 +46525,22 @@
                       "protectedRawItems": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "recentConsumedRawTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "recentConsumedRawItems": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "unconsumedRawTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "unconsumedRawItems": {
+                        "type": "integer",
+                        "minimum": 0
                       }
                     },
                     "required": [
@@ -46495,7 +46551,11 @@
                       "eligibleRawTokens",
                       "eligibleRawItems",
                       "protectedRawTokens",
-                      "protectedRawItems"
+                      "protectedRawItems",
+                      "recentConsumedRawTokens",
+                      "recentConsumedRawItems",
+                      "unconsumedRawTokens",
+                      "unconsumedRawItems"
                     ],
                     "additionalProperties": false
                   },
@@ -55725,6 +55785,22 @@
                       "protectedRawItems": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "recentConsumedRawTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "recentConsumedRawItems": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "unconsumedRawTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "unconsumedRawItems": {
+                        "type": "integer",
+                        "minimum": 0
                       }
                     },
                     "required": [
@@ -55735,7 +55811,11 @@
                       "eligibleRawTokens",
                       "eligibleRawItems",
                       "protectedRawTokens",
-                      "protectedRawItems"
+                      "protectedRawItems",
+                      "recentConsumedRawTokens",
+                      "recentConsumedRawItems",
+                      "unconsumedRawTokens",
+                      "unconsumedRawItems"
                     ],
                     "additionalProperties": false
                   },
@@ -59204,6 +59284,22 @@
                       "protectedRawItems": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "recentConsumedRawTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "recentConsumedRawItems": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "unconsumedRawTokens": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "unconsumedRawItems": {
+                        "type": "integer",
+                        "minimum": 0
                       }
                     },
                     "required": [
@@ -59214,7 +59310,11 @@
                       "eligibleRawTokens",
                       "eligibleRawItems",
                       "protectedRawTokens",
-                      "protectedRawItems"
+                      "protectedRawItems",
+                      "recentConsumedRawTokens",
+                      "recentConsumedRawItems",
+                      "unconsumedRawTokens",
+                      "unconsumedRawItems"
                     ],
                     "additionalProperties": false
                   },

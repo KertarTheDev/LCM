@@ -26,6 +26,11 @@ Only the two raw-history lanes drive soft pressure. Summary roots and fixed upst
 soft work. A source already covered by an active summary root is in the summary lane, not the raw backlog. The
 complete final provider request still drives hard-limit safety.
 
+A user turn may contain many provider steps separated by tool calls. Each successful provider step advances durable
+consumption through the exact finalized sources it received, including outputs from the five LCM recovery tools; one
+tool call is not a separate user turn, and LCM does not wait for the whole turn to end. A failed or interrupted next
+step leaves those new sources unconsumed.
+
 `conversation_memory.soft_threshold_percent` configures soft pressure and the hard-reset target. It defaults to 40%.
 The exact recent tail defaults to 15% of usable input, clamped to 2,000–20,000 tokens;
 `compaction.preserve_recent_tokens` is the explicit override. While LCM is enabled, `compaction.auto` controls only

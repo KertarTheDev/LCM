@@ -38,6 +38,13 @@ resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
 |`kilo-windows-x64-baseline.zip`|64,467,528|`8ce9e0e4b844add8bb10d0851db048097994a56a434adc61270790b9581b994f`|
 |`kilo-windows-x64.zip`|64,467,528|`0b8fd907908f1245ba4dd4d8a5bedabe4802f8fc3142cb073c8a3873918222c4`|
 
+`v7.4.21-lcm.1`, exact release ID `368913653`, is known faulty. It permanently omitted finalized LCM recovery-tool
+results from derived source lineage, so successive tool calls could accumulate as protected raw provider context
+instead of becoming consumed and eligible after the next successful provider step. It also accepted model summaries
+with no recovery handle and negligible content. Publish and fully verify the differently tagged fixed replacement
+`v7.4.21-lcm.2` first; only then remove this exact release ID and its matching `.1` tag. The raw Kilo transcript is not
+affected, and `.2` rebuilds the disposable pre-v6 sidecar.
+
 Release [`365487957`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.20-lcm.1), release
 [`364019885`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.17-lcm.2), and release
 [`360907867`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.16-lcm.3) remain published as retained history. The
@@ -70,7 +77,8 @@ Healthy prereleases are retained history. Publishing a newer prerelease does not
 replaces. A successful differently tagged replacement may delete an older published prerelease only when this document
 already identifies that exact tag and release ID as known faulty, states the defect, and requires its removal after the
 fixed replacement is verified. Capture and re-resolve the exact release ID/tag/SHA before deletion; never infer the
-target from "latest" or from tag order. There are currently no published prereleases authorized for deletion.
+target from "latest" or from tag order. The only currently authorized replacement deletion is exact release ID
+`368913653` and tag `v7.4.21-lcm.1`, and only after verified publication of `v7.4.21-lcm.2`.
 
 Failed same-run publication cleanup is separate from replacement cleanup. If publication fails after creating a new
 draft or release, delete only that captured failed release ID and its matching tag. If failure occurs before draft

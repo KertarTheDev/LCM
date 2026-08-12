@@ -53,6 +53,10 @@ export function formatLcmStatus(value: {
     eligibleRawItems: number
     protectedRawTokens: number
     protectedRawItems: number
+    recentConsumedRawTokens: number
+    recentConsumedRawItems: number
+    unconsumedRawTokens: number
+    unconsumedRawItems: number
   }
   background: { summarizing: boolean; phase: string }
   memoryWork: { attempts: number; inputTokens: number; outputTokens: number; cost: number }
@@ -64,6 +68,7 @@ export function formatLcmStatus(value: {
       value.capacity.thresholdRatio === undefined ? "" : ` · intervention at ${percent(value.capacity.thresholdRatio)}`
     }`,
     `Raw conversation pressure: ${percent(value.capacity.rawLaneRatio)} · eligible backlog ${value.composition.eligibleRawItems} items (${value.composition.eligibleRawTokens.toLocaleString()} tokens) · protected ${value.composition.protectedRawItems} items (${value.composition.protectedRawTokens.toLocaleString()} tokens)`,
+    `Protected detail: recent consumed ${value.composition.recentConsumedRawItems} items (${value.composition.recentConsumedRawTokens.toLocaleString()} tokens) · not yet consumed ${value.composition.unconsumedRawItems} items (${value.composition.unconsumedRawTokens.toLocaleString()} tokens)`,
     value.capacity.fixedInputTokens === undefined
       ? "Fixed upstream input: not measured yet"
       : `Fixed upstream input: ${value.capacity.fixedInputTokens.toLocaleString()} tokens`,

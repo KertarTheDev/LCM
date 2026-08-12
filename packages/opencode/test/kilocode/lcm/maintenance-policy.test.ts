@@ -79,6 +79,39 @@ describe("LCM maintenance policy", () => {
       eligibleRawItems: 1,
       protectedRawTokens: 100,
       protectedRawItems: 1,
+      recentConsumedRawTokens: 0,
+      recentConsumedRawItems: 0,
+      unconsumedRawTokens: 100,
+      unconsumedRawItems: 1,
+    })
+  })
+
+  test("splits protected raw history into recent consumed and not-yet-consumed lanes", () => {
+    const sources: FinalSource[] = Array.from({ length: 4 }, (_, ordinal) => ({
+      id: `src_${ordinal}`,
+      sessionID: "ses_protected_lanes",
+      messageID: `msg_${ordinal}`,
+      partID: `part_${ordinal}`,
+      ordinal,
+      kind: "tool",
+      digest: `digest_${ordinal}`,
+      tokens: 100,
+      bytes: 400,
+      excerpt: `tool source ${ordinal}`,
+    }))
+
+    expect(conversationLanes({ sources, consumedThrough: 2, recentTailTokens: 200 })).toEqual({
+      maxEligibleOrdinal: 1,
+      firstProtectedMessageID: "msg_2",
+      protectedSources: 2,
+      eligibleRawTokens: 200,
+      eligibleRawItems: 2,
+      protectedRawTokens: 200,
+      protectedRawItems: 2,
+      recentConsumedRawTokens: 100,
+      recentConsumedRawItems: 1,
+      unconsumedRawTokens: 100,
+      unconsumedRawItems: 1,
     })
   })
 

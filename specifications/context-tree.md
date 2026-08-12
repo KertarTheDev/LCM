@@ -6,8 +6,8 @@ A source is one finalized model-visible transcript part. A summary is immutable 
 children. A frontier revision is an exact, gap-free, non-overlapping cut through the current lineage. Every retained
 source is covered exactly once by a frontier source or a reachable summary descendant.
 
-The tree policy is `lcm-tree-v2`. This policy and derived schema intentionally invalidate the incorrect prerelease
-cache; the sidecar is discarded and rebuilt without modifying the Kilo transcript.
+The tree policy is `lcm-tree-v3`. This policy and derived schema intentionally invalidate earlier prerelease caches;
+the sidecar is quarantined and rebuilt without modifying the Kilo transcript.
 
 Soft maintenance summarizes at most one eligible raw window per quantum. Leaf windows target 30% of usable input and
 never exceed 20,000 estimated tokens. Existing roots remain stable. When more than eight roots exist, the oldest four
@@ -20,12 +20,15 @@ summary groups until the full LCM-owned frontier reaches
 count. Model generation is attempted in normal and aggressive modes, followed by a deterministic handle-preserving
 fallback. This strict reduction rule makes reducible history converge.
 
-Summary candidates must be non-empty, smaller than their children, within 115% of target, and contain no invented
-`src_` or `sum_` handle. Rejected/failed attempts retain usage and error provenance. Summary calls have no tools, do
-not recurse through LCM, and write no transcript message.
+Summary candidates must be non-empty, smaller than their children, within 115% of target, cite at least one exact
+current child/descendant `src_` or `sum_` handle, contain no invented handle, and retain at least 16 non-whitespace
+characters after handles are removed. Rejected/failed attempts retain usage and error provenance. After rejected
+normal and aggressive attempts, the runtime uses the deterministic handle-preserving fallback. Summary calls have no
+tools, do not recurse through LCM, and write no transcript message.
 
 The exact recent tail defaults to 15% of usable input, clamped to 2,000–20,000 tokens. It and all unconsumed current
-sources are protected. Only consumed sources older than that tail are eligible.
+sources are protected. Only consumed sources older than that tail are eligible. LCM recovery-tool results are ordinary
+model-visible sources for this rule; they have no permanent protected lane.
 
 Projection replaces the eligible historical model-message range with one inert `<conversation-memory>` message
 containing the active frontier's stable summaries and any not-yet-summarized eligible sources. The runtime derives the

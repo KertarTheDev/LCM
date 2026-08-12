@@ -314,7 +314,7 @@ describe("LCM SQLite store", () => {
     const target = path.join(root, "kilo.lcm.db")
     const old = new Database(target)
     old.exec("CREATE TABLE lcm_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-    old.query("INSERT INTO lcm_meta(key, value) VALUES ('schema_version', '1')").run()
+    old.query("INSERT INTO lcm_meta(key, value) VALUES ('schema_version', '5')").run()
     old.close()
 
     const store = SqliteConversationMemoryStore.open({ databasePath: path.join(root, "kilo.db"), derivedPath: target })

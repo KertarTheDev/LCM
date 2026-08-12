@@ -47,6 +47,10 @@ export const Status = Schema.Struct({
     eligibleRawItems: NonNegativeInt,
     protectedRawTokens: NonNegativeInt,
     protectedRawItems: NonNegativeInt,
+    recentConsumedRawTokens: NonNegativeInt,
+    recentConsumedRawItems: NonNegativeInt,
+    unconsumedRawTokens: NonNegativeInt,
+    unconsumedRawItems: NonNegativeInt,
   }),
   background: Schema.Struct({
     summarizing: Schema.Boolean,

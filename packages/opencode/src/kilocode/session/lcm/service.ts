@@ -106,6 +106,10 @@ interface Synced {
   eligibleRawItems: number
   protectedRawTokens: number
   protectedRawItems: number
+  recentConsumedRawTokens: number
+  recentConsumedRawItems: number
+  unconsumedRawTokens: number
+  unconsumedRawItems: number
 }
 
 export interface Interface {
@@ -163,6 +167,10 @@ export interface Interface {
         eligibleRawItems: number
         protectedRawTokens: number
         protectedRawItems: number
+        recentConsumedRawTokens: number
+        recentConsumedRawItems: number
+        unconsumedRawTokens: number
+        unconsumedRawItems: number
       }
     | undefined
   >
@@ -261,6 +269,8 @@ export function conversationLanes(input: {
   const activeRaw = input.sources.filter((source) => activeSourceIDs.has(source.id))
   const eligible = activeRaw.filter((source) => source.ordinal <= maxEligibleOrdinal)
   const protectedRaw = activeRaw.filter((source) => source.ordinal > maxEligibleOrdinal)
+  const recentConsumedRaw = protectedRaw.filter((source) => source.ordinal <= input.consumedThrough)
+  const unconsumedRaw = protectedRaw.filter((source) => source.ordinal > input.consumedThrough)
   const firstProtectedMessageID = input.sources.find((source) => source.ordinal > maxEligibleOrdinal)?.messageID
   return {
     maxEligibleOrdinal,
@@ -270,6 +280,10 @@ export function conversationLanes(input: {
     eligibleRawItems: eligible.length,
     protectedRawTokens: protectedRaw.reduce((total, source) => total + source.tokens, 0),
     protectedRawItems: protectedRaw.length,
+    recentConsumedRawTokens: recentConsumedRaw.reduce((total, source) => total + source.tokens, 0),
+    recentConsumedRawItems: recentConsumedRaw.length,
+    unconsumedRawTokens: unconsumedRaw.reduce((total, source) => total + source.tokens, 0),
+    unconsumedRawItems: unconsumedRaw.length,
   }
 }
 
@@ -1491,6 +1505,10 @@ export const layer: Layer.Layer<
             eligibleRawItems: currentLanes.eligibleRawItems,
             protectedRawTokens: currentLanes.protectedRawTokens,
             protectedRawItems: currentLanes.protectedRawItems,
+            recentConsumedRawTokens: currentLanes.recentConsumedRawTokens,
+            recentConsumedRawItems: currentLanes.recentConsumedRawItems,
+            unconsumedRawTokens: currentLanes.unconsumedRawTokens,
+            unconsumedRawItems: currentLanes.unconsumedRawItems,
           },
           background: { summarizing: background.has(sessionID), phase: phases.get(sessionID) ?? "idle" },
           memoryWork: metrics.work,
@@ -1514,6 +1532,10 @@ export const layer: Layer.Layer<
               eligibleRawItems: 0,
               protectedRawTokens: 0,
               protectedRawItems: 0,
+              recentConsumedRawTokens: 0,
+              recentConsumedRawItems: 0,
+              unconsumedRawTokens: 0,
+              unconsumedRawItems: 0,
             },
             background: { summarizing: false, phase: "idle" as const },
             memoryWork: emptyWork,
@@ -1586,6 +1608,10 @@ export const layer: Layer.Layer<
           eligibleRawItems: synced.eligibleRawItems,
           protectedRawTokens: synced.protectedRawTokens,
           protectedRawItems: synced.protectedRawItems,
+          recentConsumedRawTokens: synced.recentConsumedRawTokens,
+          recentConsumedRawItems: synced.recentConsumedRawItems,
+          unconsumedRawTokens: synced.unconsumedRawTokens,
+          unconsumedRawItems: synced.unconsumedRawItems,
         })),
         Effect.catch(() => Effect.succeed(undefined)),
       )
@@ -1620,6 +1646,10 @@ export const layer: Layer.Layer<
         eligibleRawItems: 0,
         protectedRawTokens: 0,
         protectedRawItems: 0,
+        recentConsumedRawTokens: 0,
+        recentConsumedRawItems: 0,
+        unconsumedRawTokens: 0,
+        unconsumedRawItems: 0,
       },
       background: { summarizing: false, phase: "idle" },
       memoryWork: emptyWork,

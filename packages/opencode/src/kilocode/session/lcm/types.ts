@@ -1,7 +1,7 @@
 import type { ModelMessage } from "ai"
 
-export const LCM_SCHEMA_VERSION = 5
-export const LCM_TREE_POLICY = "lcm-tree-v2"
+export const LCM_SCHEMA_VERSION = 6
+export const LCM_TREE_POLICY = "lcm-tree-v3"
 export const DEFAULT_SOFT_THRESHOLD_RATIO = 0.4
 export const DEFAULT_RECENT_TAIL_RATIO = 0.15
 
@@ -200,6 +200,10 @@ export interface LcmStatus {
     eligibleRawItems: number
     protectedRawTokens: number
     protectedRawItems: number
+    recentConsumedRawTokens: number
+    recentConsumedRawItems: number
+    unconsumedRawTokens: number
+    unconsumedRawItems: number
   }
   background: {
     summarizing: boolean

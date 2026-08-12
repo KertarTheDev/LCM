@@ -14,8 +14,10 @@ Acceptance must prove:
 - disabled prompt, idle, deletion, API, CLI, and tool paths neither create nor mutate a sidecar, while re-enable
   reuses or rebuilds retained state;
 - newest-first stream normalization and stable chronology for new, legacy, imported, and 100+ source sessions;
-- schema-v5/tree-v2 discard-and-rebuild without raw-body duplication;
-- durable successful-request consumption and protection after cancel/failure/overflow;
+- schema-v6/tree-v3 discard-and-rebuild without raw-body duplication or derived-cache migration;
+- durable per-provider-step successful-request consumption and protection after cancel/failure/overflow;
+- sequential and parallel LCM recovery-tool results entering source lineage, becoming eligible after a later
+  successful provider step, and remaining unconsumed after a failed later step;
 - successful queued handoff records consumption and closes as `superseded`, while upstream steering runs before a
   dismissed blocking question resumes;
 - 15%-clamped exact tail plus explicit override;
@@ -33,7 +35,9 @@ Acceptance must prove:
   summary when enabled and the upstream legacy cycle when disabled;
 - all five real tool handlers, cancellation/cursors/current-session isolation, reachable `active`, direct `frontier`,
   and one-call cited `lcm_expand_query` recovery;
-- coherent enabled status lane/phase/frame fields, disabled typed 409 responses, conditional UI/tool/TUI surfaces,
+- substantive, exact-lineage summary citations with rejection of missing, invented, stale, or content-free handles;
+- coherent enabled status lane/phase/frame fields including the protected recent-consumed/unconsumed split, disabled
+  typed 409 responses, conditional UI/tool/TUI surfaces,
   reopened-session actions, frontier-only timeline events, export redaction/hashes, and generated contract stability;
 - unchanged v7.4.21 remote, Project Memory, permissions, structured output, request identity, skill,
   first-response-byte timeout, JSONC, and SQLite behavior outside the deliberate seams.

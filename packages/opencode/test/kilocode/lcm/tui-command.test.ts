@@ -33,6 +33,10 @@ describe("LCM TUI command", () => {
         eligibleRawItems: 1,
         protectedRawTokens: 500,
         protectedRawItems: 1,
+        recentConsumedRawTokens: 200,
+        recentConsumedRawItems: 1,
+        unconsumedRawTokens: 300,
+        unconsumedRawItems: 0,
       },
       background: { summarizing: false, phase: "idle" },
       memoryWork: { attempts: 1, inputTokens: 2_000, outputTokens: 400, cost: 0.01 },
@@ -40,6 +44,7 @@ describe("LCM TUI command", () => {
     expect(value).toContain("Context pressure: 50%")
     expect(value).toContain("1 summaries")
     expect(value).toContain("Raw conversation pressure: 40%")
+    expect(value).toContain("Protected detail: recent consumed")
     expect(value).not.toMatch(/sqlite|pglite|frontier|lease/i)
     expect(formatLcmTimeline([])).toContain("No Conversation Memory activity")
   })

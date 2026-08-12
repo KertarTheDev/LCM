@@ -118,12 +118,19 @@ function messages() {
 }
 
 describe("LCM transcript source", () => {
-  test("indexes only finalized ordinary model-visible content", () => {
+  test("indexes every finalized model-visible source, including LCM recovery results", () => {
     const items = extractFinalSources(sessionID, messages())
-    expect(items.map((item) => item.metadata.partID)).toEqual(["part_user", "part_media", "part_tool", "part_answer"])
-    expect(items.map((item) => item.metadata.ordinal)).toEqual([0, 1, 2, 3])
-    expect(items[2]?.content).toContain("original compacted tool detail")
-    expect(items[3]?.content).toBe("The binding answer is beta.")
+    expect(items.map((item) => item.metadata.partID)).toEqual([
+      "part_user",
+      "part_media",
+      "part_lcm",
+      "part_tool",
+      "part_answer",
+    ])
+    expect(items.map((item) => item.metadata.ordinal)).toEqual([0, 1, 2, 3, 4])
+    expect(items[2]?.content).toContain("large recovered payload")
+    expect(items[3]?.content).toContain("original compacted tool detail")
+    expect(items[4]?.content).toBe("The binding answer is beta.")
   })
 
   test("extracts digest-verified immutable persisted media", () => {
@@ -137,7 +144,7 @@ describe("LCM transcript source", () => {
     const chronological = extractFinalSources(sessionID, messages())
     const streamed = extractFinalSources(sessionID, messages().toReversed())
     expect(streamed.map((item) => item.metadata.id)).toEqual(chronological.map((item) => item.metadata.id))
-    expect(streamed.map((item) => item.metadata.ordinal)).toEqual([0, 1, 2, 3])
+    expect(streamed.map((item) => item.metadata.ordinal)).toEqual([0, 1, 2, 3, 4])
   })
 
   test("keeps stable chronology beyond one hundred imported sources", () => {
@@ -172,5 +179,82 @@ describe("LCM transcript source", () => {
     const sources = extractFinalSources(sessionID, transcript).map((item) => item.metadata)
     expect(bootstrapConsumedThrough(sessionID, transcript, sources)).toBe(1)
     expect(bootstrapConsumedThrough(sessionID, transcript.toReversed(), sources)).toBe(1)
+  })
+
+  test("a later successful provider step consumes sequential and parallel LCM tool results", () => {
+    const [user, assistant] = messages()
+    const lcm = assistant!.parts.find((part) => part.id === "part_lcm")!
+    const toolStep = {
+      info: {
+        ...assistant!.info,
+        id: "msg_tool_step",
+        finish: "tool-calls",
+        time: { created: 2, completed: 3 },
+      },
+      parts: [
+        { ...lcm, messageID: "msg_tool_step" },
+        {
+          ...lcm,
+          id: "part_parallel_lcm",
+          messageID: "msg_tool_step",
+          callID: "call_parallel_lcm",
+          tool: "lcm_grep",
+          state: { ...lcm.state, input: { pattern: "binding" }, output: "parallel recovered payload" },
+        },
+      ],
+    } as SessionV1.WithParts
+    const sequentialStep = {
+      info: {
+        ...assistant!.info,
+        id: "msg_sequential_tool_step",
+        parentID: "msg_tool_step",
+        finish: "tool-calls",
+        time: { created: 4, completed: 5 },
+      },
+      parts: [
+        {
+          ...lcm,
+          id: "part_sequential_lcm",
+          messageID: "msg_sequential_tool_step",
+          callID: "call_sequential_lcm",
+          tool: "lcm_expand",
+          state: { ...lcm.state, input: { handle: "sum_old" }, output: "sequential recovered payload" },
+        },
+      ],
+    } as SessionV1.WithParts
+    const answerStep = {
+      info: {
+        ...assistant!.info,
+        id: "msg_answer_step",
+        parentID: "msg_sequential_tool_step",
+        finish: "stop",
+        time: { created: 6, completed: 7 },
+      },
+      parts: [
+        {
+          id: "part_final_answer",
+          sessionID,
+          messageID: "msg_answer_step",
+          type: "text",
+          text: "Done after recovery.",
+          time: { start: 6, end: 7 },
+        },
+      ],
+    } as SessionV1.WithParts
+    const transcript = [user!, toolStep, sequentialStep, answerStep]
+    const sources = extractFinalSources(sessionID, transcript).map((item) => item.metadata)
+    const beforeFinalSuccess = transcript.slice(0, -1)
+    const beforeFinalSources = extractFinalSources(sessionID, beforeFinalSuccess).map((item) => item.metadata)
+
+    expect(sources.map((source) => source.partID)).toEqual([
+      "part_user",
+      "part_media",
+      "part_lcm",
+      "part_parallel_lcm",
+      "part_sequential_lcm",
+      "part_final_answer",
+    ])
+    expect(bootstrapConsumedThrough(sessionID, beforeFinalSuccess, beforeFinalSources)).toBe(3)
+    expect(bootstrapConsumedThrough(sessionID, transcript, sources)).toBe(4)
   })
 })

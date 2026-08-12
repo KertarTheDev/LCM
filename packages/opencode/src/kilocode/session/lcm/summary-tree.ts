@@ -150,11 +150,14 @@ function valid(candidate: string, sourceTokens: number, sourceBytes: number, tar
   const candidateBytes = Buffer.byteLength(candidate)
   const candidateTokens = Math.max(1, Math.ceil(candidateBytes / 4))
   const handles = candidate.match(/\b(?:src|sum)_[a-f0-9]{24}\b/g) ?? []
+  const contentCharacters = candidate.replace(/\b(?:src|sum)_[a-f0-9]{24}\b/g, "").replace(/\s/gu, "").length
   return (
     candidate.trim().length > 0 &&
     candidateBytes < sourceBytes &&
     candidateTokens < sourceTokens &&
     candidateTokens <= Math.ceil(target * 1.15) &&
+    handles.length > 0 &&
+    contentCharacters >= 16 &&
     handles.every((handle) => allowed.has(handle))
   )
 }

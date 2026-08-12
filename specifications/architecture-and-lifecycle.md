@@ -17,10 +17,13 @@ forward with exact new sources. Revert, rewrite, and import invalidate the activ
 SQLite.
 
 A persisted source becomes eligible only after a later successful terminal provider response proves that the request
-containing it was consumed. Failed, cancelled, overflowed, and interrupted requests do not advance durable
-consumption. When a sidecar is first created or rebuilt, retained successful non-summary assistant responses provide
-the same durable proof for messages that precede them; the proving response's own parts remain protected. Newly
-finalized assistant and tool results therefore remain protected until a later successful provider step.
+containing it was consumed. A user turn may contain many provider steps separated by sequential or parallel tool
+calls; consumption advances at each successful provider step, not only when the whole user turn ends. This applies
+equally to ordinary tool results and all five LCM recovery-tool results. Failed, cancelled, overflowed, and
+interrupted requests do not advance durable consumption. When a sidecar is first created or rebuilt, retained
+successful non-summary assistant responses provide the same durable proof for messages that precede them; the proving
+response's own parts remain protected. Newly finalized assistant and tool results therefore remain protected until a
+later successful provider step.
 A successful provider step that hands off to an already queued prompt records consumption before the turn closes with
 upstream reason `superseded`; it is not an interrupted or failed request.
 
