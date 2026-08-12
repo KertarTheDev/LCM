@@ -183,7 +183,9 @@ describe("LCM transcript source", () => {
 
   test("a later successful provider step consumes sequential and parallel LCM tool results", () => {
     const [user, assistant] = messages()
-    const lcm = assistant!.parts.find((part) => part.id === "part_lcm")!
+    const lcm = assistant!.parts.find(
+      (part): part is SessionV1.ToolPart => part.id === "part_lcm" && part.type === "tool",
+    )!
     const toolStep = {
       info: {
         ...assistant!.info,
