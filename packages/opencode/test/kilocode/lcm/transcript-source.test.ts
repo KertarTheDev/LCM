@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import { bootstrapConsumedThrough, extractFinalSources } from "@/kilocode/session/lcm/transcript-source"
 import { sha256 } from "@/kilocode/session/lcm/ids"
+import type { MessageID, PartID } from "@/session/schema"
 
 const sessionID = "ses_source"
+const messageID = (value: string) => value as MessageID
+const partID = (value: string) => value as PartID
 
 function messages() {
   return [
@@ -189,16 +192,16 @@ describe("LCM transcript source", () => {
     const toolStep = {
       info: {
         ...assistant!.info,
-        id: "msg_tool_step",
+        id: messageID("msg_tool_step"),
         finish: "tool-calls",
         time: { created: 2, completed: 3 },
       },
       parts: [
-        { ...lcm, messageID: "msg_tool_step" },
+        { ...lcm, messageID: messageID("msg_tool_step") },
         {
           ...lcm,
-          id: "part_parallel_lcm",
-          messageID: "msg_tool_step",
+          id: partID("part_parallel_lcm"),
+          messageID: messageID("msg_tool_step"),
           callID: "call_parallel_lcm",
           tool: "lcm_grep",
           state: { ...lcm.state, input: { pattern: "binding" }, output: "parallel recovered payload" },
@@ -208,16 +211,16 @@ describe("LCM transcript source", () => {
     const sequentialStep = {
       info: {
         ...assistant!.info,
-        id: "msg_sequential_tool_step",
-        parentID: "msg_tool_step",
+        id: messageID("msg_sequential_tool_step"),
+        parentID: messageID("msg_tool_step"),
         finish: "tool-calls",
         time: { created: 4, completed: 5 },
       },
       parts: [
         {
           ...lcm,
-          id: "part_sequential_lcm",
-          messageID: "msg_sequential_tool_step",
+          id: partID("part_sequential_lcm"),
+          messageID: messageID("msg_sequential_tool_step"),
           callID: "call_sequential_lcm",
           tool: "lcm_expand",
           state: { ...lcm.state, input: { handle: "sum_old" }, output: "sequential recovered payload" },
@@ -227,16 +230,16 @@ describe("LCM transcript source", () => {
     const answerStep = {
       info: {
         ...assistant!.info,
-        id: "msg_answer_step",
-        parentID: "msg_sequential_tool_step",
+        id: messageID("msg_answer_step"),
+        parentID: messageID("msg_sequential_tool_step"),
         finish: "stop",
         time: { created: 6, completed: 7 },
       },
       parts: [
         {
-          id: "part_final_answer",
+          id: partID("part_final_answer"),
           sessionID,
-          messageID: "msg_answer_step",
+          messageID: messageID("msg_answer_step"),
           type: "text",
           text: "Done after recovery.",
           time: { start: 6, end: 7 },
