@@ -6,44 +6,43 @@ The product branch remains a direct, narrow augmentation of upstream tag `v7.4.2
 (`a5aaef74a81edaa9b5dac9b6b459d7700b973b62`). Correct the product branch with ordinary reviewable commits; do not
 rewrite its published history or replay old LCM branches.
 
-The current public prerelease is `v7.4.21-lcm.1`. It was published on 2026-08-12 from candidate
-`d7f5c2c59babb027fcbabdd08d9e34567344a484`, containing verified product
-`400cf2c116f482b5f9a84d338926bc4145f3fac0`. Exact-SHA workflow run
-[`31547434768`](https://github.com/KertarTheDev/LCM/actions/runs/31547434768) completed successfully, including exact
+The current public prerelease is `v7.4.21-lcm.2`. It was published on 2026-08-12 from candidate
+`5b0ff9b3618c8d27d1fedb86b9e4d6a253871053`, containing verified product
+`b3db0028e4a80804e2b18c595393f0564a2c41be`. Exact-SHA workflow run
+[`31642534580`](https://github.com/KertarTheDev/LCM/actions/runs/31642534580) completed successfully, including exact
 27-path overlay verification, focused v7.4.21 adaptation tests, canonical affected-package typechecks, stable contract
 generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory runtime smoke. Release
-[`368913653`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.21-lcm.1) is a non-draft prerelease whose tag
+[`369542832`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.21-lcm.2) is a non-draft prerelease whose tag
 resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
-|`kilo-darwin-arm64.zip`|50,115,670|`61d66be2ae29380229dbae20c2ad8e5d7697cc4519db22f5f9a4eeada9063fc7`|
-|`kilo-darwin-x64-baseline.zip`|52,444,457|`d3ab213cbfa4ede9615116b9dd4ef859784d021965bed8158d96c353db8eae81`|
-|`kilo-darwin-x64.zip`|52,444,457|`3569bd45212ced578843d279b50ad5b8377d692754a52fdf7ea49f795f03026e`|
-|`kilo-linux-arm64-musl.tar.gz`|62,508,388|`058ee8f81b803150840acafd2d1412ad473d57a908f67e3ef73e913bb898fd26`|
-|`kilo-linux-arm64.tar.gz`|63,906,808|`7d2e88dee723a8677f82523841d7edb88c92bbfc83ff44decec509da37ddf61c`|
-|`kilo-linux-x64-baseline-musl.tar.gz`|62,924,639|`b55cfd4c6c3c9b91640d6992e66738ad67368aec3d1ce64dfcb46a1ef4345a1f`|
-|`kilo-linux-x64-baseline.tar.gz`|64,161,165|`ea04ddd02d28a124cdc5961597d29097a71b91887f515399da8deb60e5ad0f5b`|
-|`kilo-linux-x64-musl.tar.gz`|62,925,483|`fe49b507d293abc540f58310e83878f3a2920b2c6374c273eb115c13626caf1d`|
-|`kilo-linux-x64.tar.gz`|64,165,375|`aee4ec30893758fc61ea7709141b58b2d38606928d46fb87f926fc980c51e69d`|
-|`kilo-vscode-alpine-arm64.vsix`|103,146,428|`90bc8a0d746ca6803aa1d34531d5d2af60270d8b5126499c865945a666dbb997`|
-|`kilo-vscode-alpine-x64.vsix`|110,304,529|`6cd3647f6901c902b17d8034c1f6297cce28d64a7dbf83fcf0644bd0c5d752b0`|
-|`kilo-vscode-darwin-arm64.vsix`|90,324,040|`dfdc488d797b653aaf1c87fea7fe2cc31ce05da6877b33e8a49241defebe2630`|
-|`kilo-vscode-darwin-x64.vsix`|98,464,313|`3af204aba586e72b34f036330e575b2bbb457321ff38d05e98413ed4fc789318`|
-|`kilo-vscode-linux-arm64.vsix`|104,566,369|`15ee721b8b844b2c0dd1ce99b3f7f4629048ddcd4c5994f1b062794eec97874f`|
-|`kilo-vscode-linux-x64.vsix`|111,527,950|`e5818b6fe741027597a459afe88951341f1a008f7dc636a28cbc5818b41693bd`|
-|`kilo-vscode-win32-arm64.vsix`|87,298,810|`9b97b0cc194b8244062b4cbc08e2ce01912134c979d08bd44590ffef2105cff7`|
-|`kilo-vscode-win32-x64.vsix`|111,324,326|`24d2f255174a8fbd6402cfdf20f90ce328a3867b1f8b0c8942f047ce9065a32b`|
-|`kilo-windows-arm64.zip`|62,801,646|`80c221dcba407a2664c803a597f07bf4e20344df7d9fd37b326b7847d2117028`|
-|`kilo-windows-x64-baseline.zip`|64,467,528|`8ce9e0e4b844add8bb10d0851db048097994a56a434adc61270790b9581b994f`|
-|`kilo-windows-x64.zip`|64,467,528|`0b8fd907908f1245ba4dd4d8a5bedabe4802f8fc3142cb073c8a3873918222c4`|
+|`kilo-darwin-arm64.zip`|50,128,527|`41f432825de8bb901a852155ba683e75f787ce598d157e183ef6c173385c1985`|
+|`kilo-darwin-x64-baseline.zip`|52,449,616|`93b5c3e49bb4185db4e36b5b1e20e134bb471da9ec3834976ec36a31c658064d`|
+|`kilo-darwin-x64.zip`|52,449,616|`dc86e20972a1a54631a3cd57c6a012312c04ff7a64e12a3d916edc1f5761d395`|
+|`kilo-linux-arm64-musl.tar.gz`|62,505,464|`c36fb315dc4ac8d54ffd5e3b6e64aa2bed192ff0ee86ad2f35989aeb487b5e26`|
+|`kilo-linux-arm64.tar.gz`|63,914,808|`9c8579dd3e71828081e6779b39b80f87379290b15e93d6bfcabc4c69b41b8a25`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|62,937,568|`f8454979c7527f82ee29ce6b0cddbbd6b3bb70679d067a1fe665303b39ff17e2`|
+|`kilo-linux-x64-baseline.tar.gz`|64,168,374|`aabf2ead4392b96cc2087925ae7a0a519afc7fd6ef45ea3da6b1443b2846776e`|
+|`kilo-linux-x64-musl.tar.gz`|62,937,553|`bee5418a6236e2e283b36d2c269a42061165bd1ae943c03415a4bfd452f67109`|
+|`kilo-linux-x64.tar.gz`|64,167,860|`5431e7e6583da7f588d444615cd13cb06e5dd73d8ea92587094631325742d5d1`|
+|`kilo-vscode-alpine-arm64.vsix`|103,150,653|`9a650ac71133ed318843460da5755f90c94a433fcb58c2284d32bff3cb2e7ff5`|
+|`kilo-vscode-alpine-x64.vsix`|110,314,324|`2fda5f6e564c9bb69523d69b8ddbb4b2c3a841236e8adc9d5400d93f03027d59`|
+|`kilo-vscode-darwin-arm64.vsix`|90,336,354|`8f6c35b9fd2e28bde0910ea9fa9382453bbf1c9d9f81bab071c834524198dcda`|
+|`kilo-vscode-darwin-x64.vsix`|98,469,398|`f2fde8e7d46723329a4695171d4618e2b1f4f9465525ff272abe7afd4565f562`|
+|`kilo-vscode-linux-arm64.vsix`|104,571,902|`c460e0969959367ae240258d62f98161cddd993dc5ec4afd0b2970a1971e81e1`|
+|`kilo-vscode-linux-x64.vsix`|111,525,963|`20759d597ef1eec56fec1b88fddee6e955edf29be284f179165d507f2abcd479`|
+|`kilo-vscode-win32-arm64.vsix`|87,303,053|`704aba2c49c7d5f98f4a888cb90cc277d4db0bab5ac6a6f79c973a0bd591a6ca`|
+|`kilo-vscode-win32-x64.vsix`|111,333,775|`80143000f2bd3ca17dfa40c0337199d05e4943b1a450dc143da80a6833b5cf90`|
+|`kilo-windows-arm64.zip`|62,809,956|`1e767c1f4f336b59e132ec0deb807debcac13240aab5c09b9b6b7ce3252c6d08`|
+|`kilo-windows-x64-baseline.zip`|64,475,502|`b65595a0d7e136658e6b29c90bd844b8134a8a6ac5b1fc67c883b2fc2927184a`|
+|`kilo-windows-x64.zip`|64,475,502|`794797ee02dc74d3368621be96bee9a691ad8c76dea22bbe7dfa899800d56f40`|
 
-`v7.4.21-lcm.1`, exact release ID `368913653`, is known faulty. It permanently omitted finalized LCM recovery-tool
-results from derived source lineage, so successive tool calls could accumulate as protected raw provider context
-instead of becoming consumed and eligible after the next successful provider step. It also accepted model summaries
-with no recovery handle and negligible content. Publish and fully verify the differently tagged fixed replacement
-`v7.4.21-lcm.2` first; only then remove this exact release ID and its matching `.1` tag. The raw Kilo transcript is not
-affected, and `.2` rebuilds the disposable pre-v6 sidecar.
+The known-faulty `v7.4.21-lcm.1` release ID `368913653` and matching tag were removed only after `.2` passed exact
+publication verification. `.1` omitted finalized LCM recovery-tool results from derived source lineage, so successive
+tool calls could accumulate as protected raw provider context instead of becoming consumed and eligible after the next
+successful provider step. It also accepted model summaries with no recovery handle and negligible content. The raw
+Kilo transcript was not affected, and `.2` rebuilds the disposable pre-v6 sidecar.
 
 Release [`365487957`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.20-lcm.1), release
 [`364019885`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.17-lcm.2), and release
@@ -89,8 +88,7 @@ Healthy prereleases are retained history. Publishing a newer prerelease does not
 replaces. A successful differently tagged replacement may delete an older published prerelease only when this document
 already identifies that exact tag and release ID as known faulty, states the defect, and requires its removal after the
 fixed replacement is verified. Capture and re-resolve the exact release ID/tag/SHA before deletion; never infer the
-target from "latest" or from tag order. The only currently authorized replacement deletion is exact release ID
-`368913653` and tag `v7.4.21-lcm.1`, and only after verified publication of `v7.4.21-lcm.2`.
+target from "latest" or from tag order. There is currently no authorized replacement deletion.
 
 Failed same-run publication cleanup is separate from replacement cleanup. If publication fails after creating a new
 draft or release, delete only that captured failed release ID and its matching tag. If failure occurs before draft
