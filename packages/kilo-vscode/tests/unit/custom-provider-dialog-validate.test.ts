@@ -13,7 +13,15 @@ function base(): FormState {
     baseURL: "https://example.com/v1",
     apiKey: "",
     models: [
-      { id: "model-1", name: "Model One", reasoning: false, supportsImages: false, modalities: {}, variants: [] },
+      {
+        id: "model-1",
+        name: "Model One",
+        reasoning: false,
+        supportsImages: false,
+        modalities: {},
+        limit: { context: "128000", input: "", output: "8000" },
+        variants: [],
+      },
     ],
     headers: [],
     saving: false,
@@ -169,8 +177,20 @@ describe("validateCustomProvider – variant name validation", () => {
   it("treats model IDs differing only in case as duplicates", () => {
     const form = base()
     form.models = [
-      { id: "qwen2.5-coder:14b", name: "Qwen", reasoning: false, variants: [] },
-      { id: "QWEN2.5-CODER:14B", name: "Qwen Upper", reasoning: false, variants: [] },
+      {
+        id: "qwen2.5-coder:14b",
+        name: "Qwen",
+        reasoning: false,
+        limit: { context: "128000", input: "", output: "8000" },
+        variants: [],
+      },
+      {
+        id: "QWEN2.5-CODER:14B",
+        name: "Qwen Upper",
+        reasoning: false,
+        limit: { context: "128000", input: "", output: "8000" },
+        variants: [],
+      },
     ]
     const out = validateCustomProvider(args(form))
     expect(out.result).toBeUndefined()
@@ -296,8 +316,24 @@ describe("validateCustomProvider – variant name validation", () => {
   it("handles multiple models with reasoning and images toggled", () => {
     const form = base()
     form.models = [
-      { id: "m1", name: "Model 1", reasoning: true, supportsImages: true, modalities: {}, variants: [] },
-      { id: "m2", name: "Model 2", reasoning: true, supportsImages: false, modalities: {}, variants: [] },
+      {
+        id: "m1",
+        name: "Model 1",
+        reasoning: true,
+        supportsImages: true,
+        modalities: {},
+        limit: { context: "128000", input: "", output: "8000" },
+        variants: [],
+      },
+      {
+        id: "m2",
+        name: "Model 2",
+        reasoning: true,
+        supportsImages: false,
+        modalities: {},
+        limit: { context: "128000", input: "", output: "8000" },
+        variants: [],
+      },
     ]
     const out = validateCustomProvider(args(form))
     expect(out.result).toBeDefined()

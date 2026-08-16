@@ -50,6 +50,8 @@ import type {
   McpStatusEntry,
   MessageLoadMode,
   ToolPart,
+  LcmActivity,
+  LcmStatus,
 } from "../types/messages"
 import { removeSessionPermissions, upsertPermission } from "./permission-queue"
 import {
@@ -87,6 +89,7 @@ import { clearIfOn, createCloudPrune } from "./session-cloud-prune"
 import { isSameSessionTree } from "./model-usage"
 import { createDraftAgentSeed } from "./session-agent"
 import { createModelSelector } from "./session-model-selector"
+import { createLcmState, routeLcmMessage } from "./lcm-state"
 
 const RECENT_LIMIT = 5
 const MESSAGE_PAGE_LIMIT = 80
@@ -210,6 +213,9 @@ interface SessionContextValue {
   // Cost and context usage for the current session
   costBreakdown: Accessor<Array<{ label: string; cost: number }>>
   contextUsage: Accessor<ContextUsage | undefined>
+  lcmActivity: Accessor<LcmActivity[]>
+  lcmStatus: Accessor<LcmStatus | undefined>
+  lcmStatusError: Accessor<string | undefined>
   modelUsage: Accessor<SessionModelUsage | undefined>
 
   // Skills loaded from the CLI backend
@@ -325,6 +331,12 @@ export const SessionProvider: ParentComponent = (props) => {
   const [currentSessionID, setCurrentSessionID] = createSignal<string | undefined>()
   const [draftSessionID, setDraftSessionID] = createSignal<string | undefined>()
   const [userClearedSession, setUserClearedSession] = createSignal(false)
+  const lcm = createLcmState({
+    config,
+    sessionID: currentSessionID,
+    connected: server.isConnected,
+    requestStatus: (sessionID) => vscode.postMessage({ type: "requestLcmStatus", sessionID }),
+  })
 
   // Per-session status map — keyed by sessionID
   const [statusMap, setStatusMap] = createStore<Record<string, SessionStatusInfo>>({})
@@ -1096,6 +1108,15 @@ export const SessionProvider: ParentComponent = (props) => {
   function handleExtensionMessage(message: ExtensionMessage): void {
     // Route suggestion messages (extracted to stay within complexity limit)
     routeSuggestionMessage(message)
+    routeLcmMessage({
+      message,
+      enabled: lcm.enabled(),
+      activeSessionID: currentSessionID(),
+      requestStatus: (sessionID) => vscode.postMessage({ type: "requestLcmStatus", sessionID }),
+      setStatus: lcm.setStatus,
+      setError: lcm.setError,
+      setActivity: lcm.setActivity,
+    })
     if (handleModelUsageMessage(message)) return
     refreshModelUsageForMessage(message)
     if (handleStreamMessage(message)) return
@@ -2970,6 +2991,9 @@ export const SessionProvider: ParentComponent = (props) => {
     clearModelOverride,
     costBreakdown,
     contextUsage,
+    lcmActivity: lcm.activity,
+    lcmStatus: lcm.status,
+    lcmStatusError: lcm.error,
     modelUsage,
     agents,
     allAgents,

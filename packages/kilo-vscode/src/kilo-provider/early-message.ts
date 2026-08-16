@@ -8,12 +8,14 @@ import { buildChatSettingsMessage } from "./chat-settings"
 import { buildThroughputSettingMessage } from "./throughput-settings"
 import { buildAutoApprovalReasonSettingMessage } from "./auto-approval-reason-settings"
 import { handleModelUsageMessage, type ModelUsageMessage } from "./model-usage"
+import { routeConversationMemoryMessage } from "./conversation-memory"
 
 type Ctx = {
   question: SuggestionContext
   client: KiloClient | null
   connection: KiloConnectionService
   dir: string
+  resolveDir: (sessionID?: string) => string
   post: (msg: unknown) => void
   browserSettings: () => void
   exportTranscript: (sessionID: string) => Promise<void>
@@ -56,6 +58,7 @@ export async function routeEarlyMessage(
     if (typeof input.sessionID === "string") await ctx.exportTranscript(input.sessionID)
     return true
   }
+  if (await routeConversationMemoryMessage(message, ctx)) return true
   if (message.type === "sidebar.openSessions") {
     const input = message as { sessionIDs?: unknown }
     const ids = Array.isArray(input.sessionIDs)
