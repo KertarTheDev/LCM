@@ -110,7 +110,7 @@ export namespace KiloToolRegistry {
       terminal?: Tool.Info
       notify: Tool.Info
       send: Tool.Info
-      lcm: readonly Tool.Info[]
+      lcm?: readonly Tool.Info[]
       notebookRead?: Tool.Info
       notebookEdit?: Tool.Info
       notebookExecute?: Tool.Info
@@ -132,7 +132,7 @@ export namespace KiloToolRegistry {
         send: Tool.init(tools.send),
       })
       const terminal = tools.terminal ? yield* Tool.init(tools.terminal) : undefined
-      const lcm = yield* LcmToolRegistry.build(tools.lcm)
+      const lcm = yield* LcmToolRegistry.build(tools.lcm ?? [])
       const notebooks =
         tools.notebookRead && tools.notebookEdit && tools.notebookExecute
           ? yield* Effect.all({
@@ -206,7 +206,7 @@ export namespace KiloToolRegistry {
       terminal?: Tool.Def
       notify: Tool.Def
       send: Tool.Def
-      lcm: Tool.Def[]
+      lcm?: Tool.Def[]
       notebookRead?: Tool.Def
       notebookEdit?: Tool.Def
       notebookExecute?: Tool.Def
@@ -238,7 +238,7 @@ export namespace KiloToolRegistry {
         : []),
       tools.notify,
       tools.send,
-      ...LcmToolRegistry.extra(tools.lcm, cfg),
+      ...LcmToolRegistry.extra(tools.lcm ?? [], cfg),
     ]
   }
 

@@ -59,7 +59,7 @@ for (const symbol of ["LcmGrepTool", "LcmDescribeTool", "LcmExpandQueryTool", "L
 if (!kiloRegistry.includes('import * as LcmToolRegistry from "./lcm-registry"')) {
   fail("Kilo tool registry does not import the LCM tool bundle")
 }
-if (!kiloRegistry.includes("...LcmToolRegistry.extra(tools.lcm, cfg)")) {
+if (!kiloRegistry.includes("...LcmToolRegistry.extra(tools.lcm ?? [], cfg)")) {
   fail("Kilo tool registry does not append the configured LCM tools")
 }
 if (registry.includes("LcmToolRegistry")) {
