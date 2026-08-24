@@ -61,6 +61,7 @@ type RawModel = {
   name?: string
   reasoning?: boolean
   modalities?: { input?: unknown; output?: unknown }
+  limit?: { context?: unknown; input?: unknown; output?: unknown }
   variants?: Record<string, Record<string, unknown>>
 }
 
@@ -108,7 +109,15 @@ function parseVariant([name, cfg]: [string, Record<string, unknown>]): VariantEn
 }
 
 function initModels(cfg: ProviderConfig | undefined): ModelEntry[] {
-  const empty = { id: "", name: "", reasoning: false, supportsImages: false, modalities: {}, variants: [] }
+  const empty: ModelEntry = {
+    id: "",
+    name: "",
+    reasoning: false,
+    supportsImages: false,
+    modalities: {},
+    limit: { context: "", input: "", output: "" },
+    variants: [],
+  }
   if (!cfg?.models || typeof cfg.models !== "object") return [{ ...empty }]
   const entries = Object.entries(cfg.models)
   if (entries.length === 0) return [{ ...empty }]
@@ -122,6 +131,11 @@ function initModels(cfg: ProviderConfig | undefined): ModelEntry[] {
       reasoning: raw.reasoning ?? false,
       supportsImages: input.includes("image"),
       modalities,
+      limit: {
+        context: typeof raw.limit?.context === "number" ? String(raw.limit.context) : "",
+        input: typeof raw.limit?.input === "number" ? String(raw.limit.input) : "",
+        output: typeof raw.limit?.output === "number" ? String(raw.limit.output) : "",
+      },
       variants: Object.entries(raw.variants ?? {}).map(parseVariant),
     }
   })
@@ -382,6 +396,7 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
       reasoning: false,
       supportsImages: false,
       modalities: {},
+      limit: { context: "", input: "", output: "" },
       variants: [],
     })
     const merged = empty ? toAdd.map(defaults) : [...form.models, ...toAdd.map(defaults)]
@@ -440,7 +455,15 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
   function addModel() {
     setForm("models", (v) => [
       ...v,
-      { id: "", name: "", reasoning: false, supportsImages: false, modalities: {}, variants: [] },
+      {
+        id: "",
+        name: "",
+        reasoning: false,
+        supportsImages: false,
+        modalities: {},
+        limit: { context: "", input: "", output: "" },
+        variants: [],
+      },
     ])
     setErrors("models", (v) => [...v, { variants: [] }])
   }
@@ -718,6 +741,9 @@ const CustomProviderDialog = (props: CustomProviderDialogProps) => {
                   canRemove={form.models.length > 1}
                   onChangeId={(v) => setForm("models", i(), "id", v)}
                   onChangeName={(v) => setForm("models", i(), "name", v)}
+                  onChangeContextLimit={(v) => setForm("models", i(), "limit", "context", v)}
+                  onChangeInputLimit={(v) => setForm("models", i(), "limit", "input", v)}
+                  onChangeOutputLimit={(v) => setForm("models", i(), "limit", "output", v)}
                   onChangeReasoning={(v) => setForm("models", i(), "reasoning", v)}
                   onChangeSupportsImages={(v) => setForm("models", i(), "supportsImages", v)}
                   onRemove={() => removeModel(i())}

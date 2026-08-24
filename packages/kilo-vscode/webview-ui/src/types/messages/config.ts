@@ -44,11 +44,16 @@ export interface CompactionConfig {
   prune?: boolean
 }
 
+export interface ConversationMemoryConfig {
+  soft_threshold_percent?: number | null
+}
+
 export interface WatcherConfig {
   ignore?: string[]
 }
 
 export interface ExperimentalConfig {
+  conversation_memory?: boolean
   batch_tool?: boolean
   image_generation?: boolean
   image_generation_model?: string
@@ -161,6 +166,7 @@ export interface Config {
   formatter?: false | Record<string, unknown>
   lsp?: false | Record<string, unknown>
   compaction?: CompactionConfig
+  conversation_memory?: ConversationMemoryConfig
   commit_message?: CommitMessageConfig
   tools?: Record<string, boolean>
   web_search?: boolean

@@ -131,6 +131,19 @@ const ExperimentalTab: Component = () => {
         </SettingsRow>
 
         <SettingsRow
+          title={language.t("conversationMemory.experimental.title")}
+          description={language.t("conversationMemory.experimental.description")}
+        >
+          <Switch
+            checked={experimental().conversation_memory ?? true}
+            onChange={(checked) => updateExperimental("conversation_memory", checked)}
+            hideLabel
+          >
+            {language.t("conversationMemory.experimental.title")}
+          </Switch>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.experimental.batch.title")}
           description={language.t("settings.experimental.batch.description")}
         >

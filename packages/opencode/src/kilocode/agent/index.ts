@@ -18,6 +18,18 @@ import PROMPT_ORCHESTRATOR from "../../agent/prompt/orchestrator.txt"
 import PROMPT_ASK from "../../agent/prompt/ask.txt"
 import PROMPT_EXPLORE from "../../agent/prompt/explore.txt"
 
+export const LCM_RECOVERY_TOOLS = [
+  "lcm_grep",
+  "lcm_describe",
+  "lcm_expand_query",
+  "lcm_expand",
+  "lcm_read",
+] as const
+
+export function lcmRecoveryPermissions() {
+  return Permission.fromConfig(Object.fromEntries(LCM_RECOVERY_TOOLS.map((tool) => [tool, "allow" as const])))
+}
+
 export const bash: Record<string, "allow" | "ask" | "deny"> = {
   "*": "ask",
   "cat *": "allow",
@@ -520,7 +532,7 @@ export function patchAgents(
 
   // Patch plan mode
   if (agents.plan) {
-    const guard = planGuard(worktree, kilo.mcpRules)
+    const guard = Permission.merge(planGuard(worktree, kilo.mcpRules), lcmRecoveryPermissions())
     agents.plan = {
       ...agents.plan,
       description: "Plan mode. Can only edit plan files; all other filesystem mutations are denied.",
@@ -561,6 +573,7 @@ export function patchAgents(
             ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
           },
         }),
+        lcmRecoveryPermissions(),
         user,
         // Explore is always delegated, so user allows cannot make its shell writable.
         Permission.fromConfig({ bash: exploreBash }),
@@ -616,6 +629,7 @@ export function patchAgents(
           [Truncate.GLOB]: "allow",
         },
       }),
+      lcmRecoveryPermissions(),
       user,
       // Enforce bash deny after user so user config cannot re-enable shell
       Permission.fromConfig({
@@ -628,7 +642,7 @@ export function patchAgents(
   }
 
   // Add ask agent
-  const guard = askGuard(kilo.mcpRules)
+  const guard = Permission.merge(askGuard(kilo.mcpRules), lcmRecoveryPermissions())
   agents.ask = {
     name: "ask",
     description: "Get answers and explanations without making changes to the codebase.",

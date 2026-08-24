@@ -80,6 +80,7 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
   })
 
   const hasTimeline = createMemo(() => {
+    if (session.lcmActivity().length > 0) return true
     for (const m of session.visibleMessages()) {
       if (m.role !== "assistant") continue
       if (session.getParts(m.id).some((p) => p.type !== "step-start")) return true
@@ -282,9 +283,11 @@ export const TaskHeader: Component<TaskHeaderProps> = (props) => {
         </div>
       </Show>
       {/* Expanded graph section: timeline + context bar + token breakdown */}
-      <Show when={expanded() && hasTimeline()}>
+      <Show when={expanded()}>
         <div data-component="task-header-graph">
-          <TaskTimeline />
+          <Show when={hasTimeline()}>
+            <TaskTimeline />
+          </Show>
           <div data-slot="task-header-graph-row">
             <ContextProgress />
           </div>

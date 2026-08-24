@@ -56,6 +56,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 // kilocode_change start
 import { Notebook } from "@/kilocode/notebook/service"
 import { AgentManager } from "@/kilocode/agent-manager/service"
+import { ConversationMemory } from "@/kilocode/session/lcm/service"
 // kilocode_change end
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -70,7 +71,14 @@ import { Pty } from "@opencode-ai/core/pty" // kilocode_change
 
 // kilocode_change start - retain Kilo runtime services in the upstream node graph
 const memory = LayerNode.make({ service: MemoryService.Service, layer: MemoryService.layer, deps: [] })
-const kilo = LayerNode.group([Credential.node, ModelCache.node, AgentManager.node, Notebook.node, memory])
+const kilo = LayerNode.group([
+  Credential.node,
+  ModelCache.node,
+  AgentManager.node,
+  Notebook.node,
+  ConversationMemory.node,
+  memory,
+])
 // kilocode_change end
 
 export const AppLayer = AppNodeBuilderV1.build(

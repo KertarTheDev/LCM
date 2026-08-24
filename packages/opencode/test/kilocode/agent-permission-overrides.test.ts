@@ -9,6 +9,8 @@ import { deriveSubagentSessionPermission } from "../../src/agent/subagent-permis
 import { provideTestInstance } from "../fixture/fixture"
 import { disposeAllInstances, provideInstance, testInstanceStoreLayer, tmpdir } from "../fixture/fixture"
 
+const LCM_TOOLS = ["lcm_grep", "lcm_describe", "lcm_expand_query", "lcm_expand", "lcm_read"]
+
 function load<A>(dir: string, fn: (svc: Agent.Interface) => Effect.Effect<A>) {
   return Effect.runPromise(
     provideInstance(dir)(Agent.Service.use(fn)).pipe(
@@ -35,6 +37,33 @@ function expectPlan(item: Agent.Info | undefined, action: Permission.Action = "a
 
 afterEach(async () => {
   await disposeAllInstances()
+})
+
+test("restricted built-in agents retain every Conversation Memory recovery tool", async () => {
+  for (const name of ["ask", "plan", "explore", "orchestrator"]) {
+    const agent = await get({}, name)
+    expect(agent).toBeDefined()
+    expect(Permission.disabled(LCM_TOOLS, agent!.permission)).toEqual(new Set())
+  }
+})
+
+test("explicit user Conversation Memory denies override built-in recovery defaults", async () => {
+  const ask = await get(
+    {
+      permission: {
+        lcm_read: "deny",
+      },
+      agent: {
+        ask: {
+          permission: {
+            lcm_expand_query: "deny",
+          },
+        },
+      },
+    },
+    "ask",
+  )
+  expect(Permission.disabled(LCM_TOOLS, ask!.permission)).toEqual(new Set(["lcm_expand_query", "lcm_read"]))
 })
 
 test("ask agent honors per-agent MCP allow over generated ask rule", async () => {
@@ -659,23 +688,26 @@ test("non-planning agents retain per-agent edit permissions", async () => {
   expect(Permission.evaluate("edit", "src/output.log", code!.permission).action).toBe("ask")
 })
 
-test("system utility agents ignore per-agent permission allows", async () => {
+test("system utility agents deny Conversation Memory recovery tools despite per-agent allows", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
         title: {
           permission: {
             bash: "allow",
+            lcm_read: "allow",
           },
         },
         summary: {
           permission: {
             read: "allow",
+            lcm_grep: "allow",
           },
         },
         compaction: {
           permission: {
             skill: "allow",
+            lcm_expand: "allow",
           },
         },
       },
@@ -694,6 +726,11 @@ test("system utility agents ignore per-agent permission allows", async () => {
       expect(Permission.evaluate("bash", "*", title!.permission).action).toBe("deny")
       expect(Permission.evaluate("read", "*", summary!.permission).action).toBe("deny")
       expect(Permission.evaluate("skill", "using-superpowers", compaction!.permission).action).toBe("deny")
+      for (const id of LCM_TOOLS) {
+        expect(Permission.evaluate(id, "*", title!.permission).action).toBe("deny")
+        expect(Permission.evaluate(id, "*", summary!.permission).action).toBe("deny")
+        expect(Permission.evaluate(id, "*", compaction!.permission).action).toBe("deny")
+      }
     },
   })
 })

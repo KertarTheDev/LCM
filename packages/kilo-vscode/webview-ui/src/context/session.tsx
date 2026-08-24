@@ -91,6 +91,7 @@ import { clearIfOn, createCloudPrune } from "./session-cloud-prune"
 import { isSameSessionTree } from "./model-usage"
 import { createDraftAgentSeed, resolvePromptAgent } from "./session-agent"
 import { createModelSelector } from "./session-model-selector"
+import { createLcmState, type LcmContextValue } from "./lcm-state"
 
 const RECENT_LIMIT = 5
 const MESSAGE_PAGE_LIMIT = 80
@@ -112,7 +113,7 @@ interface SessionStore {
   modelUsage: Record<string, { requestID: string; data?: SessionModelUsage }>
 }
 
-interface SessionContextValue {
+interface SessionContextValue extends LcmContextValue {
   // Current session
   currentSessionID: Accessor<string | undefined>
   currentSession: Accessor<SessionInfo | undefined>
@@ -315,6 +316,13 @@ export const SessionProvider: ParentComponent = (props) => {
   const [currentSessionID, setCurrentSessionID] = createSignal<string | undefined>()
   const [draftSessionID, setDraftSessionID] = createSignal<string | undefined>()
   const [userClearedSession, setUserClearedSession] = createSignal(false)
+  const requestLcm = (sessionID: string) => vscode.postMessage({ type: "requestLcmStatus", sessionID })
+  const lcm = createLcmState({
+    config,
+    sessionID: currentSessionID,
+    connected: server.isConnected,
+    requestStatus: requestLcm,
+  })
 
   // Per-session status map — keyed by sessionID
   const [statusMap, setStatusMap] = createStore<Record<string, SessionStatusInfo>>({})
@@ -1092,6 +1100,7 @@ export const SessionProvider: ParentComponent = (props) => {
   function handleExtensionMessage(message: ExtensionMessage): void {
     // Route suggestion messages (extracted to stay within complexity limit)
     routeSuggestionMessage(message)
+    lcm.route(message)
     if (handleModelUsageMessage(message)) return
     refreshModelUsageForMessage(message)
     if (handleStreamMessage(message)) return
@@ -3002,6 +3011,7 @@ export const SessionProvider: ParentComponent = (props) => {
     clearModelOverride,
     costBreakdown,
     contextUsage,
+    ...lcm.context,
     modelUsage,
     agents,
     allAgents,

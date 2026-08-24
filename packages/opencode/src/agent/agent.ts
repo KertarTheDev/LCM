@@ -274,6 +274,7 @@ const layer = Layer.effect(
                         [path.join(Global.Path.repos, "*")]: "allow",
                       },
                     }),
+                    KiloAgent.lcmRecoveryPermissions(),
                     user,
                   ),
                   description: `Docs and dependency-source specialist. Use this when you need to inspect external documentation, clone dependency repositories into the managed cache, and research library implementation details without modifying the user's workspace.`,
