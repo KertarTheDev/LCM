@@ -6,7 +6,40 @@ The product branch remains a direct, narrow augmentation of upstream tag `v7.4.2
 (`40fa10e50a75c4887978d892520d1246515413bf`). Correct the product branch with ordinary reviewable commits; do not
 rewrite its published history or replay old LCM branches.
 
-The current public prerelease is `v7.4.22-lcm.1`. It was published on 2026-08-16 from candidate
+The current public prerelease is `v7.4.23-lcm.1`. It was published on 2026-08-24 from candidate
+`cc4db8d99fea02c8ab057b884607354ea290a680`, containing verified product
+`941ed964867c275244ec19778d8d601e4b9a204d`. Exact-SHA workflow run
+[`32740430840`](https://github.com/KertarTheDev/LCM/actions/runs/32740430840) completed successfully, including exact
+27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
+typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
+runtime smoke. Release [`375779703`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.1) is a non-draft
+prerelease whose tag resolves to the candidate SHA. No previously healthy prerelease or matching tag was deleted. Its
+exact GitHub-reported asset manifest is:
+
+|Asset|Bytes|SHA-256|
+|---|---:|---|
+|`kilo-darwin-arm64.zip`|52,508,225|`91fc4ea40f83922218d2fa83a2e72fcfcc07f07560fa38162f7818c540314175`|
+|`kilo-darwin-x64-baseline.zip`|54,762,318|`770c30019c8f9a399b14e09dcc8849773f8bdda35f317f92b6f0f51a503c65d8`|
+|`kilo-darwin-x64.zip`|54,762,318|`407cfc769ac024ee94f64cd6543836a263ef85fe1cd5ed9230e4b88e0dde64a3`|
+|`kilo-linux-arm64-musl.tar.gz`|69,296,994|`33bfc602befbc9a081acbb06031986536c7fe6e91f81fa0211904961e922c5ff`|
+|`kilo-linux-arm64.tar.gz`|67,175,667|`fcf2e575ef9995b158d1a196a163b1c5057a2e4fc1c3dcda35b4af38cad56c78`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|69,784,691|`db8e170a6d2a62ec40c38e34c29cba8cda96e3a8486c0b145888e159a18b91be`|
+|`kilo-linux-x64-baseline.tar.gz`|67,415,981|`7b4d5a876c9181fc19ae3924cfaf2ff52039b9b26c097fc32c78d400e0f7fda3`|
+|`kilo-linux-x64-musl.tar.gz`|69,786,450|`4749b3175b7e5ad4441bfe9f8cbc3f9a8d34168dedf49eb6d00358f2e1173376`|
+|`kilo-linux-x64.tar.gz`|67,416,874|`e350c8cab3508e35f56e12c706add551e1922ea138157e051d91707b7f99b46e`|
+|`kilo-vscode-alpine-arm64.vsix`|110,092,554|`eaee095e667473666b9d1795a17c902959847170355d6b9f9cce7f87e8edd72b`|
+|`kilo-vscode-alpine-x64.vsix`|117,297,206|`cd7f73c36279d99839b20cd9afef92d61477d284c5da2d8572a4bf2dd0e5bc13`|
+|`kilo-vscode-darwin-arm64.vsix`|92,825,536|`df4aa5013bd301257734fc89eba293236fc5b6af39b779f6e72a08ff08857511`|
+|`kilo-vscode-darwin-x64.vsix`|100,893,986|`3cbdf572600cffb1d87454c360bbce8fb4c665c88f949cb25ec8cefc092b584d`|
+|`kilo-vscode-linux-arm64.vsix`|107,927,201|`d81fbf23812b36987eca30d81906694bfd4855c91cefff3c32cd71bcb133fd57`|
+|`kilo-vscode-linux-x64.vsix`|114,872,991|`6a4ddd4dad924102e14275f1fc3923fcde541aae12b638a59083ab267e79b36a`|
+|`kilo-vscode-win32-arm64.vsix`|89,701,546|`2ecf4c176d2d2691a5a806e268e767a103df8a46d83549463186f1434d9106c2`|
+|`kilo-vscode-win32-x64.vsix`|113,744,680|`3ecdb2fda930bea12f2cc3335b8afe36c557526169b6e27a007b714c8c525ff9`|
+|`kilo-windows-arm64.zip`|65,095,469|`f24485210eab2b2f6a89c3c216c23ba1f9c82fee0b49ebf1f23eddebbf86ac1e`|
+|`kilo-windows-x64-baseline.zip`|66,768,579|`f9b8e04d6938a2b1d774a3fd3b854f16b97c8dc46ba0955d0cdfd26666cc7f8b`|
+|`kilo-windows-x64.zip`|66,768,579|`dbc19e960b587a8d219d5ca494296d67fa79bd65c0cdd1b8da75cc1dbe8448f5`|
+
+The previous healthy prerelease `v7.4.22-lcm.1` remains published. It was published on 2026-08-16 from candidate
 `9234be5dc51a3e2e8f5ae52366c90a451b49edfa`, containing verified product
 `3e5be03a2b8436587f14dfcbe04ba81366b551a4`. Exact-SHA workflow run
 [`31951340616`](https://github.com/KertarTheDev/LCM/actions/runs/31951340616) completed successfully, including exact
@@ -38,7 +71,7 @@ prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported as
 |`kilo-windows-x64-baseline.zip`|66,711,696|`f53209e1bfd32bac5d967c9ec262cb6a0ffee93e43873ef4ca571e34c9c16d3c`|
 |`kilo-windows-x64.zip`|66,711,696|`305ce04eb2db2a83f8338bd3311cddcfe68198fcc208d8b6d4e920880ff20034`|
 
-The previous healthy prerelease `v7.4.21-lcm.2` remains published. It was published on 2026-08-12 from candidate
+The earlier healthy prerelease `v7.4.21-lcm.2` remains published. It was published on 2026-08-12 from candidate
 `5b0ff9b3618c8d27d1fedb86b9e4d6a253871053`, containing verified product
 `b3db0028e4a80804e2b18c595393f0564a2c41be`. Exact-SHA workflow run
 [`31642534580`](https://github.com/KertarTheDev/LCM/actions/runs/31642534580) completed successfully, including exact
