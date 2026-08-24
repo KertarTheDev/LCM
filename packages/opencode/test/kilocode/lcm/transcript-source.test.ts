@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
-import { bootstrapConsumedThrough, extractFinalSources } from "@/kilocode/session/lcm/transcript-source"
+import {
+  bootstrapConsumedThrough,
+  extractFinalSources,
+  replacementBootstrapConsumedThrough,
+} from "@/kilocode/session/lcm/transcript-source"
 import { sha256 } from "@/kilocode/session/lcm/ids"
 import type { MessageID, PartID } from "@/session/schema"
 
@@ -182,6 +186,56 @@ describe("LCM transcript source", () => {
     const sources = extractFinalSources(sessionID, transcript).map((item) => item.metadata)
     expect(bootstrapConsumedThrough(sessionID, transcript, sources)).toBe(1)
     expect(bootstrapConsumedThrough(sessionID, transcript.toReversed(), sources)).toBe(1)
+  })
+
+  test("re-bootstraps proven consumption after an unconsumed retry suffix is replaced", () => {
+    const [user] = messages()
+    const retry = {
+      info: {
+        ...user!.info,
+        id: messageID("msg_retry_new"),
+        time: { created: 6 },
+      },
+      parts: [
+        {
+          ...user!.parts[0]!,
+          id: partID("part_retry_new"),
+          messageID: messageID("msg_retry_new"),
+          text: "Retry the current unconsumed request.",
+        },
+      ],
+    } as SessionV1.WithParts
+    const transcript = [...messages(), retry]
+    const sources = extractFinalSources(sessionID, transcript).map((item) => item.metadata)
+    const previousSources = sources.map((source, index) =>
+      index === sources.length - 1
+        ? {
+            ...source,
+            id: "src_retry_old",
+            messageID: "msg_retry_old",
+            partID: "part_retry_old",
+          }
+        : source,
+    )
+
+    expect(
+      replacementBootstrapConsumedThrough({
+        sessionID,
+        messages: transcript,
+        previousSources,
+        sources,
+        hadPreviousLineage: true,
+      }),
+    ).toBe(1)
+    expect(
+      replacementBootstrapConsumedThrough({
+        sessionID,
+        messages: transcript,
+        previousSources: sources.slice(0, -1),
+        sources,
+        hadPreviousLineage: true,
+      }),
+    ).toBe(-1)
   })
 
   test("a later successful provider step consumes sequential and parallel LCM tool results", () => {

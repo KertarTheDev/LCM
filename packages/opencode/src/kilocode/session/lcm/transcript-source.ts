@@ -57,6 +57,26 @@ export function bootstrapConsumedThrough(sessionID: string, messages: WithParts[
   return sources.findLast((source) => consumedMessages.has(source.messageID))?.ordinal ?? -1
 }
 
+export function replacementBootstrapConsumedThrough(input: {
+  sessionID: string
+  messages: WithParts[]
+  previousSources: FinalSource[]
+  sources: FinalSource[]
+  hadPreviousLineage: boolean
+}) {
+  const strictAppend =
+    input.hadPreviousLineage &&
+    input.previousSources.length <= input.sources.length &&
+    input.previousSources.every(
+      (source, index) =>
+        source.id === input.sources[index]?.id &&
+        source.digest === input.sources[index]?.digest &&
+        source.ordinal === input.sources[index]?.ordinal,
+    )
+  if (strictAppend) return -1
+  return bootstrapConsumedThrough(input.sessionID, input.messages, input.sources)
+}
+
 function bytes(value: string) {
   return Buffer.byteLength(value)
 }

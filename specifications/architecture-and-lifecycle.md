@@ -23,7 +23,9 @@ equally to ordinary tool results and all five LCM recovery-tool results. Failed,
 interrupted requests do not advance durable consumption. When a sidecar is first created or rebuilt, retained
 successful non-summary assistant responses provide the same durable proof for messages that precede them; the proving
 response's own parts remain protected. Newly finalized assistant and tool results therefore remain protected until a
-later successful provider step.
+later successful provider step. Recovery that replaces only a failed or unconsumed request suffix invalidates the old
+lineage, then re-bootstraps only the prefix proven by retained successful responses; the replacement suffix remains
+protected.
 A successful provider step that hands off to an already queued prompt records consumption before the turn closes with
 upstream reason `superseded`; it is not an interrupted or failed request.
 

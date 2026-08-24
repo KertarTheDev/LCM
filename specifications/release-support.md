@@ -39,6 +39,16 @@ exact GitHub-reported asset manifest is:
 |`kilo-windows-x64-baseline.zip`|66,768,579|`f9b8e04d6938a2b1d774a3fd3b854f16b97c8dc46ba0955d0cdfd26666cc7f8b`|
 |`kilo-windows-x64.zip`|66,768,579|`dbc19e960b587a8d219d5ca494296d67fa79bd65c0cdd1b8da75cc1dbe8448f5`|
 
+The current `v7.4.23-lcm.1` release ID `375779703` is known faulty under retry recovery. A live 175k-token run showed
+that replacing only an unconsumed retried user suffix correctly invalidated derived lineage but also left the rebuilt
+sidecar with `consumed_through = -1`, despite retained successful assistant responses independently proving the older
+prefix had been consumed. Hard maintenance then saw no eligible sources and failed closed with
+`lcm_hard_limit_unresolved`. A fixed build must preserve replacement invalidation while reapplying only that
+proof-backed retained prefix; the replacement suffix must remain protected. Before another prerelease, exercise this
+restart/retry path through hard-pressure convergence. Keep `.1` available for audit until a differently tagged fixed
+replacement is published and verified; then remove release ID `375779703` and its matching tag only as part of that
+explicitly authorized replacement operation. No deletion is currently authorized.
+
 The previous healthy prerelease `v7.4.22-lcm.1` remains published. It was published on 2026-08-16 from candidate
 `9234be5dc51a3e2e8f5ae52366c90a451b49edfa`, containing verified product
 `3e5be03a2b8436587f14dfcbe04ba81366b551a4`. Exact-SHA workflow run

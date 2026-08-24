@@ -19,7 +19,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { GlobalBus } from "@/bus/global"
 import { Event as ServerEvent } from "@/server/event"
 import { LLMResponse } from "@opencode-ai/llm"
-import { bootstrapConsumedThrough, extractFinalSources } from "./transcript-source"
+import { extractFinalSources, replacementBootstrapConsumedThrough } from "./transcript-source"
 import { lineageDigest, sortableID } from "./ids"
 import { Projector } from "./projector"
 import { SqliteConversationMemoryStore } from "./store"
@@ -493,10 +493,14 @@ export const layer: Layer.Layer<
       const target = open()
       let state = await target.inspect(input.sessionID)
       if (state.lineageDigest !== lineage.digest || state.sourceCount !== sources.length) {
-        const bootstrap = state.lineageDigest
-          ? -1
-          : bootstrapConsumedThrough(input.sessionID, input.transcript, sources)
         const previousSources = state.lineageDigest ? await target.listSources(input.sessionID) : []
+        const bootstrap = replacementBootstrapConsumedThrough({
+          sessionID: input.sessionID,
+          messages: input.transcript,
+          previousSources,
+          sources,
+          hadPreviousLineage: Boolean(state.lineageDigest),
+        })
         const previousRevision = state.lineageDigest
           ? await target.activeRevision(input.sessionID, state.lineageDigest)
           : undefined

@@ -14,6 +14,8 @@ Consumption advances only for the exact lineage and only after a successful term
 to indexed history. On first cache creation or recovery, retained successful non-summary assistant responses
 bootstrap the conservative proven prefix that precedes the newest such response; that response's own parts are not
 marked consumed. A strict append preserves the bound; rewrite/revert/import resets it and rebuilds the active frontier.
+When recovery replaces a failed or unconsumed suffix, the reset lineage re-applies that same retained-response proof
+without consuming the replacement suffix.
 
 Source replacement, summary creation, consumption advancement, and frontier activation are transactional at their
 own boundaries. A frontier activates only after every referenced source/summary exists for the exact lineage.

@@ -15,7 +15,8 @@ Acceptance must prove:
   reuses or rebuilds retained state;
 - newest-first stream normalization and stable chronology for new, legacy, imported, and 100+ source sessions;
 - schema-v6/tree-v3 discard-and-rebuild without raw-body duplication or derived-cache migration;
-- durable per-provider-step successful-request consumption and protection after cancel/failure/overflow;
+- durable per-provider-step successful-request consumption, proof-based recovery after an unconsumed retry-suffix
+  replacement, and protection after cancel/failure/overflow;
 - sequential and parallel LCM recovery-tool results entering source lineage, becoming eligible after a later
   successful provider step, and remaining unconsumed after a failed later step;
 - successful queued handoff records consumption and closes as `superseded`, while upstream steering runs before a
