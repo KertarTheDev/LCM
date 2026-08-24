@@ -45,9 +45,12 @@ sidecar with `consumed_through = -1`, despite retained successful assistant resp
 prefix had been consumed. Hard maintenance then saw no eligible sources and failed closed with
 `lcm_hard_limit_unresolved`. A fixed build must preserve replacement invalidation while reapplying only that
 proof-backed retained prefix; the replacement suffix must remain protected. Before another prerelease, exercise this
-restart/retry path through hard-pressure convergence. Keep `.1` available for audit until a differently tagged fixed
-replacement is published and verified; then remove release ID `375779703` and its matching tag only as part of that
-explicitly authorized replacement operation. No deletion is currently authorized.
+restart/retry path through hard-pressure convergence. The repaired-source rerun also showed that direct hard-pressure
+projection created summaries and context frames without the required `frontier_advanced` activity record because that
+path bypassed the public maintenance wrapper; a fixed build must retain timeline evidence for both changed and
+irreducible hard preparation. Keep `.1` available for audit until a differently tagged fixed replacement is published
+and verified; then remove release ID `375779703` and its matching tag only as part of that explicitly authorized
+replacement operation. No deletion is currently authorized.
 
 The previous healthy prerelease `v7.4.22-lcm.1` remains published. It was published on 2026-08-16 from candidate
 `9234be5dc51a3e2e8f5ae52366c90a451b49edfa`, containing verified product

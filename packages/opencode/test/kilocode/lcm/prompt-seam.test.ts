@@ -64,4 +64,20 @@ describe("LCM prompt seam", () => {
     expect(source).toContain("Conversation Memory prepared an earlier-history summary.")
     expect(source).toContain('reason: input.reason === "hard" || hard ? "hard_built" : "soft_ready"')
   })
+
+  test("records direct hard-pressure preparation in the activity timeline", async () => {
+    const source = await Bun.file(servicePath).text()
+    const hard = source.indexOf("if (hard) {")
+    const build = source.indexOf("const revision = yield* Effect.promise", hard)
+    const activity = source.indexOf("synced.store.appendActivity", build)
+    const projected = source.indexOf('projectCurrent("hard")', activity)
+
+    expect(hard).toBeGreaterThan(0)
+    expect(build).toBeGreaterThan(hard)
+    expect(activity).toBeGreaterThan(build)
+    expect(projected).toBeGreaterThan(activity)
+    expect(source.slice(activity, projected)).toContain('kind: changed ? "frontier_advanced" : "intervention"')
+    expect(source.slice(activity, projected)).toContain("hard-level preparation")
+    expect(source.slice(activity, projected)).toContain("events.publish(LcmEvent.Activity")
+  })
 })

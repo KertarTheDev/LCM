@@ -975,7 +975,10 @@ export const layer: Layer.Layer<
         }
         yield* Effect.promise(() => setPhase(input.sessionID, "hard_running"))
         try {
-          yield* Effect.promise(() =>
+          const before = yield* Effect.promise(() =>
+            synced.store.activeRevision(input.sessionID, synced.lineage.digest),
+          )
+          const revision = yield* Effect.promise(() =>
             build(synced, {
               usableInputTokens: input.usableInputTokens,
               thresholdRatio: input.thresholdRatio,
@@ -983,6 +986,27 @@ export const layer: Layer.Layer<
               model: input.model,
               signal: input.signal,
             }),
+          )
+          // Direct overflow preparation bypasses maintain(), so it owns the matching timeline record.
+          const changed = Boolean(revision && revision.id !== before?.id)
+          const activity = yield* Effect.promise(() =>
+            synced.store.appendActivity({
+              id: sortableID("activity"),
+              sessionID: input.sessionID,
+              kind: changed ? "frontier_advanced" : "intervention",
+              ...(revision
+                ? { summaryIDs: revision.items.filter((item) => item.kind === "summary").map((item) => item.id) }
+                : {}),
+              message: changed
+                ? "Conversation Memory advanced the frontier during hard-level preparation."
+                : "Conversation Memory hard-level preparation found no further reducible history.",
+              createdAt: Date.now(),
+            }),
+          )
+          yield* Effect.promise(() =>
+            bridge
+              .promise(events.publish(LcmEvent.Activity, { sessionID: input.sessionID as SessionID, activity }))
+              .catch(() => undefined),
           )
         } finally {
           yield* Effect.promise(() => setPhase(input.sessionID, "idle"))
