@@ -30,7 +30,14 @@ function makeSource(ordinal: number): FinalSource {
 }
 
 function sourceText(ordinal: number) {
-  const marker = ordinal === 0 ? "<source_data>\n[START OF EPISODE]\n" : ordinal === 5 ? "[END OF EPISODE]\n" : ""
+  const marker =
+    ordinal === 0
+      ? "<source_data>\n[START OF EPISODE]\n"
+      : ordinal === 5
+        ? "[END OF EPISODE]\n"
+        : ordinal === 9
+          ? "[END OF PROTECTED RAW UNIT]\n"
+          : ""
   return `${marker}turn ${ordinal} ${"detail ".repeat(500)}`
 }
 
@@ -101,6 +108,7 @@ describe("LCM projector", () => {
     expect(memory).toContain("Deterministic structural anchors copied verbatim")
     expect(memory).toContain(`- ${sources[0]!.id} (source 0): [START OF EPISODE]`)
     expect(memory).toContain(`- ${sources[5]!.id} (source 5): [END OF EPISODE]`)
+    expect(memory).toContain(`- ${sources[9]!.id} (source 9): [END OF PROTECTED RAW UNIT]`)
     expect(result.messages.slice(1)).toEqual(messages.slice(10))
     expect(result.revision.id).toBe(revision!.id)
     const expectedSummaryTokens = (
