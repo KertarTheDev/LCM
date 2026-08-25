@@ -54,6 +54,23 @@ describe("LCM context export", () => {
       summaryTokens: 0,
       createdAt: 1,
     })
+    await store.recordAttempt({
+      id: "attempt_test",
+      nodeKey: "node_test",
+      sessionID: "ses_export",
+      providerID: "provider_test",
+      modelID: "model_test",
+      mode: "normal",
+      inputTokens: 1_000,
+      outputTokens: 0,
+      reasoningTokens: 20,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      cost: 0,
+      errorCode: "lcm_summary_rejected",
+      durationMs: 200,
+      createdAt: 2,
+    })
     for (let index = 0; index < 105; index++) {
       await store.appendActivity({
         id: `activity_${index}`,
@@ -79,14 +96,27 @@ describe("LCM context export", () => {
     const entries = await zip.getEntries()
     expect(entries.map((entry) => entry.filename).toSorted()).toEqual(["context.json", "context.md", "manifest.json"])
     const context = await entries.find((entry) => entry.filename === "context.json")!.getData!(new TextWriter())
-    const parsed = JSON.parse(context) as { activity: unknown[]; product: { upstreamBase: string } }
+    const parsed = JSON.parse(context) as {
+      activity: unknown[]
+      attempts: Array<{ id: string; errorCode?: string }>
+      product: { upstreamBase: string }
+    }
     const manifest = JSON.parse(
       await entries.find((entry) => entry.filename === "manifest.json")!.getData!(new TextWriter()),
-    ) as { frameCount: number; files: Record<string, { sha256: string }>; product: { upstreamBase: string } }
+    ) as {
+      frameCount: number
+      attemptCount: number
+      files: Record<string, { sha256: string }>
+      product: { upstreamBase: string }
+    }
     expect(manifest.frameCount).toBe(1)
     expect(parsed.product.upstreamBase).toBe(LCM_UPSTREAM_BASE)
     expect(manifest.product.upstreamBase).toBe("v7.4.23")
     expect(parsed.activity).toHaveLength(105)
+    expect(parsed.attempts).toEqual([
+      expect.objectContaining({ id: "attempt_test", errorCode: "lcm_summary_rejected" }),
+    ])
+    expect(manifest.attemptCount).toBe(1)
     expect(manifest.files["context.json"]?.sha256).toBe(sha256(context))
     expect(context).toContain("excluded-binary")
     expect(context).toContain("excluded-sensitive")

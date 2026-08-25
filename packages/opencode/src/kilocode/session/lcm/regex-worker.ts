@@ -3,12 +3,15 @@ interface Request {
   flags: string
   values: Array<{ id: string; text: string }>
   recordLimit: number
+  rangeOffset: number
   rangeLimit: number
 }
 
 interface Match {
   id: string
   ranges: Array<{ start: number; end: number }>
+  matchCount: number
+  rangesComplete: boolean
 }
 
 self.onmessage = (event: MessageEvent<Request>) => {
@@ -22,13 +25,24 @@ self.onmessage = (event: MessageEvent<Request>) => {
     for (const value of event.data.values) {
       expression.lastIndex = 0
       const ranges: Match["ranges"] = []
-      while (ranges.length < event.data.rangeLimit) {
+      let matchCount = 0
+      while (true) {
         const match = expression.exec(value.text)
         if (!match) break
-        ranges.push({ start: match.index, end: match.index + match[0].length })
+        const occurrence = matchCount++
+        if (occurrence >= event.data.rangeOffset && ranges.length < event.data.rangeLimit) {
+          ranges.push({ start: match.index, end: match.index + match[0].length })
+        }
         if (match[0].length === 0) expression.lastIndex++
       }
-      if (ranges.length > 0) matches.push({ id: value.id, ranges })
+      if (ranges.length > 0) {
+        matches.push({
+          id: value.id,
+          ranges,
+          matchCount,
+          rangesComplete: event.data.rangeOffset === 0 && ranges.length === matchCount,
+        })
+      }
       if (matches.length >= event.data.recordLimit) break
     }
     self.postMessage({ matches })

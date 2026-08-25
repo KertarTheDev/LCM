@@ -39,5 +39,8 @@ reports the stable disabled error. Manual compact/summarize affordances retain t
 using forced LCM maintenance when enabled and upstream legacy compaction when disabled.
 
 Export remains a private atomic ZIP containing normalized pre/post frames, current and retained diagnostic revisions,
-summary relationships, source metadata, activity, the exact current upstream base identity (`v7.4.23`), and hashes. It
-excludes executable functions, credentials, provider headers/options/wire bodies, and raw inline binary bytes.
+summary relationships, sanitized summary-attempt provenance and usage, source metadata, activity, the exact current
+upstream base identity (`v7.4.23`), and hashes. It excludes summary prompts and responses, executable functions,
+credentials, provider headers/options/wire bodies, and raw inline binary bytes.
+Frame `summaryTokens` counts only active summary-node estimates, consistent with status composition; it does not
+mislabel the entire projected memory message, which may also contain eligible raw roots and rendering overhead.

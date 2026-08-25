@@ -83,7 +83,15 @@ describe("LCM projector", () => {
     expect(isConversationMemoryMessage(result.messages[0]!)).toBe(true)
     expect(result.messages.slice(1)).toEqual(messages.slice(10))
     expect(result.revision.id).toBe(revision!.id)
-    expect(result.summaryTokens).toBe(measure([result.messages[0]!]) - measure([]))
+    const expectedSummaryTokens = (
+      await Promise.all(
+        result.revision.items
+          .filter((item) => item.kind === "summary")
+          .map((item) => store.getSummary("ses_project", item.id)),
+      )
+    ).reduce((tokens, summary) => tokens + (summary?.tokens ?? 0), 0)
+    expect(result.summaryTokens).toBe(expectedSummaryTokens)
+    expect(result.summaryTokens).toBeLessThan(measure([result.messages[0]!]) - measure([]))
 
     await store.commitRevision({
       ...revision!,

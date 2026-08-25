@@ -7,10 +7,17 @@ import {
   matchingContextFrame,
   providerRequiresBlocking,
   recentTailTokens,
+  transformationVariant,
 } from "@/kilocode/session/lcm/service"
 import type { ContextFrame, FinalSource, FrontierRevision } from "@/kilocode/session/lcm/types"
 
 describe("LCM maintenance policy", () => {
+  test("prefers a non-reasoning variant for bounded memory transformations", () => {
+    expect(transformationVariant({ variants: { low: {}, none: {}, high: {} } })).toBe("none")
+    expect(transformationVariant({ variants: { instant: {}, low: {} } })).toBe("instant")
+    expect(transformationVariant({ variants: { low: {} } })).toBeUndefined()
+  })
+
   test("requires a positive usable input capacity before maintenance", () => {
     expect(hasKnownCapacity(undefined)).toBe(false)
     expect(hasKnownCapacity(0)).toBe(false)

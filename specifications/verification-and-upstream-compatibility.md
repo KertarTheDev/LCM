@@ -22,8 +22,9 @@ Acceptance must prove:
 - successful queued handoff records consumption and closes as `superseded`, while upstream steering runs before a
   dismissed blocking question resumes;
 - 15%-clamped exact tail plus explicit override;
-- incremental one-quantum soft work, stable projection, multi-level hard convergence, and deterministic strict
-  compression;
+- incremental one-call soft quanta that leave raw history unchanged, apply bounded retry delay after model failure,
+  and use a non-reasoning transformation variant when available; stable projection, multi-level hard convergence, and
+  deterministic strict compression;
 - optimistic provider overlap, observed single-flight blocking, fair session quanta, and hard/manual priority;
 - irreducible constrained state and fail-closed `lcm_hard_limit_unresolved`;
 - no legacy threshold preflight or post-success automatic compaction scheduling in enabled LCM flow for every
@@ -40,7 +41,8 @@ Acceptance must prove:
   while deterministic reduction still converges over recovery-tool output containing cross-references;
 - coherent enabled status lane/phase/frame fields including the protected recent-consumed/unconsumed split, disabled
   typed 409 responses, conditional UI/tool/TUI surfaces,
-  reopened-session actions, frontier-only timeline events, export redaction/hashes, and generated contract stability;
+  reopened-session actions, frontier-only timeline events, export redaction/hashes plus sanitized summary-attempt
+  provenance, and generated contract stability;
 - unchanged v7.4.23 remote, Project Memory, structured output, request identity, skill, first-response-byte timeout,
   JSONC, and SQLite behavior outside the deliberate seams;
 - the v7.4.23 prompt tool-service environment, GPT-5.6 OAuth capacity, raw SQLite WAL recovery, Ask-to-Code reminder,

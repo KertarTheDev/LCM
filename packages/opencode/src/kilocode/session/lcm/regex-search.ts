@@ -1,6 +1,8 @@
 interface Match {
   id: string
   ranges: Array<{ start: number; end: number }>
+  matchCount: number
+  rangesComplete: boolean
 }
 
 const MAX_PATTERN_LENGTH = 512
@@ -12,6 +14,7 @@ export async function regexSearch(input: {
   caseSensitive: boolean
   values: Array<{ id: string; text: string }>
   recordLimit: number
+  rangeOffset?: number
   rangeLimit: number
   signal?: AbortSignal
 }) {
@@ -56,6 +59,7 @@ export async function regexSearch(input: {
       flags: input.caseSensitive ? "gu" : "giu",
       values: input.values,
       recordLimit: input.recordLimit,
+      rangeOffset: input.rangeOffset ?? 0,
       rangeLimit: input.rangeLimit,
     })
   })

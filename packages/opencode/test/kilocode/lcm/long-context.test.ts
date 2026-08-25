@@ -68,7 +68,7 @@ describe("LCM deterministic long-context continuity", () => {
 
     const currentSources = await store.listSources(fixture.sessionID)
     for (const binding of fixture.bindings) {
-      // lcm_grep searches retained raw-source excerpts, then lcm_read returns
+      // lcm_grep searches exact retained raw-source text, then lcm_read returns
       // the digest-verified body: two recovery calls regardless of tree depth.
       const match = currentSources.find((item) => item.excerpt.includes(binding.exact))
       expect(match, binding.name).toBeDefined()

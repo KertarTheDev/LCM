@@ -13,11 +13,24 @@ applies: explicit global or per-agent denies remove a tool, and hidden system ut
 
 ## `lcm_grep`
 
-Search retained current-session source excerpts and summary text. Inputs are `pattern`, optional `mode` (`literal` or
-`regex`), `caseSensitive`, `summaryID`, `limit`, and opaque `cursor`. Default limit is 20; maximum is 50. A summary
-scope searches its cycle-safe descendant closure. Regex work runs in a cancellable isolated worker with bounded
-per-source and aggregate input, matching records, ranges per record, and elapsed time. Oversized scopes fail
-explicitly instead of silently omitting sources, so the caller can narrow the search to a summary or use literal mode.
+Search exact retained current-session raw source text and summary text. Inputs are `pattern`, optional mode (`literal`
+or `regex`), `caseSensitive`, `summaryID`, `sourceID`, `occurrenceOffset`, `limit`, and opaque `cursor`. Default record
+limit is 20; maximum is 50. Literal mode treats regex syntax such as `|` as ordinary text; alternatives require regex
+mode. A summary scope
+searches its cycle-safe descendant closure; a source scope searches one exact current-lineage source, and both scopes
+may be combined. Each returned record reports an exact `matchCount`, bounded character
+`ranges`, matching UTF-8 `byteRanges`, local `occurrences` (up to five per global record or all 20 retained ranges for
+a source-scoped search), an exact occurrence-page offset/total/next offset, `rangesComplete`, `occurrencesComplete`,
+and source records identify their `sourceKind`, so a range cap or assistant/tool record is never mistaken for
+exhaustive user-source evidence. The caller can pass a
+`byteRange.start` to `lcm_read.offset` to inspect exact source text around any retained match. If a source has more than
+20 matches, repeat the source-scoped search with its `occurrencePage.nextOffset`. Regex work runs in a
+cancellable isolated worker with bounded per-source and aggregate input, matching records, retained ranges per record,
+and elapsed time. Oversized scopes fail explicitly
+instead of silently omitting sources, so the caller can narrow the search to a summary or source, or use literal mode.
+Unscoped search excludes the current user turn and its later assistant/tool sources, which remain visible in protected
+ordinary context; this prevents a recovery query from matching its own search terms. An explicit `sourceID` or
+`summaryID` can still address any trusted current-lineage item.
 
 ## `lcm_describe`
 
@@ -42,13 +55,17 @@ Kilo provider/model runtime with no tools. It does not create a child session, s
 turn. The answer is validated as `answer`, selected `citations`, and `coverage` (`full`, `partial`, or `none`), and its
 cost is added to the calling assistant message. Provider failure or invalid output is explicit. A bounded extractive
 fallback is allowed only for an explicit handle or at least two useful query terms.
+Unscoped retrieval uses the same prior-turn boundary as `lcm_grep`; an explicit summary scope may address a trusted
+current-lineage summary beyond that boundary.
 
 ## `lcm_read`
 
 Read a digest-verified source from the persisted Kilo transcript. Text reads default to 8 KiB and are capped at
-32 KiB; pagination preserves UTF-8 boundaries and binds the cursor to source ID, digest, and page size. Immutable
-persisted media may be returned through Kilo's normal attachment channel after digest verification. Current filesystem
-or remote URL bytes are never substituted.
+32 KiB. A non-negative UTF-8 byte `offset`, including a `lcm_grep` byte-range start, seeks directly to relevant exact
+text; an opaque cursor continues sequentially, and the two inputs are mutually exclusive. Reads preserve UTF-8
+boundaries and bind cursors to source ID, digest, and page size. Immutable persisted media may be returned through
+Kilo's normal attachment channel after digest verification. Current filesystem or remote URL bytes are never
+substituted.
 
 Cursors are signed and bound to the complete query. Changing a query field invalidates a cursor. All operations
 consume Kilo's cancellation signal and run through ordinary permission requests.

@@ -1,7 +1,14 @@
 import { TextReader, Uint8ArrayWriter, ZipWriter } from "@zip.js/zip.js"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { sha256, sortableID } from "./ids"
-import type { ActivityRecord, ContextFrame, ConversationMemoryStore, FrontierRevision, SummaryNode } from "./types"
+import type {
+  ActivityRecord,
+  ContextFrame,
+  ConversationMemoryStore,
+  FrontierRevision,
+  SummaryAttempt,
+  SummaryNode,
+} from "./types"
 
 export const CONTEXT_EXPORT_VERSION = 1
 export const LCM_IMPLEMENTATION_VERSION = 1
@@ -56,6 +63,7 @@ function markdown(input: {
   sessionID: string
   frames: ContextFrame[]
   summaries: SummaryNode[]
+  attempts: SummaryAttempt[]
   activity: ActivityRecord[]
 }) {
   return [
@@ -74,6 +82,17 @@ function markdown(input: {
       ? "No Conversation Memory activity was recorded."
       : input.activity
           .map((item) => `- ${new Date(item.createdAt).toISOString()} — ${item.kind}: ${item.message}`)
+          .join("\n"),
+    "",
+    "## Summary attempts",
+    "",
+    input.attempts.length === 0
+      ? "No summary model attempts were recorded."
+      : input.attempts
+          .map(
+            (item) =>
+              `- ${new Date(item.createdAt).toISOString()} — ${item.mode} on \`${item.nodeKey}\`: ${item.errorCode ?? item.finish ?? "completed"}; ${item.inputTokens} input / ${item.outputTokens} output / ${item.reasoningTokens} reasoning tokens; ${item.durationMs} ms`,
+          )
           .join("\n"),
     "",
     "## Retained summary nodes",
@@ -98,10 +117,11 @@ export async function createContextExport(input: {
   sessionID: string
   store: ConversationMemoryStore
 }): Promise<ContextExport> {
-  const [state, frames, summaries, activity] = await Promise.all([
+  const [state, frames, summaries, attempts, activity] = await Promise.all([
     input.store.inspect(input.sessionID),
     input.store.listFrames(input.sessionID),
     input.store.listSummaries(input.sessionID),
+    input.store.listAttempts(input.sessionID),
     allActivity(input.store, input.sessionID),
   ])
   const active = frames.filter((frame) => frame.active)
@@ -140,6 +160,7 @@ export async function createContextExport(input: {
     revisions,
     sources,
     summaries: summaryEntries,
+    attempts,
     activity: activity.toReversed(),
     health: {
       status: state.health,
@@ -147,7 +168,13 @@ export async function createContextExport(input: {
     },
   }
   const json = `${JSON.stringify(context, null, 2)}\n`
-  const md = markdown({ sessionID: input.sessionID, frames: selected, summaries, activity: activity.toReversed() })
+  const md = markdown({
+    sessionID: input.sessionID,
+    frames: selected,
+    summaries,
+    attempts,
+    activity: activity.toReversed(),
+  })
   const manifest = {
     formatVersion: CONTEXT_EXPORT_VERSION,
     product,
@@ -166,6 +193,7 @@ export async function createContextExport(input: {
     revisionIDs: revisions.map((revision) => revision.id),
     sourceCount: sources.length,
     summaryCount: summaryEntries.length,
+    attemptCount: attempts.length,
     exclusions: context.exclusions,
     files: {
       "context.json": { sha256: sha256(json), bytes: Buffer.byteLength(json) },

@@ -10,8 +10,11 @@ const Parameters = Schema.Struct({
   maxBytes: Schema.optional(Schema.Number).annotate({
     description: "Maximum UTF-8 bytes to return (default 8192, maximum 32768).",
   }),
+  offset: Schema.optional(Schema.Number).annotate({
+    description: "Optional UTF-8 byte offset, such as a byteRange start returned by lcm_grep.",
+  }),
   cursor: Schema.optional(Schema.String).annotate({
-    description: "Opaque nextCursor from the preceding read of this source.",
+    description: "Opaque nextCursor from the preceding read of this source; mutually exclusive with offset.",
   }),
 })
 
@@ -29,13 +32,21 @@ export function textChunk(value: string, offset: number, limit: number) {
   return { content: "", end: offset, total: buffer.byteLength }
 }
 
+export function validUtf8Offset(value: string, offset: number) {
+  if (!Number.isSafeInteger(offset) || offset < 0) return false
+  const buffer = Buffer.from(value)
+  if (offset > buffer.byteLength) return false
+  return offset === buffer.byteLength || (buffer[offset]! & 0xc0) !== 0x80
+}
+
 export const LcmReadTool = Tool.define(
   "lcm_read",
   Effect.gen(function* () {
     const memory = yield* ConversationMemory.Service
     const database = yield* Database.Service
     return {
-      description: "Read a bounded digest-verified byte range from one exact current-session conversation source.",
+      description:
+        "Read a bounded digest-verified byte range from one exact current-session conversation source. Start at a lcm_grep byteRange with offset, or continue sequentially with nextCursor.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -47,13 +58,23 @@ export const LcmReadTool = Tool.define(
           })
           const view = yield* loadMemory({ sessionID: ctx.sessionID, signal: ctx.abort, memory, database })
           const { source, content } = requireSource(view, params.sourceID)
+          if (params.maxBytes !== undefined && !Number.isFinite(params.maxBytes))
+            throw new LcmToolError("lcm_unavailable", "The source byte limit must be a finite number.")
           const maxBytes = Math.min(32 * 1024, Math.max(1, Math.floor(params.maxBytes ?? 8 * 1024)))
+          if (params.offset !== undefined && (!Number.isSafeInteger(params.offset) || params.offset < 0))
+            throw new LcmToolError("lcm_invalid_cursor", "The source byte offset must be a non-negative integer.")
+          if (params.offset !== undefined && params.cursor)
+            throw new LcmToolError("lcm_invalid_cursor", "Use either a source byte offset or a cursor, not both.")
           const query = { sourceID: source.id, digest: source.digest, maxBytes }
           let offset: number
-          try {
-            offset = decodeCursor(query, params.cursor)
-          } catch {
-            throw new LcmToolError("lcm_invalid_cursor", "The cursor does not belong to this source read.")
+          if (params.offset !== undefined) {
+            offset = params.offset
+          } else {
+            try {
+              offset = decodeCursor(query, params.cursor)
+            } catch {
+              throw new LcmToolError("lcm_invalid_cursor", "The cursor does not belong to this source read.")
+            }
           }
           if (content.immutableMedia) {
             if (offset !== 0) throw new LcmToolError("lcm_invalid_cursor", "Media sources do not use byte cursors.")
@@ -82,8 +103,9 @@ export const LcmReadTool = Tool.define(
               ],
             }
           }
+          if (!validUtf8Offset(content.content, offset))
+            throw new LcmToolError("lcm_invalid_cursor", "The source byte offset is not a UTF-8 boundary.")
           const chunk = textChunk(content.content, offset, maxBytes)
-          if (offset > chunk.total) throw new LcmToolError("lcm_invalid_cursor", "The source cursor is out of range.")
           const result = {
             kind: "text",
             sourceID: source.id,

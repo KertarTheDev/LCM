@@ -12,7 +12,12 @@ the sidecar is quarantined and rebuilt without modifying the Kilo transcript.
 Soft maintenance summarizes at most one eligible raw window per quantum. Leaf windows target 30% of usable input and
 never exceed 20,000 estimated tokens. Existing roots remain stable. When more than eight roots exist, the oldest four
 adjacent roots may be promoted as one complete group. Projection always uses the stable active roots; it never expands
-children opportunistically to spend spare context.
+children opportunistically to spend spare context. A soft quantum with a configured summary model makes exactly one
+normal generation attempt. A rejected, unavailable, or failed attempt leaves the frontier unchanged so a later
+checkpoint can retry the exact raw history; transient model trouble is never materialized as an immutable fallback
+summary. Failed soft generation also starts a bounded internal retry delay so rapid tool checkpoints do not repeatedly
+spend provider calls on the same unavailable window. Deterministic generation remains available to direct tree callers
+that have no summary model.
 
 Hard and manual maintenance summarize all eligible raw windows, then repeatedly promote bounded adjacent active
 summary groups until the full LCM-owned frontier reaches
@@ -25,8 +30,13 @@ makes reducible history converge.
 Summary candidates must be non-empty, smaller than their children, within 115% of target, cite at least one exact
 current child/descendant `src_` or `sum_` handle, contain no invented handle, and retain at least 16 non-whitespace
 characters after handles are removed. Rejected/failed attempts retain usage and error provenance. After rejected
-normal and aggressive attempts, the runtime uses the deterministic handle-preserving fallback. Summary calls have no
-tools, do not recurse through LCM, and write no transcript message.
+normal and aggressive attempts during hard or manual maintenance, the runtime uses the deterministic
+handle-preserving fallback. Summary calls have no tools, do not recurse through LCM, and write no transcript message.
+Because these calls are bounded text transformations, the runtime selects the model's `none` or `instant` variant when
+one is available; otherwise it preserves the configured compaction-agent variant. This prevents hidden reasoning from
+consuming a small summary output allowance without producing summary text.
+Generator input labels every child with its source kind and ordinal range so protocol acknowledgements, reasoning,
+tool evidence, raw user material, and prior summaries are not conflated.
 
 The exact recent tail defaults to 15% of usable input, clamped to 2,000–20,000 tokens. It and all unconsumed current
 sources are protected. Only consumed sources older than that tail are eligible. LCM recovery-tool results are ordinary

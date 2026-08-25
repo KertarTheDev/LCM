@@ -197,6 +197,7 @@ export class SummaryTree {
     items: TreeItem[]
     level: number
     usableInputTokens: number
+    maintenanceMode: "soft" | "hard" | "manual"
     signal?: AbortSignal
   }) {
     abort(input.signal)
@@ -249,6 +250,7 @@ export class SummaryTree {
             sessionID: input.sessionID,
             errorCode: candidate.attempt.errorCode ?? "lcm_summary_rejected",
           })
+        if (input.maintenanceMode === "soft") return
         candidate = await generate("aggressive")
       }
     }
@@ -338,6 +340,7 @@ export class SummaryTree {
     maxEligibleOrdinal: number
     usableInputTokens: number
     one: boolean
+    maintenanceMode: "soft" | "hard" | "manual"
     signal?: AbortSignal
   }) {
     let changed = false
@@ -366,6 +369,7 @@ export class SummaryTree {
           items: group.map(sourceItem),
           level: 0,
           usableInputTokens: input.usableInputTokens,
+          maintenanceMode: input.maintenanceMode,
           signal: input.signal,
         })
         if (!created) {
@@ -394,6 +398,7 @@ export class SummaryTree {
     usableInputTokens: number
     targetTokens: number
     force: boolean
+    maintenanceMode: "soft" | "hard" | "manual"
     signal?: AbortSignal
   }) {
     let changed = false
@@ -420,6 +425,7 @@ export class SummaryTree {
         items: children,
         level: Math.max(...children.map((item) => item.summary?.level ?? -1)) + 1,
         usableInputTokens: input.usableInputTokens,
+        maintenanceMode: input.maintenanceMode,
         signal: input.signal,
       })
       if (!created || created.tokens >= before) break
@@ -449,6 +455,7 @@ export class SummaryTree {
       maxEligibleOrdinal: input.maxEligibleOrdinal,
       usableInputTokens: input.usableInputTokens,
       one: input.mode === "soft",
+      maintenanceMode: input.mode,
       signal: input.signal,
     })
     const promoted =
@@ -461,6 +468,7 @@ export class SummaryTree {
             usableInputTokens: input.usableInputTokens,
             targetTokens: input.targetTokens,
             force: input.mode !== "soft",
+            maintenanceMode: input.mode,
             signal: input.signal,
           })
     if (!rawChanged && !promoted) return active

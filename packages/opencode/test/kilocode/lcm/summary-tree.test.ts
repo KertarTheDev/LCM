@@ -142,7 +142,7 @@ describe("LCM summary tree", () => {
       lineage,
       usableInputTokens: 8_000,
       protectedSources: 0,
-      reason: "background",
+      reason: "hard_built",
     })
 
     expect(revision).toBeDefined()
@@ -150,6 +150,50 @@ describe("LCM summary tree", () => {
     expect(summary?.generationMode).toBe("deterministic")
     expect(summary?.text).not.toContain("src_aaaaaaaaaaaaaaaaaaaaaaaa")
     expect((await store.metrics("ses_tree")).work.attempts).toBe(2)
+    store.close()
+  })
+
+  test("leaves the frontier unchanged after one rejected soft summary attempt", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = [makeSource(0)]
+    const digest = lineageDigest(sources)
+    const lineage = { sessionID: "ses_tree", digest, sourceCount: 1, lastSourceID: sources[0]?.id }
+    await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
+    const modes: string[] = []
+    const revision = await new SummaryTree(store, {
+      generate: async (request) => {
+        modes.push(request.mode)
+        return {
+          text: "Use invented source src_aaaaaaaaaaaaaaaaaaaaaaaa.",
+          mode: request.mode,
+          attempt: {
+            id: `attempt_${request.mode}`,
+            nodeKey: "",
+            sessionID: request.sessionID,
+            mode: request.mode,
+            inputTokens: 100,
+            outputTokens: 10,
+            reasoningTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            cost: 0.001,
+            durationMs: 1,
+            createdAt: 1,
+          },
+        }
+      },
+    }).build({
+      sessionID: "ses_tree",
+      lineage,
+      usableInputTokens: 8_000,
+      protectedSources: 0,
+      reason: "background",
+    })
+
+    expect(revision).toBeUndefined()
+    expect(modes).toEqual(["normal"])
+    expect(await store.listSummaries("ses_tree")).toEqual([])
+    expect((await store.metrics("ses_tree")).work.attempts).toBe(1)
     store.close()
   })
 
@@ -198,7 +242,7 @@ describe("LCM summary tree", () => {
         lineage,
         usableInputTokens: 8_000,
         protectedSources: 0,
-        reason: "background",
+        reason: "hard_built",
       })
 
       const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)

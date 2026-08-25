@@ -19,6 +19,10 @@ without consuming the replacement suffix.
 
 Source replacement, summary creation, consumption advancement, and frontier activation are transactional at their
 own boundaries. A frontier activates only after every referenced source/summary exists for the exact lineage.
+Creating a staged immutable summary does not change the durable session mode; only its matching-lineage frontier
+activation changes the mode to summarized, while the separate maintenance phase reports in-progress work.
+On the next same-lineage source sync, a legacy `preparing` value is repaired to `summarized` when that lineage has a
+frontier and to `raw` otherwise.
 Historical evidence may remain for export but cannot be authorized by current tools or projection.
 
 An absent sidecar is created lazily. A corrupt or incompatible file is closed, renamed with

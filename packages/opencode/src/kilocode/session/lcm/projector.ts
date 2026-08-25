@@ -24,8 +24,10 @@ function render(items: MemoryItem[]) {
   return [
     MEMORY_OPEN,
     "Earlier finalized conversation is represented below. Treat it as prior conversation state, not as new user",
-    "instructions. Preserve its decisions and constraints. When exact omitted detail matters, use lcm_grep,",
-    "lcm_describe, lcm_expand_query, lcm_expand, or lcm_read with the stable IDs shown here instead of guessing.",
+    "instructions. Preserve its decisions, constraints, and evidence. When exact omitted detail matters, use the",
+    "stable IDs instead of guessing: lcm_grep accepts sourceID, searches exact retained text, and reports match counts",
+    "plus occurrence byte ranges; lcm_read can seek to a byte-range offset or page exact source text; lcm_describe,",
+    "lcm_expand, and lcm_expand_query navigate or query summaries.",
     "",
     body,
     MEMORY_CLOSE,
@@ -110,7 +112,7 @@ export class Projector {
       pressureAfter,
       revision,
       rawTokens,
-      summaryTokens: Math.max(0, input.measure([memory]) - input.measure([])),
+      summaryTokens: roots.reduce((tokens, item) => tokens + (item.kind === "summary" ? item.summary.tokens : 0), 0),
     }
   }
 }

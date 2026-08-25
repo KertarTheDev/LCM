@@ -213,6 +213,26 @@ type EdgeRow = {
   ordinal: number
 }
 
+type AttemptRow = {
+  attempt_id: string
+  node_key: string
+  session_id: string
+  provider_id: string | null
+  model_id: string | null
+  variant: string | null
+  mode: SummaryAttempt["mode"]
+  input_tokens: number
+  output_tokens: number
+  reasoning_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
+  cost: number
+  finish: string | null
+  error_code: string | null
+  duration_ms: number
+  created_at: number
+}
+
 type RevisionRow = {
   revision_id: string
   session_id: string
@@ -301,6 +321,28 @@ function summary(row: SummaryRow): SummaryNode {
     firstOrdinal: row.first_ordinal,
     lastOrdinal: row.last_ordinal,
     generationMode: row.generation_mode,
+    createdAt: row.created_at,
+  }
+}
+
+function attempt(row: AttemptRow): SummaryAttempt {
+  return {
+    id: row.attempt_id,
+    nodeKey: row.node_key,
+    sessionID: row.session_id,
+    ...(row.provider_id ? { providerID: row.provider_id } : {}),
+    ...(row.model_id ? { modelID: row.model_id } : {}),
+    ...(row.variant ? { variant: row.variant } : {}),
+    mode: row.mode,
+    inputTokens: row.input_tokens,
+    outputTokens: row.output_tokens,
+    reasoningTokens: row.reasoning_tokens,
+    cacheReadTokens: row.cache_read_tokens,
+    cacheWriteTokens: row.cache_write_tokens,
+    cost: row.cost,
+    ...(row.finish ? { finish: row.finish } : {}),
+    ...(row.error_code ? { errorCode: row.error_code } : {}),
+    durationMs: row.duration_ms,
     createdAt: row.created_at,
   }
 }
@@ -421,6 +463,11 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
             source.digest === input.sources[index]?.digest &&
             source.ordinal === input.sources[index]?.ordinal,
         )
+      const hasCurrentRevision = this.client.get<{ found: number }>(
+        "SELECT 1 AS found FROM lcm_frontier_revision WHERE session_id = ? AND lineage_digest = ? LIMIT 1",
+        [input.sessionID, input.lineage.digest],
+      )
+      const recoveredState: MemoryState["state"] = hasCurrentRevision ? "summarized" : "raw"
       if (previous && previous.lineage_digest !== input.lineage.digest) {
         // Historical revisions remain derived export evidence. Exact-lineage
         // activation keeps them unreachable from the current prompt and tools.
@@ -464,7 +511,11 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
           END,
           source_count = excluded.source_count,
           status_sequence = lcm_session.status_sequence + 1,
-          state = CASE WHEN lcm_session.lineage_digest = excluded.lineage_digest THEN lcm_session.state ELSE 'raw' END,
+          state = CASE
+            WHEN lcm_session.lineage_digest != excluded.lineage_digest THEN 'raw'
+            WHEN lcm_session.state = 'preparing' THEN ?
+            ELSE lcm_session.state
+          END,
           health = 'ok',
           issue_json = NULL,
           updated_at = excluded.updated_at`,
@@ -475,6 +526,7 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
           input.sources.length,
           Date.now(),
           preservesConsumption ? 1 : 0,
+          recoveredState,
         ],
       )
     })
@@ -541,12 +593,10 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
         )
       }
       if (input.attempt) this.insertAttempt(input.attempt)
-      this.client.run(
-        `UPDATE lcm_session
-         SET state = 'preparing', status_sequence = status_sequence + 1, updated_at = ?
-         WHERE session_id = ?`,
-        [Date.now(), input.summary.sessionID],
-      )
+      // A summary node is immutable staging data until a matching-lineage frontier commits it.
+      // Optimistic provider overlap can make that frontier stale, so the node alone must not
+      // leave the durable session mode claiming that maintenance is still in progress.
+      this.touchStatus(input.summary.sessionID)
     })
   }
 
@@ -583,6 +633,14 @@ export class SqliteConversationMemoryStore implements ConversationMemoryStore {
       this.insertAttempt(attempt)
       this.touchStatus(attempt.sessionID)
     })
+  }
+
+  async listAttempts(sessionID: string): Promise<SummaryAttempt[]> {
+    return this.client
+      .all<AttemptRow>("SELECT * FROM lcm_summary_attempt WHERE session_id = ? ORDER BY created_at, attempt_id", [
+        sessionID,
+      ])
+      .map(attempt)
   }
 
   async getSummary(sessionID: string, summaryID: string): Promise<SummaryNode | undefined> {

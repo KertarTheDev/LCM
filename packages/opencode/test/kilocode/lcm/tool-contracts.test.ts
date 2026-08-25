@@ -1,10 +1,32 @@
 import { describe, expect, test } from "bun:test"
 import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
 import { regexSearch } from "@/kilocode/session/lcm/regex-search"
-import { textChunk } from "@/kilocode/tool/lcm-read"
+import { priorTurnSourceCutoff } from "@/kilocode/tool/lcm-common"
+import { literalRanges, utf8Ranges } from "@/kilocode/tool/lcm-grep"
+import { textChunk, validUtf8Offset } from "@/kilocode/tool/lcm-read"
 import { parseQueryAnswer, queryParts } from "@/kilocode/tool/lcm-expand-query"
 
 describe("LCM tool contracts", () => {
+  test("bounds unscoped recovery before the current user turn", () => {
+    const view = {
+      sources: new Map([
+        ["src_old_user", { messageID: "msg_old_user", ordinal: 0 }],
+        ["src_old_assistant", { messageID: "msg_old_assistant", ordinal: 1 }],
+        ["src_question", { messageID: "msg_question", ordinal: 2 }],
+        ["src_current_reasoning", { messageID: "msg_current_assistant", ordinal: 3 }],
+      ]),
+    }
+    const messages = [
+      { info: { id: "msg_old_user", role: "user" } },
+      { info: { id: "msg_old_assistant", role: "assistant" } },
+      { info: { id: "msg_question", role: "user" } },
+      { info: { id: "msg_current_assistant", role: "assistant" } },
+    ]
+
+    expect(priorTurnSourceCutoff(view, messages)).toBe(1)
+    expect(priorTurnSourceCutoff(view, [])).toBeUndefined()
+  })
+
   test("extracts stable handles and useful terms for bounded recovery queries", () => {
     expect(queryParts("What did src_alpha decide about the release branch and release tag?")).toEqual({
       handles: ["src_alpha"],
@@ -55,6 +77,8 @@ describe("LCM tool contracts", () => {
           { start: 0, end: 5 },
           { start: 10, end: 14 },
         ],
+        matchCount: 2,
+        rangesComplete: true,
       },
     ])
     await expect(
@@ -87,9 +111,44 @@ describe("LCM tool contracts", () => {
           { start: 0, end: 3 },
           { start: 4, end: 7 },
         ],
+        matchCount: 4,
+        rangesComplete: false,
       },
-      { id: "src_next", ranges: [{ start: 0, end: 3 }] },
+      { id: "src_next", ranges: [{ start: 0, end: 3 }], matchCount: 1, rangesComplete: true },
     ])
+  })
+
+  test("pages exact regex occurrences without losing the total match count", async () => {
+    const matches = await regexSearch({
+      pattern: "hit",
+      caseSensitive: true,
+      values: [{ id: "src_many", text: "hit hit hit hit" }],
+      recordLimit: 1,
+      rangeOffset: 1,
+      rangeLimit: 2,
+    })
+    expect(matches).toEqual([
+      {
+        id: "src_many",
+        ranges: [
+          { start: 4, end: 7 },
+          { start: 8, end: 11 },
+        ],
+        matchCount: 4,
+        rangesComplete: false,
+      },
+    ])
+  })
+
+  test("pages exact literal occurrences without losing the total match count", () => {
+    expect(literalRanges("hit hit hit hit", "hit", true, 1, 2)).toEqual({
+      ranges: [
+        { start: 4, end: 7 },
+        { start: 8, end: 11 },
+      ],
+      matchCount: 4,
+      rangesComplete: false,
+    })
   })
 
   test("advances zero-width regular expressions without hanging", async () => {
@@ -105,6 +164,8 @@ describe("LCM tool contracts", () => {
       { start: 1, end: 1 },
       { start: 2, end: 2 },
     ])
+    expect(matches[0]?.matchCount).toBe(3)
+    expect(matches[0]?.rangesComplete).toBe(true)
   })
 
   test("cancels regex work with the public cancellation code", async () => {
@@ -143,5 +204,20 @@ describe("LCM tool contracts", () => {
     expect(second.content).toBe("αβ")
     expect(second.end).toBe(6)
     expect(second.total).toBe(Buffer.byteLength(value))
+  })
+
+  test("maps grep character ranges to seekable UTF-8 byte ranges", () => {
+    expect(
+      utf8Ranges("aé🙂z", [
+        { start: 1, end: 2 },
+        { start: 2, end: 4 },
+      ]),
+    ).toEqual([
+      { start: 1, end: 3 },
+      { start: 3, end: 7 },
+    ])
+    expect(textChunk("aé🙂z", 3, 4).content).toBe("🙂")
+    expect(validUtf8Offset("aé🙂z", 3)).toBe(true)
+    expect(validUtf8Offset("aé🙂z", 2)).toBe(false)
   })
 })

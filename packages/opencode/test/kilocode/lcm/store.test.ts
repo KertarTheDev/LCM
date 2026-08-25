@@ -74,6 +74,7 @@ describe("LCM SQLite store", () => {
       createdAt: 1,
     }
     await store.commitSummary({ summary, children })
+    expect((await store.inspect("ses_test")).state).toBe("raw")
     await store.commitRevision({
       id: "rev_test",
       sessionID: "ses_test",
@@ -88,6 +89,33 @@ describe("LCM SQLite store", () => {
     expect((await store.activeRevision("ses_test", digest))?.items).toEqual([{ kind: "summary", id, ordinal: 0 }])
     expect((await store.inspect("ses_test")).state).toBe("summarized")
     store.close()
+  })
+
+  test("repairs a preparing mode left by an older staged-summary writer", async () => {
+    const root = mkdtempSync(path.join(process.env.TMPDIR ?? "/tmp", "lcm-store-preparing-"))
+    const target = path.join(root, "kilo.lcm.db")
+    const sources = [makeSource(0)]
+    const digest = lineageDigest(sources)
+    const lineage = { sessionID: "ses_test", digest, sourceCount: 1 }
+    const first = SqliteConversationMemoryStore.open({
+      databasePath: path.join(root, "kilo.db"),
+      derivedPath: target,
+    })
+    await first.replaceSources({ sessionID: "ses_test", sources, lineage })
+    first.close()
+
+    const legacy = new Database(target)
+    legacy.query("UPDATE lcm_session SET state = 'preparing' WHERE session_id = 'ses_test'").run()
+    legacy.close()
+
+    const reopened = SqliteConversationMemoryStore.open({
+      databasePath: path.join(root, "kilo.db"),
+      derivedPath: target,
+    })
+    await reopened.replaceSources({ sessionID: "ses_test", sources, lineage })
+    expect((await reopened.inspect("ses_test")).state).toBe("raw")
+    reopened.close()
+    rmSync(root, { recursive: true })
   })
 
   test("persists a monotonic status sequence across reopen", async () => {

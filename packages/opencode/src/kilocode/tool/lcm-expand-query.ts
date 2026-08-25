@@ -6,7 +6,14 @@ import { Provider } from "@/provider/provider"
 import { Session } from "@/session/session"
 import { ConversationMemory } from "@/kilocode/session/lcm/service"
 import { KiloCostPropagation } from "@/kilocode/session/cost-propagation"
-import { inertOutput, LcmToolError, loadMemory, requireSummary, type MemoryView } from "./lcm-common"
+import {
+  inertOutput,
+  LcmToolError,
+  loadMemory,
+  priorTurnSourceCutoff,
+  requireSummary,
+  type MemoryView,
+} from "./lcm-common"
 
 const Parameters = Schema.Struct({
   query: Schema.String.annotate({
@@ -85,24 +92,29 @@ export function selectQueryExcerpts(
   query: string,
   summaryID: string | undefined,
   budgetTokens: number,
+  maxOrdinal?: number,
 ) {
   const { handles, terms } = queryParts(query)
   const allowed = summaryID ? scope(summaryID, view) : undefined
   const candidates: Candidate[] = [
-    ...[...view.sources.values()].map((source) => ({
-      id: source.id,
-      kind: "source" as const,
-      ordinal: source.ordinal,
-      text: view.content.get(source.id)?.content ?? "",
-      score: 0,
-    })),
-    ...[...view.summaries.values()].map((summary) => ({
-      id: summary.id,
-      kind: "summary" as const,
-      ordinal: summary.firstOrdinal,
-      text: summary.text,
-      score: 0,
-    })),
+    ...[...view.sources.values()]
+      .filter((source) => maxOrdinal === undefined || source.ordinal <= maxOrdinal)
+      .map((source) => ({
+        id: source.id,
+        kind: "source" as const,
+        ordinal: source.ordinal,
+        text: view.content.get(source.id)?.content ?? "",
+        score: 0,
+      })),
+    ...[...view.summaries.values()]
+      .filter((summary) => maxOrdinal === undefined || summary.lastOrdinal <= maxOrdinal)
+      .map((summary) => ({
+        id: summary.id,
+        kind: "summary" as const,
+        ordinal: summary.firstOrdinal,
+        text: summary.text,
+        score: 0,
+      })),
   ]
     .filter((item) => !allowed || allowed.has(item.id))
     .map((item) => {
@@ -198,7 +210,8 @@ export const LcmExpandQueryTool = Tool.define(
           const inputLimit = model.limit.input ?? model.limit.context
           const usable = inputLimit > 0 ? Math.max(0, inputLimit - model.limit.output) : 0
           const budgetTokens = usable > 0 ? Math.min(16_000, Math.max(1_000, Math.floor(usable * 0.2))) : 4_000
-          const retrieval = selectQueryExcerpts(view, query, params.summaryID, budgetTokens)
+          const historicalCutoff = params.summaryID ? undefined : priorTurnSourceCutoff(view, ctx.messages)
+          const retrieval = selectQueryExcerpts(view, query, params.summaryID, budgetTokens, historicalCutoff)
           if (retrieval.selected.length === 0) {
             return {
               title: "Conversation Memory query",

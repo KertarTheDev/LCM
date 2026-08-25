@@ -265,6 +265,7 @@ export interface ConversationMemoryStore {
   getSource(sessionID: string, sourceID: string): Promise<FinalSource | undefined>
   commitSummary(input: { summary: SummaryNode; children: SummaryChild[]; attempt?: SummaryAttempt }): Promise<void>
   recordAttempt(attempt: SummaryAttempt): Promise<void>
+  listAttempts(sessionID: string): Promise<SummaryAttempt[]>
   getSummary(sessionID: string, summaryID: string): Promise<SummaryNode | undefined>
   findSummary(sessionID: string, nodeKey: string): Promise<SummaryNode | undefined>
   listSummaries(sessionID: string): Promise<SummaryNode[]>
