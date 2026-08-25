@@ -6,51 +6,49 @@ The product branch remains a direct, narrow augmentation of upstream tag `v7.4.2
 (`40fa10e50a75c4887978d892520d1246515413bf`). Correct the product branch with ordinary reviewable commits; do not
 rewrite its published history or replay old LCM branches.
 
-The current public prerelease is `v7.4.23-lcm.1`. It was published on 2026-08-24 from candidate
-`cc4db8d99fea02c8ab057b884607354ea290a680`, containing verified product
-`941ed964867c275244ec19778d8d601e4b9a204d`. Exact-SHA workflow run
-[`32740430840`](https://github.com/KertarTheDev/LCM/actions/runs/32740430840) completed successfully, including exact
+The current public prerelease is `v7.4.23-lcm.2`. It was published on 2026-08-25 from candidate
+`ac853c4c7964cfedb9673528d232af9fbae823a9`, containing verified product
+`5f1f7c7c15facf39fd214f29ca0eb7ef23d64680`. Exact-SHA workflow run
+[`32793536639`](https://github.com/KertarTheDev/LCM/actions/runs/32793536639) completed successfully, including exact
 27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
 typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
-runtime smoke. Release [`375779703`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.1) is a non-draft
-prerelease whose tag resolves to the candidate SHA. No previously healthy prerelease or matching tag was deleted. Its
-exact GitHub-reported asset manifest is:
+runtime smoke. Release [`376067342`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.2) is a non-draft
+prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
-|`kilo-darwin-arm64.zip`|52,508,225|`91fc4ea40f83922218d2fa83a2e72fcfcc07f07560fa38162f7818c540314175`|
-|`kilo-darwin-x64-baseline.zip`|54,762,318|`770c30019c8f9a399b14e09dcc8849773f8bdda35f317f92b6f0f51a503c65d8`|
-|`kilo-darwin-x64.zip`|54,762,318|`407cfc769ac024ee94f64cd6543836a263ef85fe1cd5ed9230e4b88e0dde64a3`|
-|`kilo-linux-arm64-musl.tar.gz`|69,296,994|`33bfc602befbc9a081acbb06031986536c7fe6e91f81fa0211904961e922c5ff`|
-|`kilo-linux-arm64.tar.gz`|67,175,667|`fcf2e575ef9995b158d1a196a163b1c5057a2e4fc1c3dcda35b4af38cad56c78`|
-|`kilo-linux-x64-baseline-musl.tar.gz`|69,784,691|`db8e170a6d2a62ec40c38e34c29cba8cda96e3a8486c0b145888e159a18b91be`|
-|`kilo-linux-x64-baseline.tar.gz`|67,415,981|`7b4d5a876c9181fc19ae3924cfaf2ff52039b9b26c097fc32c78d400e0f7fda3`|
-|`kilo-linux-x64-musl.tar.gz`|69,786,450|`4749b3175b7e5ad4441bfe9f8cbc3f9a8d34168dedf49eb6d00358f2e1173376`|
-|`kilo-linux-x64.tar.gz`|67,416,874|`e350c8cab3508e35f56e12c706add551e1922ea138157e051d91707b7f99b46e`|
-|`kilo-vscode-alpine-arm64.vsix`|110,092,554|`eaee095e667473666b9d1795a17c902959847170355d6b9f9cce7f87e8edd72b`|
-|`kilo-vscode-alpine-x64.vsix`|117,297,206|`cd7f73c36279d99839b20cd9afef92d61477d284c5da2d8572a4bf2dd0e5bc13`|
-|`kilo-vscode-darwin-arm64.vsix`|92,825,536|`df4aa5013bd301257734fc89eba293236fc5b6af39b779f6e72a08ff08857511`|
-|`kilo-vscode-darwin-x64.vsix`|100,893,986|`3cbdf572600cffb1d87454c360bbce8fb4c665c88f949cb25ec8cefc092b584d`|
-|`kilo-vscode-linux-arm64.vsix`|107,927,201|`d81fbf23812b36987eca30d81906694bfd4855c91cefff3c32cd71bcb133fd57`|
-|`kilo-vscode-linux-x64.vsix`|114,872,991|`6a4ddd4dad924102e14275f1fc3923fcde541aae12b638a59083ab267e79b36a`|
-|`kilo-vscode-win32-arm64.vsix`|89,701,546|`2ecf4c176d2d2691a5a806e268e767a103df8a46d83549463186f1434d9106c2`|
-|`kilo-vscode-win32-x64.vsix`|113,744,680|`3ecdb2fda930bea12f2cc3335b8afe36c557526169b6e27a007b714c8c525ff9`|
-|`kilo-windows-arm64.zip`|65,095,469|`f24485210eab2b2f6a89c3c216c23ba1f9c82fee0b49ebf1f23eddebbf86ac1e`|
-|`kilo-windows-x64-baseline.zip`|66,768,579|`f9b8e04d6938a2b1d774a3fd3b854f16b97c8dc46ba0955d0cdfd26666cc7f8b`|
-|`kilo-windows-x64.zip`|66,768,579|`dbc19e960b587a8d219d5ca494296d67fa79bd65c0cdd1b8da75cc1dbe8448f5`|
+|`kilo-darwin-arm64.zip`|52,509,267|`ce2e37d3b18b6b36da79bbe874b961f8b4b85ec7d8f4ef96b6362bb6e987aadb`|
+|`kilo-darwin-x64-baseline.zip`|54,765,647|`44f578cb9ff91a2a88cab8ba6a61b2581e2b46c2456820b167b3572e46c1efba`|
+|`kilo-darwin-x64.zip`|54,765,647|`045960a12d6c175429dce1918786161a9d9a22a55b659aa629620d9500353237`|
+|`kilo-linux-arm64-musl.tar.gz`|69,283,493|`fa391e46143eadbaf7ceb2a0ea4c3be7e65c63bd234f872db3a9114dec9ebd8e`|
+|`kilo-linux-arm64.tar.gz`|67,179,656|`5c7b65dcd85677945c54bcd9c8fb198e633e6b8f129ea89c77f8287ff58e29a3`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|69,771,705|`1c872b24ad0fef4867c949e4b241cce79b2e9edf3f6acbded7868b9d072d9cf4`|
+|`kilo-linux-x64-baseline.tar.gz`|67,420,666|`f8b1ed1bfc7cf694a46463ca18143ccb5a358fd2fca95e664a34431a944c8821`|
+|`kilo-linux-x64-musl.tar.gz`|69,771,346|`65b6d8fff6062e172a17616b299875fecfdcae119e665489b856e1f01d24c449`|
+|`kilo-linux-x64.tar.gz`|67,416,454|`7d1cff3fa7bd0f39c463bad5045b138035c135b27eaea2b0ce87eeba578a5e80`|
+|`kilo-vscode-alpine-arm64.vsix`|110,091,995|`b1ae86c71c81ed3481e3aaed29989c6c3e35da53a5d4d246a1473af8c032a03e`|
+|`kilo-vscode-alpine-x64.vsix`|117,299,641|`e5e33045815010275c1aa77427fc9c369c4c8f62271bd960120503ebe458cfbe`|
+|`kilo-vscode-darwin-arm64.vsix`|92,827,010|`fc4c9397e811f37715bc66f7fb42046c0c5ab14f210021a0dd17d642f2056842`|
+|`kilo-vscode-darwin-x64.vsix`|100,895,418|`5a7fcd6758c6c896712fcaf8801982c11bf6c98a05eaba6524987394238b7799`|
+|`kilo-vscode-linux-arm64.vsix`|107,929,032|`d84b532d686eb33cfa106a9a4dfe9e1606c5cb2951462c85206dcc20b0a94f3e`|
+|`kilo-vscode-linux-x64.vsix`|114,875,063|`3cf8bb8cf44ec633a4f8972e584141346738e5072f999c3d2971117995f4dcae`|
+|`kilo-vscode-win32-arm64.vsix`|89,703,071|`ecb5a67e30e97f4342314fa39325c7660aae80ccb4e438af2cdd464ab6f7144f`|
+|`kilo-vscode-win32-x64.vsix`|113,746,528|`d822db9badd26922abeafde005471fbd9dad9371be1d0d245a5ffc752d910507`|
+|`kilo-windows-arm64.zip`|65,095,755|`2eced120631b5d0551f4a2af926a61081cc173e8a0ca99b12695728ce8bea425`|
+|`kilo-windows-x64-baseline.zip`|66,769,949|`eb7bae46ec2df84f0c57437c6576c3e622c525afbb7b49cbb7e6211959134205`|
+|`kilo-windows-x64.zip`|66,769,949|`52ab25edab235d13efe48b89de742cc4eda5674963e56a1c71a1999884220187`|
 
-The current `v7.4.23-lcm.1` release ID `375779703` is known faulty under retry recovery. A live 175k-token run showed
-that replacing only an unconsumed retried user suffix correctly invalidated derived lineage but also left the rebuilt
-sidecar with `consumed_through = -1`, despite retained successful assistant responses independently proving the older
-prefix had been consumed. Hard maintenance then saw no eligible sources and failed closed with
-`lcm_hard_limit_unresolved`. A fixed build must preserve replacement invalidation while reapplying only that
-proof-backed retained prefix; the replacement suffix must remain protected. Before another prerelease, exercise this
-restart/retry path through hard-pressure convergence. The repaired-source rerun also showed that direct hard-pressure
-projection created summaries and context frames without the required `frontier_advanced` activity record because that
-path bypassed the public maintenance wrapper; a fixed build must retain timeline evidence for both changed and
-irreducible hard preparation. Keep `.1` available for audit until a differently tagged fixed replacement is published
-and verified; then remove release ID `375779703` and its matching tag only as part of that explicitly authorized
-replacement operation.
+The superseded `v7.4.23-lcm.1` release ID `375779703` and matching tag were removed only after `.2` passed exact
+publication verification. `.1` was published from candidate `cc4db8d99fea02c8ab057b884607354ea290a680`, containing
+product `941ed964867c275244ec19778d8d601e4b9a204d`, by retained workflow run
+[`32740430840`](https://github.com/KertarTheDev/LCM/actions/runs/32740430840). A live 175k-token run showed that replacing
+only an unconsumed retried user suffix correctly invalidated derived lineage but also left the rebuilt sidecar with
+`consumed_through = -1`, despite retained successful assistant responses independently proving the older prefix had
+been consumed. Hard maintenance then saw no eligible sources and failed closed with `lcm_hard_limit_unresolved`.
+`.2` preserves replacement invalidation while reapplying only that proof-backed retained prefix; the replacement
+suffix remains protected. It also records the required activity evidence for changed and irreducible direct
+hard-pressure preparation. The raw Kilo transcript was never affected. Deletion removed `.1`'s release assets and tag;
+its Actions audit history is retained, and no older historical prerelease was removed.
 
 An exact retained-release audit on 2026-08-25 found the same retry-lineage implementation in every still-published
 LCM prerelease from v7.4.16 through v7.4.22. Under hard context pressure, replacing a retried suffix can erase the
@@ -70,8 +68,8 @@ public identities are:
 
 Keep those exact older releases and tags published as historical prereleases after `v7.4.23-lcm.2` is verified. The
 current replacement operation does not authorize deleting any of these five releases. Only the separately captured
-`v7.4.23-lcm.1` release and matching tag are removed after the fixed replacement passes exact release, tag, asset, and
-packaged-runtime verification. Older already-absent faulty releases require no action.
+`v7.4.23-lcm.1` release and matching tag were removed after the fixed replacement passed exact release, tag, asset,
+and packaged-runtime verification. Older already-absent faulty releases require no action.
 
 The previous affected prerelease `v7.4.22-lcm.1` remains published as retained history. It was published on 2026-08-16
 from candidate
@@ -198,7 +196,8 @@ release it replaces. A successful differently tagged replacement may delete an o
 this document already identifies that exact tag and release ID as known faulty, states the defect, and requires its
 removal after the fixed replacement is verified. Capture and re-resolve the exact release ID/tag/SHA before deletion;
 never infer the target from "latest" or from tag order. The replacement operation described above authorizes deletion
-of only release ID `375779703` and tag `v7.4.23-lcm.1` after `v7.4.23-lcm.2` passes exact verification.
+of only release ID `375779703` and tag `v7.4.23-lcm.1`; that cleanup is complete. No further replacement deletion is
+authorized.
 
 Failed same-run publication cleanup is separate from replacement cleanup. If publication fails after creating a new
 draft or release, delete only that captured failed release ID and its matching tag. If failure occurs before draft
