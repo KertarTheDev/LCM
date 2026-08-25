@@ -237,6 +237,7 @@ export interface ProjectionInput {
   recentTailTokens: number
   protectedMessages: ModelMessage[]
   maxEligibleOrdinal: number
+  maxConsumedOrdinal: number
   sourceContent: ReadonlyMap<string, string>
   requestID?: string
   continuationID?: string

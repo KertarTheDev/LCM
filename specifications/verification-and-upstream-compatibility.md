@@ -39,7 +39,8 @@ Acceptance must prove:
   and one-call cited `lcm_expand_query` recovery;
 - substantive, exact-lineage summary citations with rejection of missing, invented, stale, or content-free handles,
   preservation of structural boundary/completeness evidence for reference data, an explicit lossy-summary recovery
-  warning for exhaustive questions, a deterministic ordered boundary map from every eligible consumed exact source,
+  warning for exhaustive questions, a deterministic ordered boundary map from every consumed exact source including
+  the protected recent tail but excluding the current unconsumed turn,
   compact unscoped grep discovery with exact source-scoped paging, and deterministic reduction over recovery-tool output
   containing cross-references;
 - coherent enabled status lane/phase/frame fields including the protected recent-consumed/unconsumed split, disabled

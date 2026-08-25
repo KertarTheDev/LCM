@@ -985,6 +985,7 @@ export const layer: Layer.Layer<
           recentTailTokens: input.recentTailTokens,
           protectedMessages: input.protectedMessages,
           maxEligibleOrdinal: synced.maxEligibleOrdinal,
+          maxConsumedOrdinal: synced.consumedThrough,
           sourceContent: synced.content,
           requestID: input.requestID,
           continuationID: input.continuationID,

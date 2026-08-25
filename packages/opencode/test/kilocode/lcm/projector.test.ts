@@ -36,8 +36,12 @@ function sourceText(ordinal: number) {
       : ordinal === 5
         ? "[END OF EPISODE]\n"
         : ordinal === 9
-          ? "[END OF PROTECTED RAW UNIT]\n"
-          : ""
+          ? "[END OF ELIGIBLE RAW UNIT]\n"
+          : ordinal === 10
+            ? "[END OF PROTECTED RAW UNIT]\n"
+            : ordinal === 11
+              ? "[END OF CURRENT RAW UNIT]\n"
+              : ""
   return `${marker}turn ${ordinal} ${"detail ".repeat(500)}`
 }
 
@@ -91,6 +95,7 @@ describe("LCM projector", () => {
       recentTailTokens: 1_000,
       protectedMessages: messages.slice(10),
       maxEligibleOrdinal: 9,
+      maxConsumedOrdinal: 10,
       sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
       continuationID: "msg_current",
       reason: "soft",
@@ -108,7 +113,9 @@ describe("LCM projector", () => {
     expect(memory).toContain("Deterministic structural anchors copied verbatim")
     expect(memory).toContain(`- ${sources[0]!.id} (source 0): [START OF EPISODE]`)
     expect(memory).toContain(`- ${sources[5]!.id} (source 5): [END OF EPISODE]`)
-    expect(memory).toContain(`- ${sources[9]!.id} (source 9): [END OF PROTECTED RAW UNIT]`)
+    expect(memory).toContain(`- ${sources[9]!.id} (source 9): [END OF ELIGIBLE RAW UNIT]`)
+    expect(memory).toContain(`- ${sources[10]!.id} (source 10): [END OF PROTECTED RAW UNIT]`)
+    expect(memory).not.toContain(`- ${sources[11]!.id} (source 11): [END OF CURRENT RAW UNIT]`)
     expect(result.messages.slice(1)).toEqual(messages.slice(10))
     expect(result.revision.id).toBe(revision!.id)
     const expectedSummaryTokens = (
@@ -137,6 +144,7 @@ describe("LCM projector", () => {
       recentTailTokens: 1_000,
       protectedMessages: messages.slice(10),
       maxEligibleOrdinal: 9,
+      maxConsumedOrdinal: 10,
       sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
       continuationID: "msg_current",
       reason: "soft",
@@ -155,6 +163,7 @@ describe("LCM projector", () => {
       recentTailTokens: 1_000,
       protectedMessages: messages.slice(10),
       maxEligibleOrdinal: 9,
+      maxConsumedOrdinal: 10,
       sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
       continuationID: "msg_current",
       reason: "hard",
@@ -173,6 +182,7 @@ describe("LCM projector", () => {
       recentTailTokens: 1_000,
       protectedMessages: messages.slice(10),
       maxEligibleOrdinal: 9,
+      maxConsumedOrdinal: 10,
       sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
       continuationID: "msg_next",
       reason: "soft",
@@ -197,6 +207,7 @@ describe("LCM projector", () => {
       recentTailTokens: 1_000,
       protectedMessages: messages.slice(10),
       maxEligibleOrdinal: 9,
+      maxConsumedOrdinal: 10,
       sourceContent: new Map(sources.map((source) => [source.id, sourceText(source.ordinal)])),
       continuationID: "msg_next",
       reason: "soft",
@@ -219,6 +230,7 @@ describe("LCM projector", () => {
       recentTailTokens: 2_000,
       protectedMessages: messages,
       maxEligibleOrdinal: -1,
+      maxConsumedOrdinal: -1,
       sourceContent: new Map(),
       reason: "soft" as const,
       measure,
@@ -280,6 +292,7 @@ describe("LCM projector", () => {
       recentTailTokens: 2_000,
       protectedMessages: messages.slice(36),
       maxEligibleOrdinal: 35,
+      maxConsumedOrdinal: 35,
       sourceContent,
       reason: "soft",
       measure,
@@ -295,6 +308,7 @@ describe("LCM projector", () => {
       recentTailTokens: 2_000,
       protectedMessages: messages.slice(36),
       maxEligibleOrdinal: 35,
+      maxConsumedOrdinal: 35,
       sourceContent,
       reason: "soft",
       measure,

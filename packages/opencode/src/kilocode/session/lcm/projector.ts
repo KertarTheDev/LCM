@@ -57,7 +57,7 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
       ? []
       : [
           "",
-          "Deterministic structural anchors copied verbatim from eligible finalized sources:",
+          "Deterministic structural anchors copied verbatim from consumed finalized sources:",
           "Occurrences are in transcript-source order. Transport/data wrappers are anchors too, not semantic units.",
           ...anchors,
           ...(structural.anchors.length < structural.total
@@ -96,7 +96,7 @@ export class Projector {
     string,
     {
       revisionID: string
-      maxEligibleOrdinal: number
+      maxConsumedOrdinal: number
       index: StructuralAnchorIndex
     }
   >()
@@ -108,9 +108,9 @@ export class Projector {
     revisionID: string,
   ): Promise<StructuralAnchorIndex | undefined> {
     const cached = this.structuralIndexes.get(input.sessionID)
-    if (cached?.revisionID === revisionID && cached.maxEligibleOrdinal === input.maxEligibleOrdinal) return cached.index
+    if (cached?.revisionID === revisionID && cached.maxConsumedOrdinal === input.maxConsumedOrdinal) return cached.index
     const sources = (await this.store.listSources(input.sessionID))
-      .filter((source) => source.ordinal <= input.maxEligibleOrdinal)
+      .filter((source) => source.ordinal <= input.maxConsumedOrdinal)
       .toSorted((a, b) => a.ordinal - b.ordinal || a.id.localeCompare(b.id))
     if (input.signal?.aborted || sources.some((source) => !input.sourceContent.has(source.id))) return
 
@@ -129,7 +129,7 @@ export class Projector {
       }
     }
     const index = { anchors, total }
-    this.structuralIndexes.set(input.sessionID, { revisionID, maxEligibleOrdinal: input.maxEligibleOrdinal, index })
+    this.structuralIndexes.set(input.sessionID, { revisionID, maxConsumedOrdinal: input.maxConsumedOrdinal, index })
     return index
   }
 
