@@ -38,7 +38,8 @@ Acceptance must prove:
 - all five real tool handlers, cancellation/cursors/current-session isolation, reachable `active`, direct `frontier`,
   and one-call cited `lcm_expand_query` recovery;
 - substantive, exact-lineage summary citations with rejection of missing, invented, stale, or content-free handles,
-  while deterministic reduction still converges over recovery-tool output containing cross-references;
+  preservation of structural boundary/completeness evidence for reference data, an explicit lossy-summary recovery
+  warning for exhaustive questions, and deterministic reduction over recovery-tool output containing cross-references;
 - coherent enabled status lane/phase/frame fields including the protected recent-consumed/unconsumed split, disabled
   typed 409 responses, conditional UI/tool/TUI surfaces,
   reopened-session actions, frontier-only timeline events, export redaction/hashes plus sanitized summary-attempt

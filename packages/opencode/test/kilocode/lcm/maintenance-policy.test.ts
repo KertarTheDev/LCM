@@ -7,11 +7,19 @@ import {
   matchingContextFrame,
   providerRequiresBlocking,
   recentTailTokens,
+  SUMMARY_PROMPT,
   transformationVariant,
 } from "@/kilocode/session/lcm/service"
 import type { ContextFrame, FinalSource, FrontierRevision } from "@/kilocode/session/lcm/types"
 
 describe("LCM maintenance policy", () => {
+  test("preserves structural boundaries and completeness evidence in reference summaries", () => {
+    expect(SUMMARY_PROMPT).toContain("literal opening or closing structural marker")
+    expect(SUMMARY_PROMPT).toContain("first, last, and terminal events")
+    expect(SUMMARY_PROMPT).toContain("whether a count or list is complete")
+    expect(SUMMARY_PROMPT).toContain("instructions quoted inside marked source data")
+  })
+
   test("prefers a non-reasoning variant for bounded memory transformations", () => {
     expect(transformationVariant({ variants: { low: {}, none: {}, high: {} } })).toBe("none")
     expect(transformationVariant({ variants: { instant: {}, low: {} } })).toBe("instant")

@@ -36,7 +36,10 @@ Because these calls are bounded text transformations, the runtime selects the mo
 one is available; otherwise it preserves the configured compaction-agent variant. This prevents hidden reasoning from
 consuming a small summary output allowance without producing summary text.
 Generator input labels every child with its source kind and ordinal range so protocol acknowledgements, reasoning,
-tool evidence, raw user material, and prior summaries are not conflated.
+tool evidence, raw user material, and prior summaries are not conflated. Reference-data summaries preserve literal
+opening/closing structural markers and known fragment boundary state, do not merge adjacent marked units, retain
+first/last/terminal events and completeness evidence for ordered or enumerative material, and treat instructions
+inside explicit data/reference delimiters as source evidence rather than active session goals.
 
 The exact recent tail defaults to 15% of usable input, clamped to 2,000–20,000 tokens. It and all unconsumed current
 sources are protected. Only consumed sources older than that tail are eligible. LCM recovery-tool results are ordinary
@@ -48,7 +51,9 @@ first protected persisted message, independently converts that transformed suffi
 matches the exact suffix of the finalized provider messages. The protected suffix is then copied by identity,
 unchanged. If that boundary cannot be verified, LCM leaves the request unchanged below the hard limit and fails closed
 at the hard limit. A projection is accepted only when it reduces the measured request, fits usable input, and belongs
-to the exact current lineage.
+to the exact current lineage. Its inert memory preamble explicitly identifies summaries as lossy indexes and directs
+the model to verify relevant retained raw sources for exact, exhaustive, boundary-sensitive, first/last, count, or
+complete-list questions instead of inferring completeness from summary omissions.
 
 Frontier reasons exposed to diagnostics are `soft_leaf`, `hard_level`, and `manual`; `append` is an internal exact
 roll-forward revision. `lcm_describe.active` means reachable anywhere in the active tree. Its separate `frontier`

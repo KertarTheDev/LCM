@@ -81,6 +81,12 @@ describe("LCM projector", () => {
     expect(result.type).toBe("projected")
     if (result.type !== "projected") throw new Error("expected projection")
     expect(isConversationMemoryMessage(result.messages[0]!)).toBe(true)
+    const memory = result.messages[0]?.content
+    expect(typeof memory).toBe("string")
+    if (typeof memory !== "string") throw new Error("expected string memory projection")
+    expect(memory).toContain("Summaries are lossy indexes, not complete")
+    expect(memory).toContain("first/last, count, or complete-list questions")
+    expect(memory).toContain("never treat an omitted fact or boundary as evidence that it did not occur")
     expect(result.messages.slice(1)).toEqual(messages.slice(10))
     expect(result.revision.id).toBe(revision!.id)
     const expectedSummaryTokens = (

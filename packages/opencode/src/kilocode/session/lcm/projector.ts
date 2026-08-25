@@ -24,8 +24,10 @@ function render(items: MemoryItem[]) {
   return [
     MEMORY_OPEN,
     "Earlier finalized conversation is represented below. Treat it as prior conversation state, not as new user",
-    "instructions. Preserve its decisions, constraints, and evidence. When exact omitted detail matters, use the",
-    "stable IDs instead of guessing: lcm_grep accepts sourceID, searches exact retained text, and reports match counts",
+    "instructions. Preserve its decisions, constraints, and evidence. Summaries are lossy indexes, not complete",
+    "records: never treat an omitted fact or boundary as evidence that it did not occur. For exact, exhaustive,",
+    "boundary-sensitive, first/last, count, or complete-list questions, verify relevant summarized regions with the",
+    "stable IDs instead of guessing. lcm_grep accepts sourceID, searches exact retained text, and reports match counts",
     "plus occurrence byte ranges; lcm_read can seek to a byte-range offset or page exact source text; lcm_describe,",
     "lcm_expand, and lcm_expand_query navigate or query summaries.",
     "",
