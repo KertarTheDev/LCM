@@ -55,9 +55,10 @@ replacement operation.
 An exact retained-release audit on 2026-08-25 found the same retry-lineage implementation in every still-published
 LCM prerelease from v7.4.16 through v7.4.22. Under hard context pressure, replacing a retried suffix can erase the
 proof-backed consumed prefix, leave no eligible history for maintenance, and make the request fail closed even though
-the retained transcript is reducible. That makes these builds unusable for the long-session retry/recovery scenario
-that LCM exists to support. The separate missing hard-preparation activity record is an observability defect and is not
-by itself a removal reason. The exact affected public identities are:
+the retained transcript is reducible. These builds remain usable outside that specific long-session retry/recovery
+edge case and are retained as historical prereleases rather than current recommendations. The separate missing
+hard-preparation activity record is an observability defect and is not by itself a removal reason. The exact affected
+public identities are:
 
 |Tag|Release ID|Candidate|Product|
 |---|---:|---|---|
@@ -67,13 +68,13 @@ by itself a removal reason. The exact affected public identities are:
 |`v7.4.17-lcm.2`|`364019885`|`f44368ca82defa4aeeb2dd822e95b96061132a0a`|`d934b8332a81dacd9617a6a0be8dad362b35f96e`|
 |`v7.4.16-lcm.3`|`360907867`|`2cab563d6c58552b9abd4e7b58579cdc7ba39a3a`|`82b79ba06fa892b3e3a778a420992ed67938c68e`|
 
-Keep those exact releases and tags available for audit until `v7.4.23-lcm.2` is published from the fixed product and
-passes exact release, tag, asset, and packaged-runtime verification. The authorized replacement operation must then
-remove only the six affected release IDs listed here, including `v7.4.23-lcm.1`, and their matching tags. Older
-already-absent faulty releases require no action.
+Keep those exact older releases and tags published as historical prereleases after `v7.4.23-lcm.2` is verified. The
+current replacement operation does not authorize deleting any of these five releases. Only the separately captured
+`v7.4.23-lcm.1` release and matching tag are removed after the fixed replacement passes exact release, tag, asset, and
+packaged-runtime verification. Older already-absent faulty releases require no action.
 
-The previous affected prerelease `v7.4.22-lcm.1` remains published pending the verified replacement. It was published
-on 2026-08-16 from candidate
+The previous affected prerelease `v7.4.22-lcm.1` remains published as retained history. It was published on 2026-08-16
+from candidate
 `9234be5dc51a3e2e8f5ae52366c90a451b49edfa`, containing verified product
 `3e5be03a2b8436587f14dfcbe04ba81366b551a4`. Exact-SHA workflow run
 [`31951340616`](https://github.com/KertarTheDev/LCM/actions/runs/31951340616) completed successfully, including exact
@@ -105,8 +106,8 @@ prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported as
 |`kilo-windows-x64-baseline.zip`|66,711,696|`f53209e1bfd32bac5d967c9ec262cb6a0ffee93e43873ef4ca571e34c9c16d3c`|
 |`kilo-windows-x64.zip`|66,711,696|`305ce04eb2db2a83f8338bd3311cddcfe68198fcc208d8b6d4e920880ff20034`|
 
-The earlier affected prerelease `v7.4.21-lcm.2` remains published pending the verified replacement. It was published
-on 2026-08-12 from candidate
+The earlier affected prerelease `v7.4.21-lcm.2` remains published as retained history. It was published on 2026-08-12
+from candidate
 `5b0ff9b3618c8d27d1fedb86b9e4d6a253871053`, containing verified product
 `b3db0028e4a80804e2b18c595393f0564a2c41be`. Exact-SHA workflow run
 [`31642534580`](https://github.com/KertarTheDev/LCM/actions/runs/31642534580) completed successfully, including exact
@@ -144,10 +145,9 @@ tool calls could accumulate as protected raw provider context instead of becomin
 successful provider step. It also accepted model summaries with no recovery handle and negligible content. The raw
 Kilo transcript was not affected, and `.2` rebuilds the disposable pre-v6 sidecar.
 
-Affected release [`365487957`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.20-lcm.1), release
+Historical release [`365487957`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.20-lcm.1), release
 [`364019885`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.17-lcm.2), and release
-[`360907867`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.16-lcm.3) remain published only until the verified
-fixed replacement is available. The
+[`360907867`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.16-lcm.3) remain published as retained history. The
 obsolete `v7.4.17-lcm.1` release ID `362945030` and its matching tag remain absent, as do the incompatible v7.4.16
 `.1` and faulty `.2` releases and tags.
 
@@ -193,12 +193,12 @@ heterogeneous-tool typings in the focused registry fixture during canonical type
 that inspected only stdout even though this CLI emitted help on stderr. Both defects were corrected on the product
 branch, their Actions audit history is retained, and unrelated upstream version/build/publish jobs remained skipped.
 
-Unaffected healthy prereleases are retained history. Publishing a newer prerelease does not authorize deleting the
+Historical prereleases are retained by default. Publishing a newer prerelease does not authorize deleting the
 release it replaces. A successful differently tagged replacement may delete an older published prerelease only when
 this document already identifies that exact tag and release ID as known faulty, states the defect, and requires its
 removal after the fixed replacement is verified. Capture and re-resolve the exact release ID/tag/SHA before deletion;
 never infer the target from "latest" or from tag order. The replacement operation described above authorizes deletion
-of only the six captured affected releases after `v7.4.23-lcm.2` passes exact verification.
+of only release ID `375779703` and tag `v7.4.23-lcm.1` after `v7.4.23-lcm.2` passes exact verification.
 
 Failed same-run publication cleanup is separate from replacement cleanup. If publication fails after creating a new
 draft or release, delete only that captured failed release ID and its matching tag. If failure occurs before draft
