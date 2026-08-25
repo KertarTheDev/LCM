@@ -38,9 +38,9 @@ prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported as
 |`kilo-windows-x64-baseline.zip`|66,773,865|`7f54381b23c1a9cb7291704a023a3ff96ea15bca35d419c5ba93000f47670e45`|
 |`kilo-windows-x64.zip`|66,773,865|`e3b940e0dd50551998deae1c39bc215c6e02eccbf2c53ee997373ef6136b4f9d`|
 
-The superseded `v7.4.23-lcm.2` release ID `376067342` remains published as retained history. It was published from
-candidate `ac853c4c7964cfedb9673528d232af9fbae823a9`, containing product
-`5f1f7c7c15facf39fd214f29ca0eb7ef23d64680`, by retained workflow run
+The known-faulty `v7.4.23-lcm.2` release ID `376067342` and matching tag were removed on 2026-08-26 after `.3` passed
+exact publication verification. `.2` was published from candidate `ac853c4c7964cfedb9673528d232af9fbae823a9`,
+containing product `5f1f7c7c15facf39fd214f29ca0eb7ef23d64680`, by retained workflow run
 [`32793536639`](https://github.com/KertarTheDev/LCM/actions/runs/32793536639). Subsequent 175k-token reference QA showed
 that `.2` could not reliably preserve or expose exhaustive evidence after compression: model summaries could omit
 structural boundaries, unscoped recovery could match the current recovery turn, and capped grep ranges did not report
@@ -48,8 +48,8 @@ an exact total or support source-scoped occurrence paging. A staged summary that
 legacy durable `preparing` mode. `.3` preserves an ordered exact structural-anchor map across every consumed source,
 including the protected recent tail; bounds unscoped recovery before the current turn; adds exact occurrence totals,
 source-scoped paging, and seekable byte ranges; repairs stale mode; improves summary provenance and retry behavior; and
-exports sanitized summary-attempt evidence. `.2` remains usable outside those long-session recovery cases and is
-retained under the historical-prerelease policy rather than deleted.
+exports sanitized summary-attempt evidence. The raw Kilo transcript was never affected. Deletion removed `.2`'s
+release assets and tag; its Actions audit history is retained, and no older historical prerelease was removed.
 
 The superseded `v7.4.23-lcm.1` release ID `375779703` and matching tag were removed only after `.2` passed exact
 publication verification. `.1` was published from candidate `cc4db8d99fea02c8ab057b884607354ea290a680`, containing
@@ -80,9 +80,9 @@ public identities are:
 |`v7.4.16-lcm.3`|`360907867`|`2cab563d6c58552b9abd4e7b58579cdc7ba39a3a`|`82b79ba06fa892b3e3a778a420992ed67938c68e`|
 
 Keep those exact older releases and tags published as historical prereleases after `v7.4.23-lcm.3` is verified. The
-current replacement operation does not authorize deleting any of these five releases. Only the separately captured
-`v7.4.23-lcm.1` release and matching tag were removed after the fixed replacement passed exact release, tag, asset,
-and packaged-runtime verification. Older already-absent faulty releases require no action.
+completed v7.4.23 cleanup does not authorize deleting any of these five releases. Only the separately captured
+`v7.4.23-lcm.1` and `v7.4.23-lcm.2` releases and matching tags were removed after their fixed replacements passed exact
+release, tag, asset, and packaged-runtime verification. Older already-absent faulty releases require no action.
 
 The previous affected prerelease `v7.4.22-lcm.1` remains published as retained history. It was published on 2026-08-16
 from candidate
@@ -208,9 +208,9 @@ Historical prereleases are retained by default. Publishing a newer prerelease do
 release it replaces. A successful differently tagged replacement may delete an older published prerelease only when
 this document already identifies that exact tag and release ID as known faulty, states the defect, and requires its
 removal after the fixed replacement is verified. Capture and re-resolve the exact release ID/tag/SHA before deletion;
-never infer the target from "latest" or from tag order. The replacement operation described above authorizes deletion
-of only release ID `375779703` and tag `v7.4.23-lcm.1`; that cleanup is complete. No further replacement deletion is
-authorized.
+never infer the target from "latest" or from tag order. The completed v7.4.23 replacement cleanup removed only release
+ID `375779703` and tag `v7.4.23-lcm.1`, followed by release ID `376067342` and tag `v7.4.23-lcm.2` after `.3` was
+verified. No further replacement deletion is authorized.
 
 Failed same-run publication cleanup is separate from replacement cleanup. If publication fails after creating a new
 draft or release, delete only that captured failed release ID and its matching tag. If failure occurs before draft
