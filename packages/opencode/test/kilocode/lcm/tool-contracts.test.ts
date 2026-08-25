@@ -2,11 +2,16 @@ import { describe, expect, test } from "bun:test"
 import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
 import { regexSearch } from "@/kilocode/session/lcm/regex-search"
 import { priorTurnSourceCutoff } from "@/kilocode/tool/lcm-common"
-import { literalRanges, utf8Ranges } from "@/kilocode/tool/lcm-grep"
+import { grepRangeLimit, literalRanges, utf8Ranges } from "@/kilocode/tool/lcm-grep"
 import { textChunk, validUtf8Offset } from "@/kilocode/tool/lcm-read"
 import { parseQueryAnswer, queryParts } from "@/kilocode/tool/lcm-expand-query"
 
 describe("LCM tool contracts", () => {
+  test("keeps global grep as discovery and reserves wider occurrence pages for exact source scopes", () => {
+    expect(grepRangeLimit(false)).toBe(3)
+    expect(grepRangeLimit(true)).toBe(20)
+  })
+
   test("bounds unscoped recovery before the current user turn", () => {
     const view = {
       sources: new Map([

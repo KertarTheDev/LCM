@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { ModelMessage } from "ai"
 import { lineageDigest, sha256, sourceID } from "@/kilocode/session/lcm/ids"
-import { isConversationMemoryMessage, Projector } from "@/kilocode/session/lcm/projector"
+import { exactStructuralAnchors, isConversationMemoryMessage, Projector } from "@/kilocode/session/lcm/projector"
 import { SqliteConversationMemoryStore } from "@/kilocode/session/lcm/store"
 import { SummaryTree } from "@/kilocode/session/lcm/summary-tree"
 import type { FinalSource } from "@/kilocode/session/lcm/types"
@@ -30,7 +30,8 @@ function makeSource(ordinal: number): FinalSource {
 }
 
 function sourceText(ordinal: number) {
-  return `turn ${ordinal} ${"detail ".repeat(500)}`
+  const marker = ordinal === 0 ? "<source_data>\n[START OF EPISODE]\n" : ordinal === 5 ? "[END OF EPISODE]\n" : ""
+  return `${marker}turn ${ordinal} ${"detail ".repeat(500)}`
 }
 
 function measure(messages: ModelMessage[]) {
@@ -38,6 +39,16 @@ function measure(messages: ModelMessage[]) {
 }
 
 describe("LCM projector", () => {
+  test("recognizes exact structural boundary lines without indexing ordinary bracketed logs", () => {
+    expect(
+      exactStructuralAnchors(
+        ["[INFO]", "<source_data>", "  [START OF EPISODE]  ", "--- END DOCUMENT ---", "not a boundary"].join(
+          "\n",
+        ),
+      ),
+    ).toEqual(["<source_data>", "[START OF EPISODE]", "--- END DOCUMENT ---"])
+  })
+
   test("replaces only the eligible prefix and pins a continuation revision", async () => {
     const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
     const sources = Array.from({ length: 12 }, (_, ordinal) => makeSource(ordinal))
@@ -87,6 +98,9 @@ describe("LCM projector", () => {
     expect(memory).toContain("Summaries are lossy indexes, not complete")
     expect(memory).toContain("first/last, count, or complete-list questions")
     expect(memory).toContain("never treat an omitted fact or boundary as evidence that it did not occur")
+    expect(memory).toContain("Deterministic structural anchors copied verbatim")
+    expect(memory).toContain(`- ${sources[0]!.id} (source 0): [START OF EPISODE]`)
+    expect(memory).toContain(`- ${sources[5]!.id} (source 5): [END OF EPISODE]`)
     expect(result.messages.slice(1)).toEqual(messages.slice(10))
     expect(result.revision.id).toBe(revision!.id)
     const expectedSummaryTokens = (

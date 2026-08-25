@@ -53,7 +53,10 @@ unchanged. If that boundary cannot be verified, LCM leaves the request unchanged
 at the hard limit. A projection is accepted only when it reduces the measured request, fits usable input, and belongs
 to the exact current lineage. Its inert memory preamble explicitly identifies summaries as lossy indexes and directs
 the model to verify relevant retained raw sources for exact, exhaustive, boundary-sensitive, first/last, count, or
-complete-list questions instead of inferring completeness from summary omissions.
+complete-list questions instead of inferring completeness from summary omissions. The projection also derives a
+bounded, ordered structural-anchor map directly from exact raw descendants of active summaries. This carries literal
+opening/closing delimiters and their source handles independently of model-generated summary prose; if its safety cap
+is reached, the map says it is incomplete and directs recovery rather than implying complete coverage.
 
 Frontier reasons exposed to diagnostics are `soft_leaf`, `hard_level`, and `manual`; `append` is an internal exact
 roll-forward revision. `lcm_describe.active` means reachable anywhere in the active tree. Its separate `frontier`

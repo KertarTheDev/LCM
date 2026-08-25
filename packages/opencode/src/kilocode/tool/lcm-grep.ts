@@ -15,7 +15,11 @@ import {
 import type { SummaryChild } from "@/kilocode/session/lcm/types"
 
 const MAX_RANGES_PER_RECORD = 20
-const MAX_OCCURRENCES_PER_RECORD = 5
+const MAX_UNSCOPED_RANGES_PER_RECORD = 3
+
+export function grepRangeLimit(sourceScoped: boolean) {
+  return sourceScoped ? MAX_RANGES_PER_RECORD : MAX_UNSCOPED_RANGES_PER_RECORD
+}
 
 const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({
@@ -101,7 +105,7 @@ export const LcmGrepTool = Tool.define(
     const database = yield* Database.Service
     return {
       description:
-        "Search exact finalized raw conversation text and active Conversation Memory summaries in the current session. Results include exact per-record match counts; use lcm_read to inspect source text beyond the returned ranges.",
+        "Search exact finalized raw conversation text and active Conversation Memory summaries in the current session. Unscoped results are compact discovery previews with exact per-record match counts; scope by sourceID and use lcm_read to inspect or page exact source text.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -121,6 +125,7 @@ export const LcmGrepTool = Tool.define(
           if (params.occurrenceOffset !== undefined && !params.sourceID)
             throw new LcmToolError("lcm_unavailable", "Occurrence paging requires a sourceID scope.")
           const occurrenceOffset = params.occurrenceOffset ?? 0
+          const rangeLimit = grepRangeLimit(params.sourceID !== undefined)
           const query = {
             pattern: params.pattern,
             mode: params.mode ?? "literal",
@@ -177,7 +182,7 @@ export const LcmGrepTool = Tool.define(
                     values,
                     recordLimit: offset + limit + 1,
                     rangeOffset: occurrenceOffset,
-                    rangeLimit: MAX_RANGES_PER_RECORD,
+                    rangeLimit,
                     signal: ctx.abort,
                   }),
                 ).pipe(
@@ -200,7 +205,7 @@ export const LcmGrepTool = Tool.define(
                       params.pattern,
                       params.caseSensitive ?? false,
                       occurrenceOffset,
-                      MAX_RANGES_PER_RECORD,
+                      rangeLimit,
                     ),
                   }))
                   .filter((item) => item.ranges.length > 0)
@@ -212,8 +217,7 @@ export const LcmGrepTool = Tool.define(
             const start = Math.max(0, first.start - 100)
             const end = Math.min(value.text.length, first.end + 180)
             const byteRanges = utf8Ranges(value.text, item.ranges)
-            const occurrenceLimit = params.sourceID ? MAX_RANGES_PER_RECORD : MAX_OCCURRENCES_PER_RECORD
-            const occurrences = item.ranges.slice(0, occurrenceLimit).map((range, index) => ({
+            const occurrences = item.ranges.map((range, index) => ({
               range,
               byteRange: byteRanges[index]!,
               excerpt: value.text.slice(Math.max(0, range.start - 100), Math.min(value.text.length, range.end + 180)),
@@ -235,7 +239,7 @@ export const LcmGrepTool = Tool.define(
                 returned: item.ranges.length,
                 total: item.matchCount,
                 complete: occurrenceOffset + item.ranges.length >= item.matchCount,
-                ...(occurrenceOffset + item.ranges.length < item.matchCount
+                ...(params.sourceID && occurrenceOffset + item.ranges.length < item.matchCount
                   ? { nextOffset: occurrenceOffset + item.ranges.length }
                   : {}),
               },
