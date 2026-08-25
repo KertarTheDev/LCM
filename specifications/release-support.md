@@ -6,37 +6,50 @@ The product branch remains a direct, narrow augmentation of upstream tag `v7.4.2
 (`40fa10e50a75c4887978d892520d1246515413bf`). Correct the product branch with ordinary reviewable commits; do not
 rewrite its published history or replay old LCM branches.
 
-The current public prerelease is `v7.4.23-lcm.2`. It was published on 2026-08-25 from candidate
-`ac853c4c7964cfedb9673528d232af9fbae823a9`, containing verified product
-`5f1f7c7c15facf39fd214f29ca0eb7ef23d64680`. Exact-SHA workflow run
-[`32793536639`](https://github.com/KertarTheDev/LCM/actions/runs/32793536639) completed successfully, including exact
+The current public prerelease is `v7.4.23-lcm.3`. It was published on 2026-08-25 from candidate
+`4a0b14cc0c1aac5027fa9f6c1ee76308824546cd`, containing verified product
+`7837cb58afd07677641eb728db2f56485f013d18`. Exact-SHA workflow run
+[`32856216753`](https://github.com/KertarTheDev/LCM/actions/runs/32856216753) completed successfully, including exact
 27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
 typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
-runtime smoke. Release [`376067342`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.2) is a non-draft
+runtime smoke. Release [`376453274`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.3) is a non-draft
 prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
-|`kilo-darwin-arm64.zip`|52,509,267|`ce2e37d3b18b6b36da79bbe874b961f8b4b85ec7d8f4ef96b6362bb6e987aadb`|
-|`kilo-darwin-x64-baseline.zip`|54,765,647|`44f578cb9ff91a2a88cab8ba6a61b2581e2b46c2456820b167b3572e46c1efba`|
-|`kilo-darwin-x64.zip`|54,765,647|`045960a12d6c175429dce1918786161a9d9a22a55b659aa629620d9500353237`|
-|`kilo-linux-arm64-musl.tar.gz`|69,283,493|`fa391e46143eadbaf7ceb2a0ea4c3be7e65c63bd234f872db3a9114dec9ebd8e`|
-|`kilo-linux-arm64.tar.gz`|67,179,656|`5c7b65dcd85677945c54bcd9c8fb198e633e6b8f129ea89c77f8287ff58e29a3`|
-|`kilo-linux-x64-baseline-musl.tar.gz`|69,771,705|`1c872b24ad0fef4867c949e4b241cce79b2e9edf3f6acbded7868b9d072d9cf4`|
-|`kilo-linux-x64-baseline.tar.gz`|67,420,666|`f8b1ed1bfc7cf694a46463ca18143ccb5a358fd2fca95e664a34431a944c8821`|
-|`kilo-linux-x64-musl.tar.gz`|69,771,346|`65b6d8fff6062e172a17616b299875fecfdcae119e665489b856e1f01d24c449`|
-|`kilo-linux-x64.tar.gz`|67,416,454|`7d1cff3fa7bd0f39c463bad5045b138035c135b27eaea2b0ce87eeba578a5e80`|
-|`kilo-vscode-alpine-arm64.vsix`|110,091,995|`b1ae86c71c81ed3481e3aaed29989c6c3e35da53a5d4d246a1473af8c032a03e`|
-|`kilo-vscode-alpine-x64.vsix`|117,299,641|`e5e33045815010275c1aa77427fc9c369c4c8f62271bd960120503ebe458cfbe`|
-|`kilo-vscode-darwin-arm64.vsix`|92,827,010|`fc4c9397e811f37715bc66f7fb42046c0c5ab14f210021a0dd17d642f2056842`|
-|`kilo-vscode-darwin-x64.vsix`|100,895,418|`5a7fcd6758c6c896712fcaf8801982c11bf6c98a05eaba6524987394238b7799`|
-|`kilo-vscode-linux-arm64.vsix`|107,929,032|`d84b532d686eb33cfa106a9a4dfe9e1606c5cb2951462c85206dcc20b0a94f3e`|
-|`kilo-vscode-linux-x64.vsix`|114,875,063|`3cf8bb8cf44ec633a4f8972e584141346738e5072f999c3d2971117995f4dcae`|
-|`kilo-vscode-win32-arm64.vsix`|89,703,071|`ecb5a67e30e97f4342314fa39325c7660aae80ccb4e438af2cdd464ab6f7144f`|
-|`kilo-vscode-win32-x64.vsix`|113,746,528|`d822db9badd26922abeafde005471fbd9dad9371be1d0d245a5ffc752d910507`|
-|`kilo-windows-arm64.zip`|65,095,755|`2eced120631b5d0551f4a2af926a61081cc173e8a0ca99b12695728ce8bea425`|
-|`kilo-windows-x64-baseline.zip`|66,769,949|`eb7bae46ec2df84f0c57437c6576c3e622c525afbb7b49cbb7e6211959134205`|
-|`kilo-windows-x64.zip`|66,769,949|`52ab25edab235d13efe48b89de742cc4eda5674963e56a1c71a1999884220187`|
+|`kilo-darwin-arm64.zip`|52,515,027|`1e2e5611562d9565a4aaddd09f9d9cb4c0e14c87359a311da63b8b513a34864e`|
+|`kilo-darwin-x64-baseline.zip`|54,771,435|`9e6e812fefbe0922f71858345fe193978356a0d32a2f52cbedcae05cbcd7c583`|
+|`kilo-darwin-x64.zip`|54,771,435|`8ed930f42eed7ccdd466024699943dd4ecfff2eeb3d083f49f0b003f84c2b8b0`|
+|`kilo-linux-arm64-musl.tar.gz`|69,293,410|`76a2dbb9c3795aad895d15ba62d216a218584eb6661ab62e26db802bfbb1400a`|
+|`kilo-linux-arm64.tar.gz`|67,178,880|`4464e156943d7b39e65063a7c1cb5597e7c74fe3fa7785460e7898901cd9d01f`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|69,788,427|`e279851d45655c082b32e2b7ea14f065f1e48ea77f8fc909caa8c9e142188014`|
+|`kilo-linux-x64-baseline.tar.gz`|67,421,997|`13413d3e070e78c29e5dae66a3fdb7473fafd7819270094df44e4051cd6f6789`|
+|`kilo-linux-x64-musl.tar.gz`|69,787,950|`29d4feb275b58a658967b5780387d2235e7a70fdb286ac603ec319f235a5b0f7`|
+|`kilo-linux-x64.tar.gz`|67,423,505|`1354f2f7564e93f65c6d3c8d57c260e35d7508bec9451aeea2e0455a3ab054d5`|
+|`kilo-vscode-alpine-arm64.vsix`|110,098,052|`7288eec1d269c87db5ddfbe1baca836284e719368e747669ea6448c89f06f2e4`|
+|`kilo-vscode-alpine-x64.vsix`|117,306,974|`a35996f78d3bd969847533b6ba19788b807323274fca206e409d55e2bbc50fab`|
+|`kilo-vscode-darwin-arm64.vsix`|92,838,314|`7c48ffdc08108e0d2418685d4e90bb723d06dac9b52ba318d75c3fac4322f9bd`|
+|`kilo-vscode-darwin-x64.vsix`|100,901,800|`12e164380045dba663ed04d9d539163c77339bfa58ad096a4d860ff382aa534c`|
+|`kilo-vscode-linux-arm64.vsix`|107,931,530|`ce3e632fd7a8bfbe7e1f6e48f62787c98cae90a91131791381f994c1e76c12d9`|
+|`kilo-vscode-linux-x64.vsix`|114,877,280|`e7b0d8e66d15d7c04bc4e4f221deca6a056033182995544155316dbab8dc52ef`|
+|`kilo-vscode-win32-arm64.vsix`|89,710,474|`660c3a38ccbad3b859e75f46db1631bd04d8031653086b83a4da2d220608d089`|
+|`kilo-vscode-win32-x64.vsix`|113,752,605|`25967207ccb361e19baf344b7ade059ab495e942419af44612ed1f02929e0953`|
+|`kilo-windows-arm64.zip`|65,102,632|`4c9105d8096a58a4cd03d2b44b4522be0102280d379b81db6751ec61d9560f7b`|
+|`kilo-windows-x64-baseline.zip`|66,773,865|`7f54381b23c1a9cb7291704a023a3ff96ea15bca35d419c5ba93000f47670e45`|
+|`kilo-windows-x64.zip`|66,773,865|`e3b940e0dd50551998deae1c39bc215c6e02eccbf2c53ee997373ef6136b4f9d`|
+
+The superseded `v7.4.23-lcm.2` release ID `376067342` remains published as retained history. It was published from
+candidate `ac853c4c7964cfedb9673528d232af9fbae823a9`, containing product
+`5f1f7c7c15facf39fd214f29ca0eb7ef23d64680`, by retained workflow run
+[`32793536639`](https://github.com/KertarTheDev/LCM/actions/runs/32793536639). Subsequent 175k-token reference QA showed
+that `.2` could not reliably preserve or expose exhaustive evidence after compression: model summaries could omit
+structural boundaries, unscoped recovery could match the current recovery turn, and capped grep ranges did not report
+an exact total or support source-scoped occurrence paging. A staged summary that never activated could also leave a
+legacy durable `preparing` mode. `.3` preserves an ordered exact structural-anchor map across every consumed source,
+including the protected recent tail; bounds unscoped recovery before the current turn; adds exact occurrence totals,
+source-scoped paging, and seekable byte ranges; repairs stale mode; improves summary provenance and retry behavior; and
+exports sanitized summary-attempt evidence. `.2` remains usable outside those long-session recovery cases and is
+retained under the historical-prerelease policy rather than deleted.
 
 The superseded `v7.4.23-lcm.1` release ID `375779703` and matching tag were removed only after `.2` passed exact
 publication verification. `.1` was published from candidate `cc4db8d99fea02c8ab057b884607354ea290a680`, containing
@@ -66,7 +79,7 @@ public identities are:
 |`v7.4.17-lcm.2`|`364019885`|`f44368ca82defa4aeeb2dd822e95b96061132a0a`|`d934b8332a81dacd9617a6a0be8dad362b35f96e`|
 |`v7.4.16-lcm.3`|`360907867`|`2cab563d6c58552b9abd4e7b58579cdc7ba39a3a`|`82b79ba06fa892b3e3a778a420992ed67938c68e`|
 
-Keep those exact older releases and tags published as historical prereleases after `v7.4.23-lcm.2` is verified. The
+Keep those exact older releases and tags published as historical prereleases after `v7.4.23-lcm.3` is verified. The
 current replacement operation does not authorize deleting any of these five releases. Only the separately captured
 `v7.4.23-lcm.1` release and matching tag were removed after the fixed replacement passed exact release, tag, asset,
 and packaged-runtime verification. Older already-absent faulty releases require no action.
