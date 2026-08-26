@@ -59,8 +59,8 @@ tool calls still replayed full evidence payloads and that summary-task commentar
 therefore remains the temporary public v7.4.23 baseline while a fixed local binary is iterated through 175k evidence;
 no replacement prerelease is published until that local cycle has no clear major issue.
 
-The following same-upstream releases are known inferior to verified `.9` for the defects described in their retained
-records below and are authorized for exact-ID/tag removal under the one-best policy:
+The following same-upstream releases were inferior to verified `.9` for the defects described in their retained
+records below:
 
 |Tag|Release ID|Candidate|
 |---|---:|---|
@@ -71,14 +71,20 @@ records below and are authorized for exact-ID/tag removal under the one-best pol
 |`v7.4.23-lcm.7`|`376895230`|`9d296d785f21af51d9cd050c0b3d41aa5330a404`|
 |`v7.4.23-lcm.8`|`376933665`|`5ae5396a540f1698272bce345c30714d8172e393`|
 
+On 2026-08-26, those six exact release IDs and matching tags were removed under the one-best policy after their remote
+identities were re-resolved. A subsequent release/tag audit confirmed their absence, confirmed `.9` still resolves to
+`f9721629bda860f84b497bc9efe6f1fd73929dec` with all 20 assets, and confirmed that the sole prerelease for every other
+upstream version was untouched. Their release assets and tags are no longer recoverable from GitHub; Actions audit
+history remains.
+
 The previous public prerelease was `v7.4.23-lcm.8`. It was published on 2026-08-26 from candidate
 `5ae5396a540f1698272bce345c30714d8172e393`, containing verified product
 `d67d15b0dc9831a94e93fb056dbcf710ae1144af`. Exact-SHA workflow run
 [`32939810930`](https://github.com/KertarTheDev/LCM/actions/runs/32939810930) completed successfully, including exact
 27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
 typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
-runtime smoke. Release [`376933665`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.8) is a non-draft
-prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
+runtime smoke. Former release ID `376933665` was a non-draft
+prerelease whose tag resolved to the candidate SHA before removal. Its exact GitHub-reported asset manifest was:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
@@ -120,8 +126,8 @@ The previous public prerelease was `v7.4.23-lcm.7`. It was published on 2026-08-
 [`32932738149`](https://github.com/KertarTheDev/LCM/actions/runs/32932738149) completed successfully, including exact
 27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
 typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
-runtime smoke. Release [`376895230`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.7) is a non-draft
-prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
+runtime smoke. Former release ID `376895230` was a non-draft
+prerelease whose tag resolved to the candidate SHA before removal. Its exact GitHub-reported asset manifest was:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
@@ -162,8 +168,8 @@ The previous public prerelease was `v7.4.23-lcm.6`. It was published on 2026-08-
 [`32928803641`](https://github.com/KertarTheDev/LCM/actions/runs/32928803641) completed successfully, including exact
 27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
 typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
-runtime smoke. Release [`376875819`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.6) is a non-draft
-prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
+runtime smoke. Former release ID `376875819` was a non-draft
+prerelease whose tag resolved to the candidate SHA before removal. Its exact GitHub-reported asset manifest was:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
@@ -204,8 +210,8 @@ The previous public prerelease was `v7.4.23-lcm.5`. It was published on 2026-08-
 [`32923865662`](https://github.com/KertarTheDev/LCM/actions/runs/32923865662) completed successfully, including exact
 27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
 typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
-runtime smoke. Release [`376851777`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.5) is a non-draft
-prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
+runtime smoke. Former release ID `376851777` was a non-draft
+prerelease whose tag resolved to the candidate SHA before removal. Its exact GitHub-reported asset manifest was:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
@@ -252,8 +258,8 @@ The previous public prerelease was `v7.4.23-lcm.4`. It was published on 2026-08-
 [`32917997402`](https://github.com/KertarTheDev/LCM/actions/runs/32917997402) completed successfully, including exact
 27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
 typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
-runtime smoke. Release [`376822950`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.4) is a non-draft
-prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
+runtime smoke. Former release ID `376822950` was a non-draft
+prerelease whose tag resolved to the candidate SHA before removal. Its exact GitHub-reported asset manifest was:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
@@ -291,8 +297,8 @@ The previous public prerelease was `v7.4.23-lcm.3`. It was published on 2026-08-
 [`32856216753`](https://github.com/KertarTheDev/LCM/actions/runs/32856216753) completed successfully, including exact
 27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
 typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
-runtime smoke. Release [`376453274`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.3) is a non-draft
-prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
+runtime smoke. Former release ID `376453274` was a non-draft
+prerelease whose tag resolved to the candidate SHA before removal. Its exact GitHub-reported asset manifest was:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
