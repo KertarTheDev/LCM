@@ -97,7 +97,8 @@ export async function regexSearch(
       finish(() => reject(new Error("lcm_regex_worker_unavailable")))
     }
     worker.onmessage = (event) => {
-      if (event.data.type === "ready") {
+      const response = event.data
+      if (response.type === "ready") {
         clearTimeout(startupTimer)
         executionTimer = setTimeout(() => {
           finish(() => reject(new Error("lcm_regex_timeout")))
@@ -116,11 +117,11 @@ export async function regexSearch(
         }
         return
       }
-      if (event.data.type === "error") {
-        finish(() => reject(new Error(event.data.error)))
+      if (response.type === "error") {
+        finish(() => reject(new Error(response.error)))
         return
       }
-      finish(() => resolve(event.data.matches))
+      finish(() => resolve(response.matches))
     }
   })
 }
