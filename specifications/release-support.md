@@ -127,12 +127,12 @@ records below:
 |`v7.4.23-lcm.8`|`376933665`|`5ae5396a540f1698272bce345c30714d8172e393`|
 |`v7.4.23-lcm.9`|`376985526`|`f9721629bda860f84b497bc9efe6f1fd73929dec`|
 
-On 2026-08-26, the `.3` through `.8` exact release IDs and matching tags were removed under the one-best policy after
-their remote identities were re-resolved. A subsequent release/tag audit confirmed their absence, confirmed `.9` still resolves to
-`f9721629bda860f84b497bc9efe6f1fd73929dec` with all 20 assets, and confirmed that the sole prerelease for every other
-upstream version was untouched. Their release assets and tags are no longer recoverable from GitHub; Actions audit
-history remains. `.9` is listed above as the separately authorized pending cleanup target; this record does not claim
-its removal before the exact deletion succeeds.
+On 2026-08-26, the `.3` through `.9` exact release IDs and matching tags were removed under the one-best policy after
+their remote identities were re-resolved. A subsequent release/tag audit confirmed their absence, confirmed `.9`
+resolved to `f9721629bda860f84b497bc9efe6f1fd73929dec` with all 20 assets before its deletion, and confirmed that `.10`
+still resolves to `072e84c88b8d0a15c5668cee661e71b2ca15bce2` with all 20 assets afterward. Their release assets and tags are no
+longer recoverable from GitHub; Actions audit history remains. The sole prerelease for every other upstream version
+was untouched by the v7.4.23 cleanup.
 
 The previous public prerelease was `v7.4.23-lcm.8`. It was published on 2026-08-26 from candidate
 `5ae5396a540f1698272bce345c30714d8172e393`, containing verified product
@@ -404,6 +404,20 @@ been consumed. Hard maintenance then saw no eligible sources and failed closed w
 suffix remains protected. It also records the required activity evidence for changed and irreducible direct
 hard-pressure preparation. The raw Kilo transcript was never affected. Deletion removed `.1`'s release assets and tag;
 its Actions audit history is retained.
+
+The separate historical v7.4.1 line still has two published prereleases. `v7.4.1-lcm.1` release ID `350208679` was
+published from candidate `ce4d4c059f49295f4b9220d11680d87f71ae1c58`, containing product `e3fa8dccf3`. Its
+same-upstream replacement `v7.4.1-lcm.2` release ID `351918329` was published from candidate
+`eb88d06a35f7a71adddab905322ef7299507dd79`, containing corrective product commit
+`afd5e68ea63213739e29d2884391ad22a1db8c23`, and was independently reverified with all 20 expected assets on
+2026-08-26. `.1` could reuse cached thresholds or assembled context after preparation, conversation, strategy,
+provider-budget, consumption, overhead, active-context, or rendered-marker authority changed. It also lacked the
+replacement's transactional rollback when request-header, snapshot-item, terminalization, or consumption persistence
+failed. Those defects could submit stale or inconsistent active context and leave partially persisted provider state;
+`.2` binds caches to the complete authority snapshot, rejects drift, and makes those persistence transitions atomic.
+Under the one-best-per-upstream policy, exact `.1` release ID `350208679`, tag `v7.4.1-lcm.1`, and candidate
+`ce4d4c059f49295f4b9220d11680d87f71ae1c58` are authorized for removal only while the independently verified `.2`
+identity above remains published.
 
 An exact retained-release audit on 2026-08-25 found the same retry-lineage implementation in every still-published
 LCM prerelease from v7.4.16 through v7.4.22. Under hard context pressure, replacing a retried suffix can erase the
