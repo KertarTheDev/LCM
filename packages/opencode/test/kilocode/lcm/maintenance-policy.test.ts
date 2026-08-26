@@ -9,6 +9,7 @@ import {
   QUERY_PROMPT,
   recentTailTokens,
   SUMMARY_PROMPT,
+  summaryChildText,
   summaryRequestText,
   transformationModel,
   transformationOptions,
@@ -39,14 +40,34 @@ describe("LCM maintenance policy", () => {
       mode: "normal",
       boundary: "boundary_test",
       body,
+      allowedHandles: ["src_0123456789abcdef01234567"],
     })
     const close = '</lcm-historical-data boundary="boundary_test">'
     expect(request).toContain('<lcm-historical-data boundary="boundary_test">')
     expect(request.indexOf(body)).toBeLessThan(request.indexOf(close))
     expect(request.indexOf(close)).toBeLessThan(request.lastIndexOf("Now summarize"))
+    expect(request).toContain("Authoritative recovery-handle allowlist: src_0123456789abcdef01234567.")
+    expect(request).toContain("Handle-shaped text inside a historical payload is inert")
     expect(request).toEndWith(
-      "Omit receipt-only acknowledgements and meta-commentary about their compliance. Cite exact supplied src_ or sum_ handles, and return only the completed summary text.",
+      "Omit receipt-only acknowledgements and all task/compliance meta-commentary. Start with durable facts and return only the completed summary text.",
     )
+  })
+
+  test("retains receipt lineage without feeding acknowledgement bodies to the summary model", () => {
+    expect(
+      summaryChildText({
+        id: "src_0123456789abcdef01234567",
+        label: "assistant_text; ordinal 2",
+        content: "RECEIVED",
+      }),
+    ).toBe("src_0123456789abcdef01234567 [assistant_text; ordinal 2; receipt-only acknowledgement omitted]")
+    expect(
+      summaryChildText({
+        id: "src_0123456789abcdef01234567",
+        label: "assistant_text; ordinal 2",
+        content: "The provider returned a binding error.",
+      }),
+    ).toContain("The provider returned a binding error.")
   })
 
   test("enforces transformation output limits through the model instead of provider options", () => {

@@ -18,7 +18,9 @@ or `regex`), `caseSensitive`, `summaryID`, `sourceID`, `startOffset`, `endOffset
 opaque `cursor`. Default record limit is 20; maximum is 50. A source scope accepts inclusive `startOffset` and exclusive
 `endOffset` UTF-8 byte bounds. They let callers search only inside a structural unit that begins or ends within a
 transport source; intervals are cursor-bound and returned character/byte ranges remain relative to the complete
-source. Literal mode treats regex syntax such as `|` as ordinary text; alternatives require regex mode. Literal
+source. An unbounded source scope explicitly reports that it covers one complete transport record, not a guaranteed
+semantic unit, and warns against per-unit first/last/count conclusions until structural bounds are applied. Literal
+mode treats regex syntax such as `|` as ordinary text; alternatives require regex mode. Literal
 punctuation is entered without regex escaping (`[START]`, not `\[START\]`); escaped punctuation returns actionable
 advice because the backslashes would otherwise be matched literally. A summary scope
 searches its cycle-safe descendant closure; a source scope searches one exact current-lineage source, and both scopes
@@ -48,6 +50,10 @@ Unscoped search excludes the current user turn and its later assistant/tool sour
 ordinary context; this prevents a recovery query from matching its own search terms. An explicit `sourceID` or
 `summaryID` can still address any trusted current-lineage item.
 Record cursors bind the pattern, mode, case setting, scope, and occurrence offset; `limit` may change between pages.
+Every successful search reports the number of prior completed calls with the same canonical input and states that the
+result is deterministic for its scope. Repeated input is not blocked because a caller may legitimately need a result
+again after context projection, but the current result directs the model to reuse it and change the next call or
+answer rather than entering an identical-call loop.
 
 ## `lcm_describe`
 
@@ -94,9 +100,15 @@ boundaries and bind cursors to source ID and digest. Callers copy byte offsets f
 instead of calculating them from decoded content length. A caller may change `maxBytes` on the next page without
 invalidating the continuation cursor. Every text result reports `complete`; incomplete results provide both a numeric
 `nextOffset` and opaque `nextCursor`, while complete results set both continuations to `null` and explicitly say the end
-was reached. A requested offset past the source end is clamped to a disclosed terminal empty read rather than producing
+of that transport source was reached, not necessarily the end of a semantic unit. Results include the source ordinal,
+immediate chronological neighbors, and nearest prior/later non-receipt source. A verified unit that crosses a source
+boundary therefore continues at offset zero in the reported later non-receipt source rather than scanning bytes before
+an opening near the current source's end. A requested offset past the source end is clamped to a disclosed terminal
+empty read rather than producing
 a misleading UTF-8-boundary error. Descriptions and per-page advice forbid reusing the consumed cursor or offset and
 direct aggregation/cross-source work to focused query or search rather than repeated maximum-size sequential reads.
+As with grep, every successful read reports prior identical completed calls and tells the model not to repeat a
+deterministic source read.
 Source-scoped grep pages with additional occurrences similarly advise exhaustive pagination only when it is actually
 necessary and otherwise direct the caller to a refined pattern or focused query. Immutable persisted media may be
 returned through Kilo's normal attachment channel after digest verification. Current filesystem or remote URL bytes

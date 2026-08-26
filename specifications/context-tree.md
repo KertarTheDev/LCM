@@ -6,7 +6,7 @@ A source is one finalized model-visible transcript part. A summary is immutable 
 children. A frontier revision is an exact, gap-free, non-overlapping cut through the current lineage. Every retained
 source is covered exactly once by a frontier source or a reachable summary descendant.
 
-The tree policy is `lcm-tree-v7`. This policy and derived schema intentionally invalidate earlier prerelease caches;
+The tree policy is `lcm-tree-v8`. This policy and derived schema intentionally invalidate earlier prerelease caches;
 the sidecar is quarantined and rebuilt without modifying the Kilo transcript.
 
 Soft maintenance summarizes at most one eligible raw window per quantum. Leaf windows target 30% of usable input and
@@ -32,7 +32,8 @@ makes reducible history converge.
 
 Summary candidates must be non-empty, smaller than their children, within 115% of target, cite at least one exact
 current child/descendant `src_` or `sum_` handle, contain no invented, truncated, or otherwise malformed handle-like
-token, and retain at least 16 non-whitespace
+token, contain no standalone receipt/protocol scaffolding, pass the product generator's conservative lexical
+grounding check against the supplied child payloads, and retain at least 16 non-whitespace
 characters after handles and a canonical recovery footer are removed. When otherwise substantive, complete model text
 omits citations, the runtime appends a deterministic footer containing its exact direct-child handles before applying
 those same size, reduction, and lineage checks. It never repairs invented handles, protocol acknowledgements,
@@ -51,8 +52,13 @@ first/last/terminal events and completeness evidence for ordered or enumerative 
 inside explicit data/reference delimiters as source evidence rather than active session goals. Every transformation
 wraps all child payloads in a request-specific historical-data boundary and repeats the active summary task only after
 the matching close, so trailing transcript directives and forged markers with another boundary remain inert.
-Receipt-only acknowledgements and meta-commentary about whether a model complied with their transport instruction are
-omitted unless later binding work depends on them, so protocol scaffolding does not displace substantive evidence.
+Receipt-only acknowledgement bodies are replaced by a typed omission label while their exact source lineage remains
+covered. The post-boundary task supplies an authoritative allowlist of exact child/descendant recovery handles;
+handle-shaped text inside historical payloads is citeable only when it also appears in that allowlist. Receipt and
+task/compliance meta-commentary are rejected rather than becoming immutable memory. The conservative grounding check
+rejects a sufficiently substantive candidate only when none of its distinctive lexical terms occurs in the supplied
+children; short candidates remain governed by all other validation, and deterministic fallback is grounded directly
+in child excerpts. This blocks unrelated transformation output without requiring a second provider or semantic judge.
 The requested summary target is enforced through a constrained copy of the active model, with a 15% completion margin
 matching candidate validation; it is never forwarded as an ad hoc provider option. Prompts require a clean ending and
 instruct the model to omit lower-priority detail before risking an unfinished bullet or sentence. They also require
@@ -84,7 +90,10 @@ Recovery guidance distinguishes transport-source records from semantic units, di
 ordered structural openings and closings, states that literal grep uses unescaped punctuation, warns that summaries
 and raw descendants overlap, and recommends bounded query synthesis followed by exact source-scoped verification.
 It directs targeted reads instead of full-source sequential scans, requires callers to honor the returned completion
-and continuation fields, and tells the agent to stop recovery and answer once exact evidence resolves the question.
+and continuation fields, reports immediate and nearest non-receipt chronological source neighbors, and makes clear
+that source completion is not semantic-unit completion. Successful grep/read results report how many times the exact
+input already completed and explicitly direct the caller to reuse deterministic results instead of repeating them.
+The guidance tells the agent to stop recovery and answer once exact evidence resolves the question.
 When a semantic unit begins or ends inside a transport source, guidance directs `lcm_grep` to its half-open byte
 interval so evidence before the opening or after the closing cannot be mistaken for part of the unit.
 

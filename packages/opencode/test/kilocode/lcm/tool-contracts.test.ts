@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
 import { regexSearch, regexSearchIssue, regexWorkerTarget } from "@/kilocode/session/lcm/regex-search"
-import { priorTurnSourceCutoff } from "@/kilocode/tool/lcm-common"
+import {
+  completedToolCallCount,
+  priorTurnSourceCutoff,
+  recoveryCallGuidance,
+  sourceChronology,
+} from "@/kilocode/tool/lcm-common"
 import {
   grepRangeLimit,
   grepCursorQuery,
@@ -30,6 +35,7 @@ import {
   queryExcerpt,
   queryParts,
 } from "@/kilocode/tool/lcm-expand-query"
+import type { FinalSource } from "@/kilocode/session/lcm/types"
 
 describe("LCM tool contracts", () => {
   test("keeps global grep as discovery and reserves wider occurrence pages for exact source scopes", () => {
@@ -79,6 +85,64 @@ describe("LCM tool contracts", () => {
 
     expect(priorTurnSourceCutoff(view, messages)).toBe(1)
     expect(priorTurnSourceCutoff(view, [])).toBeUndefined()
+  })
+
+  test("identifies completed identical tool inputs independent of object key order", () => {
+    const messages = [
+      {
+        parts: [
+          {
+            type: "tool",
+            tool: "lcm_grep",
+            state: { status: "completed", input: { pattern: "needle", sourceID: "src_a" } },
+          },
+          {
+            type: "tool",
+            tool: "lcm_grep",
+            state: { status: "running", input: { pattern: "needle", sourceID: "src_a" } },
+          },
+        ],
+      },
+    ]
+    expect(completedToolCallCount(messages, "lcm_grep", { sourceID: "src_a", pattern: "needle" })).toBe(1)
+    expect(completedToolCallCount(messages, "lcm_grep", { sourceID: "src_b", pattern: "needle" })).toBe(0)
+    expect(
+      recoveryCallGuidance({ tool: "lcm_grep", previousIdenticalCalls: 3, sourceScoped: true }).instruction,
+    ).toContain("do not submit the identical input again")
+  })
+
+  test("reports chronological transport neighbors while skipping pure receipt records", () => {
+    const source = (id: string, ordinal: number, kind: FinalSource["kind"]): FinalSource => ({
+      id,
+      sessionID: "ses_tools",
+      messageID: `msg_${ordinal}`,
+      partID: `part_${ordinal}`,
+      ordinal,
+      kind,
+      digest: `digest_${ordinal}`,
+      tokens: 1,
+      bytes: 1,
+      excerpt: id,
+    })
+    const first = source("src_first", 0, "user_text")
+    const receipt = source("src_receipt", 1, "assistant_text")
+    const next = source("src_next", 2, "user_text")
+    const view = {
+      sources: new Map([first, receipt, next].map((item) => [item.id, item])),
+      content: new Map([
+        [first.id, { content: "opening fragment" }],
+        [receipt.id, { content: "RECEIVED" }],
+        [next.id, { content: "continuation fragment" }],
+      ]),
+    }
+
+    expect(sourceChronology(view, first.id)).toEqual({
+      sourceOrdinal: 0,
+      previousSource: null,
+      nextSource: { sourceID: receipt.id, ordinal: 1, kind: "assistant_text" },
+      previousNonReceiptSource: null,
+      nextNonReceiptSource: { sourceID: next.id, ordinal: 2, kind: "user_text" },
+    })
   })
 
   test("extracts stable handles and useful terms for bounded recovery queries", () => {
@@ -348,7 +412,7 @@ describe("LCM tool contracts", () => {
       complete: true,
       nextOffset: null,
       advice: [
-        "This read reached the end of the source. nextOffset and nextCursor are null; do not calculate or retry another offset for this source.",
+        "This read reached the end of this transport source, not necessarily the end of a document, episode, section, or other semantic unit. nextOffset and nextCursor are null; do not retry this source. If verified boundaries show the unit continues, follow chronology.nextNonReceiptSource at offset 0.",
       ],
     })
   })

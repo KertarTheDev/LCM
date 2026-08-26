@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { lineageDigest, sha256, sourceID } from "@/kilocode/session/lcm/ids"
 import { SqliteConversationMemoryStore } from "@/kilocode/session/lcm/store"
-import { rollForwardItems, SummaryTree } from "@/kilocode/session/lcm/summary-tree"
+import { rollForwardItems, summaryGrounded, SummaryTree } from "@/kilocode/session/lcm/summary-tree"
 import type { FinalSource } from "@/kilocode/session/lcm/types"
 
 function makeSource(ordinal: number, tokens = 800): FinalSource {
@@ -337,25 +337,28 @@ describe("LCM summary tree", () => {
     const lineage = { sessionID: "ses_tree", digest, sourceCount: 1, lastSourceID: sources[0]?.id }
     await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
     const revision = await new SummaryTree(store, {
-      generate: async (request) => ({
-        text: "The binding implementation decision and supporting detail are preserved here.",
-        mode: request.mode,
-        attempt: {
-          id: "attempt_missing_citation",
-          nodeKey: "",
-          sessionID: request.sessionID,
+      generate: async (request) => {
+        expect(request.allowedHandles).toEqual([sources[0]!.id])
+        return {
+          text: "The binding implementation decision and supporting detail are preserved here.",
           mode: request.mode,
-          inputTokens: 100,
-          outputTokens: 20,
-          reasoningTokens: 0,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
-          cost: 0,
-          finish: "stop",
-          durationMs: 1,
-          createdAt: 1,
-        },
-      }),
+          attempt: {
+            id: "attempt_missing_citation",
+            nodeKey: "",
+            sessionID: request.sessionID,
+            mode: request.mode,
+            inputTokens: 100,
+            outputTokens: 20,
+            reasoningTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            cost: 0,
+            finish: "stop",
+            durationMs: 1,
+            createdAt: 1,
+          },
+        }
+      },
     }).build({
       sessionID: "ses_tree",
       lineage,
@@ -416,6 +419,103 @@ describe("LCM summary tree", () => {
       )
       store.close()
     }
+  })
+
+  test("rejects embedded protocol scaffolding instead of preserving it as immutable memory", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = [makeSource(0)]
+    const digest = lineageDigest(sources)
+    const lineage = { sessionID: "ses_tree", digest, sourceCount: 1, lastSourceID: sources[0]?.id }
+    await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
+    const revision = await new SummaryTree(store, {
+      generate: async (request) => ({
+        text:
+          request.mode === "normal"
+            ? `I've updated unrelated project files. Durable source detail is retained. ${sources[0]!.id}`
+            : `Durable source detail is retained.\nRECEIVED\n${sources[0]!.id}`,
+        mode: request.mode,
+        attempt: {
+          id: `attempt_${request.mode}`,
+          nodeKey: "",
+          sessionID: request.sessionID,
+          mode: request.mode,
+          inputTokens: 100,
+          outputTokens: 20,
+          reasoningTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cost: 0,
+          finish: "stop",
+          durationMs: 1,
+          createdAt: 1,
+        },
+      }),
+    }).build({
+      sessionID: "ses_tree",
+      lineage,
+      usableInputTokens: 8_000,
+      protectedSources: 0,
+      reason: "hard_built",
+    })
+
+    const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
+    expect(summary?.generationMode).toBe("deterministic")
+    expect(summary?.text).not.toContain("RECEIVED")
+    expect((await store.listAttempts("ses_tree")).map((attempt) => attempt.errorCode)).toEqual([
+      "lcm_summary_protocol_scaffolding",
+      "lcm_summary_protocol_scaffolding",
+    ])
+    store.close()
+  })
+
+  test("rejects model output that the product generator could not ground in its supplied children", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = [makeSource(0)]
+    const digest = lineageDigest(sources)
+    const lineage = { sessionID: "ses_tree", digest, sourceCount: 1, lastSourceID: sources[0]?.id }
+    await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
+    const revision = await new SummaryTree(store, {
+      generate: async (request) => ({
+        text: `Unrelated stylesheet modifications affect deployment assets. ${sources[0]!.id}`,
+        grounded: false,
+        mode: request.mode,
+        attempt: {
+          id: `attempt_${request.mode}`,
+          nodeKey: "",
+          sessionID: request.sessionID,
+          mode: request.mode,
+          inputTokens: 100,
+          outputTokens: 20,
+          reasoningTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cost: 0,
+          finish: "stop",
+          durationMs: 1,
+          createdAt: 1,
+        },
+      }),
+    }).build({
+      sessionID: "ses_tree",
+      lineage,
+      usableInputTokens: 8_000,
+      protectedSources: 0,
+      reason: "hard_built",
+    })
+
+    const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
+    expect(summary?.generationMode).toBe("deterministic")
+    expect((await store.listAttempts("ses_tree")).map((attempt) => attempt.errorCode)).toEqual([
+      "lcm_summary_ungrounded",
+      "lcm_summary_ungrounded",
+    ])
+    store.close()
+  })
+
+  test("checks distinctive lexical grounding without treating handles or task boilerplate as evidence", () => {
+    const source = "Keyleth cast Prestidigitation after the party entered the chamber."
+    expect(summaryGrounded(source, "Keyleth's final spell was Prestidigitation.")).toBe(true)
+    expect(summaryGrounded(source, "I've updated the CSS and implemented changes to the project files.")).toBe(false)
   })
 
   test("deterministic fallback converges when source excerpts reference other memory", async () => {

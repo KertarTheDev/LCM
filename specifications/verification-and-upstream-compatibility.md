@@ -14,7 +14,7 @@ Acceptance must prove:
 - disabled prompt, idle, deletion, API, CLI, and tool paths neither create nor mutate a sidecar, while re-enable
   reuses or rebuilds retained state;
 - newest-first stream normalization and stable chronology for new, legacy, imported, and 100+ source sessions;
-- schema-v8/tree-v5 discard-and-rebuild of earlier derived caches without raw-body duplication or semantic migration;
+- schema-v11/tree-v8 discard-and-rebuild of earlier derived caches without raw-body duplication or semantic migration;
 - durable per-provider-step successful-request consumption, proof-based recovery after an unconsumed retry-suffix
   replacement, and protection after cancel/failure/overflow;
 - sequential and parallel LCM recovery-tool results entering source lineage, becoming eligible after a later
@@ -38,12 +38,14 @@ Acceptance must prove:
 - all five real tool handlers, cancellation/cursors/current-session isolation, reachable `active`, direct `frontier`,
   compact nonduplicated grep previews with separate raw/summary totals and actionable regex guidance,
   packaged regex-worker availability, distinct startup/timeout/syntax failures, exact source byte-interval search,
+  unbounded transport-source warnings, chronological non-receipt neighbors, prior-identical-call diagnostics,
   page-size-independent continuation, and one-call cited `lcm_expand_query` recovery with fair match-centered excerpts
   and fallback;
-- substantive, exact-lineage summary citations, deterministic direct-child citation completion when otherwise useful
-  output omits handles, and rejection of invented, stale, protocol-only, content-free, or non-`stop`/length-truncated
-  model output; request-specific source-data isolation and transformation caps enforced through the model rather than
-  provider options;
+- substantive, grounded exact-lineage summary citations, deterministic direct-child citation completion when otherwise
+  useful output omits handles, receipt-body omission with preserved lineage, an authoritative handle allowlist, and
+  rejection of invented, stale, protocol-only, protocol-contaminated, ungrounded, content-free, or non-`stop`/length-
+  truncated model output; request-specific source-data isolation and transformation caps enforced through the model
+  rather than provider options;
   preservation of structural boundary/completeness evidence for reference data, an explicit lossy-summary recovery
   warning for exhaustive questions, a deterministic ordered boundary map with half-open UTF-8 byte ranges from every
   consumed exact source including

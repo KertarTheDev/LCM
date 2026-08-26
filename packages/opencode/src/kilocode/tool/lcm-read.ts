@@ -3,7 +3,15 @@ import { Effect, Schema } from "effect"
 import * as Tool from "@/tool/tool"
 import { ConversationMemory } from "@/kilocode/session/lcm/service"
 import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
-import { inertOutput, LcmToolError, loadMemory, requireSource } from "./lcm-common"
+import {
+  completedToolCallCount,
+  inertOutput,
+  LcmToolError,
+  loadMemory,
+  recoveryCallGuidance,
+  requireSource,
+  sourceChronology,
+} from "./lcm-common"
 
 const Parameters = Schema.Struct({
   sourceID: Schema.String.annotate({ description: "Exact current-session src_ source handle." }),
@@ -62,7 +70,7 @@ export function readContinuation(end: number, total: number) {
     ...(complete
       ? {
           advice: [
-            "This read reached the end of the source. nextOffset and nextCursor are null; do not calculate or retry another offset for this source.",
+            "This read reached the end of this transport source, not necessarily the end of a document, episode, section, or other semantic unit. nextOffset and nextCursor are null; do not retry this source. If verified boundaries show the unit continues, follow chronology.nextNonReceiptSource at offset 0.",
           ],
         }
       : {
@@ -80,7 +88,7 @@ export const LcmReadTool = Tool.define(
     const database = yield* Database.Service
     return {
       description:
-        "Read a bounded digest-verified exact excerpt from one current-session src_ source. Seek directly with a structural or lcm_grep byteRange start. For aggregation or cross-source questions, prefer lcm_expand_query or lcm_grep over sequential 32 KiB scans. To continue a necessary contiguous read, copy returned nextOffset or nextCursor; never calculate an offset from content length or repeat one just consumed. When complete is true, both continuations are null: stop reading that source. Recent ordinary context is already visible and does not need recovery reads.",
+        "Read a bounded digest-verified exact excerpt from one current-session src_ transport source. A source is never proof of a complete document, episode, section, or other semantic unit. Seek directly with a structural or lcm_grep byteRange start. For aggregation or cross-source questions, prefer lcm_expand_query or lcm_grep over sequential 32 KiB scans. To continue within this source, copy returned nextOffset or nextCursor; never calculate an offset from content length or repeat one just consumed. When complete is true, both continuations are null: stop reading this source, then use chronology.nextNonReceiptSource at offset 0 only if verified semantic boundaries continue. Recent ordinary context is already visible and does not need recovery reads.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -90,8 +98,15 @@ export const LcmReadTool = Tool.define(
             always: ["*"],
             metadata: { sourceID: params.sourceID },
           })
+          const previousIdenticalCalls = completedToolCallCount(ctx.messages, "lcm_read", params)
           const view = yield* loadMemory({ sessionID: ctx.sessionID, signal: ctx.abort, memory, database })
           const { source, content } = requireSource(view, params.sourceID)
+          const chronology = sourceChronology(view, source.id)
+          const callGuidance = recoveryCallGuidance({
+            tool: "lcm_read",
+            previousIdenticalCalls,
+            sourceScoped: true,
+          })
           if (params.maxBytes !== undefined && !Number.isFinite(params.maxBytes))
             throw new LcmToolError("lcm_unavailable", "The source byte limit must be a finite number.")
           const maxBytes = Math.min(32 * 1024, Math.max(1, Math.floor(params.maxBytes ?? 8 * 1024)))
@@ -114,6 +129,8 @@ export const LcmReadTool = Tool.define(
             if (offset !== 0) throw new LcmToolError("lcm_invalid_cursor", "Media sources do not use byte cursors.")
             const media = content.immutableMedia
             const result = {
+              callGuidance,
+              chronology,
               kind: "media",
               sourceID: source.id,
               mediaType: media.mediaType,
@@ -126,7 +143,11 @@ export const LcmReadTool = Tool.define(
             return {
               title: `Read Conversation Memory: ${source.id}`,
               output: inertOutput(result),
-              metadata: { bytes: media.bytes.byteLength, truncated: false },
+              metadata: {
+                bytes: media.bytes.byteLength,
+                repeatedInput: previousIdenticalCalls > 0,
+                truncated: false,
+              },
               attachments: [
                 {
                   type: "file" as const,
@@ -148,13 +169,13 @@ export const LcmReadTool = Tool.define(
           const chunk = textChunk(content.content, offset, maxBytes)
           const continuation = readContinuation(chunk.end, chunk.total)
           const result = {
+            callGuidance,
+            chronology,
             kind: "text",
             sourceID: source.id,
             mediaType: source.mediaType ?? "text/plain",
             offset,
-            ...(resolvedOffset.adjusted
-              ? { requestedOffset, adjustedOffsetReason: "past_source_end" as const }
-              : {}),
+            ...(resolvedOffset.adjusted ? { requestedOffset, adjustedOffsetReason: "past_source_end" as const } : {}),
             bytesReturned: chunk.end - offset,
             totalBytes: chunk.total,
             digest: source.digest,
@@ -164,6 +185,7 @@ export const LcmReadTool = Tool.define(
             ...(resolvedOffset.adjusted
               ? {
                   advice: [
+                    ...continuation.advice,
                     "The requested offset was past totalBytes and was clamped to the source end. This source is complete; do not retry nearby offsets. Use focused search or a different source.",
                   ],
                 }
@@ -172,7 +194,11 @@ export const LcmReadTool = Tool.define(
           return {
             title: `Read Conversation Memory: ${source.id}`,
             output: inertOutput(result),
-            metadata: { bytes: result.bytesReturned, truncated: chunk.end < chunk.total },
+            metadata: {
+              bytes: result.bytesReturned,
+              repeatedInput: previousIdenticalCalls > 0,
+              truncated: chunk.end < chunk.total,
+            },
           }
         }),
     }

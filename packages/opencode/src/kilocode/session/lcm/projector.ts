@@ -81,7 +81,9 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
           "questions. Byte intervals are half-open. When boundaries share a source, constrain sourceID-scoped lcm_grep",
           "with startOffset at the opening marker's byte end and endOffset at the closing marker's byte start. For units",
           "spanning sources, apply the opening offset to the first source, the closing offset to the last, and search",
-          "intermediate sources in full. Do not use evidence before the opening or after the closing.",
+          "intermediate sources in full. Do not use evidence before the opening or after the closing. Source EOF is",
+          "never semantic-unit EOF: if an opening is near source end, ignore earlier bytes and continue later",
+          "chronological sources from offset 0 until the matching close. lcm_read reports those source neighbors.",
           ...anchors,
           ...(structural.anchors.length < structural.total
             ? [
@@ -101,8 +103,10 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
     "sources when focused search or query can answer. lcm_grep defaults to literal mode: enter punctuation without",
     "regex escapes (for example [START], not \\[START\\]); set mode=regex for | alternatives. Unscoped grep can",
     "return overlapping summaries and raw descendants: never add both counts. For lcm_read, copy nextOffset or",
-    "nextCursor only from an incomplete result; when complete is true both are null. Never calculate byte offsets",
-    "from content length or repeat a consumed page. lcm_describe and lcm_expand navigate provenance. Once exact",
+    "nextCursor only from an incomplete result; when complete is true both are null for that transport source only.",
+    "Use its chronology metadata when a verified semantic unit continues into later sources.",
+    "Never calculate byte offsets from content length or repeat a completed deterministic call. lcm_describe and",
+    "lcm_expand navigate provenance. Once exact",
     "evidence resolves the current question, stop recovery and answer immediately instead of re-verifying it.",
     ...structuralMap,
     "",

@@ -3,6 +3,7 @@ import { MessageV2 } from "@/session/message-v2"
 import { Database } from "@opencode-ai/core/database/database"
 import type { ConversationMemory } from "@/kilocode/session/lcm/service"
 import { extractFinalSources } from "@/kilocode/session/lcm/transcript-source"
+import { isReceiptOnlyAcknowledgement } from "@/kilocode/session/lcm/summary-tree"
 import type {
   ConversationMemoryStore,
   FinalSource,
@@ -137,6 +138,90 @@ export function priorTurnSourceCutoff(
     (cutoff, source) => (priorMessageIDs.has(source.messageID) ? Math.max(cutoff, source.ordinal) : cutoff),
     -1,
   )
+}
+
+function canonicalToolInput(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalToolInput)
+  if (!value || typeof value !== "object") return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .toSorted(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, canonicalToolInput(item)]),
+  )
+}
+
+function historicalToolPart(part: unknown): part is {
+  type: "tool"
+  tool: string
+  state: { status: "completed"; input: unknown }
+} {
+  if (!part || typeof part !== "object") return false
+  const value = part as Record<string, unknown>
+  if (value.type !== "tool" || typeof value.tool !== "string" || !value.state || typeof value.state !== "object")
+    return false
+  const state = value.state as Record<string, unknown>
+  return state.status === "completed" && "input" in state
+}
+
+export function completedToolCallCount(
+  messages: readonly { parts: readonly unknown[] }[],
+  tool: string,
+  input: unknown,
+) {
+  const signature = JSON.stringify(canonicalToolInput(input))
+  return messages.reduce(
+    (count, message) =>
+      count +
+      message.parts.filter(
+        (part) =>
+          historicalToolPart(part) &&
+          part.tool === tool &&
+          JSON.stringify(canonicalToolInput(part.state.input)) === signature,
+      ).length,
+    0,
+  )
+}
+
+export function recoveryCallGuidance(input: {
+  tool: "lcm_grep" | "lcm_read"
+  previousIdenticalCalls: number
+  sourceScoped: boolean
+}) {
+  const scope = input.sourceScoped ? "this digest-verified source" : "the current prior-turn memory view"
+  return {
+    deterministic: true,
+    previousIdenticalCalls: input.previousIdenticalCalls,
+    instruction:
+      input.previousIdenticalCalls > 0
+        ? `This exact ${input.tool} input already completed ${input.previousIdenticalCalls} previous time(s). It is deterministic for ${scope}; reuse this result and do not submit the identical input again. Change the scope, pattern, page, or offset, or answer now.`
+        : `This completed ${input.tool} call is deterministic for ${scope}. Reuse this result instead of repeating identical input.`,
+  }
+}
+
+function sourceReference(source: FinalSource | undefined) {
+  if (!source) return null
+  return { sourceID: source.id, ordinal: source.ordinal, kind: source.kind }
+}
+
+export function sourceChronology(
+  view: {
+    sources: ReadonlyMap<string, FinalSource>
+    content: ReadonlyMap<string, { content: string }>
+  },
+  sourceID: string,
+) {
+  const ordered = [...view.sources.values()].toSorted((left, right) => left.ordinal - right.ordinal)
+  const index = ordered.findIndex((source) => source.id === sourceID)
+  if (index < 0) throw new LcmToolError("lcm_not_found", "No current-session source has that ID.")
+  const nonReceipt = (source: FinalSource) => !isReceiptOnlyAcknowledgement(view.content.get(source.id)?.content ?? "")
+  return {
+    sourceOrdinal: ordered[index]!.ordinal,
+    previousSource: sourceReference(ordered[index - 1]),
+    nextSource: sourceReference(ordered[index + 1]),
+    previousNonReceiptSource: sourceReference(ordered.slice(0, index).findLast(nonReceipt)),
+    nextNonReceiptSource: sourceReference(ordered.slice(index + 1).find(nonReceipt)),
+  }
 }
 
 export function inertOutput(value: unknown) {

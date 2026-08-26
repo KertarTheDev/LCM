@@ -20,11 +20,22 @@ const RECOVERY_HANDLE = /\b(?:src|sum)_[a-f0-9]{24}\b/g
 const RECOVERY_HANDLE_LIKE = /\b(?:src|sum)_(?:[a-z0-9][a-z0-9_-]*|\.{2,})/gi
 const RECOVERY_FOOTER = /\n\nRecovery handles: (?:\b(?:src|sum)_[a-f0-9]{24}\b(?:, )?)+\s*$/u
 const PROTOCOL_ONLY = /^(?:received|acknowledged|understood|ok(?:ay)?)[.!]?$/iu
+const PROTOCOL_LINE = /(?:^|\n)\s*(?:received|acknowledged|understood|ok(?:ay)?)[.!]?\s*(?=\n|$)/iu
+const TRANSFORMER_COMPLETION_LEAD =
+  /^(?:i(?:'ve| have)|we(?:'ve| have))\s+(?:updated|implemented|completed|made|applied|finished|fixed|changed|created|added|removed)\b/iu
 const REFUSAL = /^(?:i(?:'m| am) sorry\b|i (?:cannot|can't|won't|am unable to)\b)/iu
+const GROUNDING_STOP_WORDS = new Set(
+  `about after again against all also and any are because been before being between both but can conversation could
+  current data detail details does each earlier every following from further had has have having historical into its
+  itself more most other our out over provided recovery requested same should source sources state summary task text than
+  that the their them then there these they this those through under user very was were what when where which while who
+  will with would`.split(/\s+/u),
+)
 
 export interface SummaryCandidate {
   text: string
   mode: GenerationMode
+  grounded?: boolean
   attempt?: SummaryAttempt
 }
 
@@ -34,6 +45,7 @@ export interface SummaryGenerator {
     children: Array<FinalSource | SummaryNode>
     targetTokens: number
     usableInputTokens: number
+    allowedHandles: string[]
     mode: "normal" | "aggressive"
     signal?: AbortSignal
   }): Promise<SummaryCandidate | undefined>
@@ -161,6 +173,28 @@ function substantiveCharacters(text: string) {
   return text.replace(RECOVERY_FOOTER, "").replace(RECOVERY_HANDLE, "").replace(/\s/gu, "").length
 }
 
+function groundingTerms(text: string) {
+  return (
+    text
+      .normalize("NFKC")
+      .toLocaleLowerCase()
+      .match(/[\p{L}\p{N}_./-]{3,}/gu) ?? []
+  )
+    .map((term) => term.replace(/^[./-]+|[./-]+$/gu, ""))
+    .filter((term) => term.length >= 3 && !GROUNDING_STOP_WORDS.has(term) && !/^(?:src|sum)_[a-f0-9]{24}$/u.test(term))
+}
+
+export function isReceiptOnlyAcknowledgement(text: string) {
+  return PROTOCOL_ONLY.test(text.trim())
+}
+
+export function summaryGrounded(sourceText: string, candidateText: string) {
+  const candidateTerms = [...new Set(groundingTerms(candidateText.replace(RECOVERY_HANDLE_LIKE, " ")))]
+  if (candidateTerms.length < 4) return true
+  const sourceTerms = new Set(groundingTerms(sourceText.replace(RECOVERY_HANDLE_LIKE, " ")))
+  return candidateTerms.some((term) => sourceTerms.has(term))
+}
+
 function candidateIssue(
   candidate: SummaryCandidate,
   sourceTokens: number,
@@ -176,6 +210,8 @@ function candidateIssue(
   if (trimmed.length === 0) return "empty" as const
   if (candidate.attempt && candidate.attempt.finish !== "stop") return "incomplete" as const
   if (PROTOCOL_ONLY.test(trimmed) || REFUSAL.test(trimmed)) return "protocol_output" as const
+  if (PROTOCOL_LINE.test(trimmed) || TRANSFORMER_COMPLETION_LEAD.test(trimmed)) return "protocol_scaffolding" as const
+  if (candidate.grounded === false) return "ungrounded" as const
   if (candidateBytes >= sourceBytes || candidateTokens >= sourceTokens) return "not_reduced" as const
   if (candidateTokens > Math.ceil(target * 1.15)) return "too_long" as const
   if (handleLike.some((handle) => !allowed.has(handle))) return "unknown_handle" as const
@@ -206,7 +242,10 @@ function attachRecoveryHandles(
     trimmed.length === 0 ||
     (candidate.attempt && candidate.attempt.finish !== "stop") ||
     PROTOCOL_ONLY.test(trimmed) ||
+    PROTOCOL_LINE.test(trimmed) ||
+    TRANSFORMER_COMPLETION_LEAD.test(trimmed) ||
     REFUSAL.test(trimmed) ||
+    candidate.grounded === false ||
     substantiveCharacters(trimmed) < 16
   )
     return candidate
@@ -297,6 +336,7 @@ export class SummaryTree {
             children: values,
             targetTokens: target,
             usableInputTokens: input.usableInputTokens,
+            allowedHandles: [...allowed].toSorted(),
             mode,
             signal: input.signal,
           })

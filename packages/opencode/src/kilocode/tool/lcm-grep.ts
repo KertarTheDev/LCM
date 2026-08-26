@@ -5,12 +5,15 @@ import { ConversationMemory } from "@/kilocode/session/lcm/service"
 import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
 import { REGEX_SEARCH_LIMITS, regexSearch } from "@/kilocode/session/lcm/regex-search"
 import {
+  completedToolCallCount,
   inertOutput,
   LcmToolError,
   loadMemory,
   priorTurnSourceCutoff,
+  recoveryCallGuidance,
   requireSource,
   requireSummary,
+  sourceChronology,
 } from "./lcm-common"
 import type { SummaryChild } from "@/kilocode/session/lcm/types"
 
@@ -231,7 +234,7 @@ export const LcmGrepTool = Tool.define(
     const database = yield* Database.Service
     return {
       description:
-        "Discover earlier current-session evidence in exact finalized raw text and active summaries. Literal mode is the default: enter punctuation exactly without regex backslashes; set mode to regex for alternatives such as foo|bar and keep every regex within 512 characters. Unscoped results include one preview plus exact counts and may contain overlapping summaries and raw descendants, so do not add both occurrence totals. For exact or exhaustive work, identify candidate src_ handles, repeat with sourceID, and use startOffset/endOffset when structural boundaries share a source, then seek with lcm_read.",
+        "Discover earlier current-session evidence in exact finalized raw text and active summaries. Literal mode is the default: enter punctuation exactly without regex backslashes; set mode to regex for alternatives such as foo|bar and keep every regex within 512 characters. A src_ handle is one transport record, never proof of a complete document, episode, section, or other semantic unit. Unscoped results include one preview plus exact counts and may contain overlapping summaries and raw descendants, so do not add both occurrence totals. For exact or exhaustive per-unit work, identify candidate src_ handles, apply structural startOffset/endOffset bounds, continue across chronological sources when needed, and seek with lcm_read.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -241,6 +244,7 @@ export const LcmGrepTool = Tool.define(
             always: ["*"],
             metadata: { mode: params.mode ?? "literal" },
           })
+          const previousIdenticalCalls = completedToolCallCount(ctx.messages, "lcm_grep", params)
           const view = yield* loadMemory({ sessionID: ctx.sessionID, signal: ctx.abort, memory, database })
           const limit = Math.min(50, Math.max(1, Math.floor(params.limit ?? 20)))
           if (
@@ -288,6 +292,7 @@ export const LcmGrepTool = Tool.define(
             ? descendants(requireSummary(view, params.summaryID).id, view.children)
             : undefined
           if (params.sourceID) requireSource(view, params.sourceID)
+          const chronology = params.sourceID ? sourceChronology(view, params.sourceID) : undefined
           const historicalCutoff =
             params.sourceID || params.summaryID ? undefined : priorTurnSourceCutoff(view, ctx.messages)
           const values = [
@@ -407,6 +412,11 @@ export const LcmGrepTool = Tool.define(
           const kinds = new Map(values.map((value) => [value.id, value.kind]))
           const complete = nextOffset >= found.length
           const totalsComplete = grepTotalsComplete(params.mode ?? "literal", complete)
+          const callGuidance = recoveryCallGuidance({
+            tool: "lcm_grep",
+            previousIdenticalCalls,
+            sourceScoped: Boolean(params.sourceID),
+          })
           const advice = [
             literalPatternAdvice(params.pattern, params.mode ?? "literal"),
             occurrencePaginationAdvice(
@@ -416,11 +426,27 @@ export const LcmGrepTool = Tool.define(
             params.sourceID && (params.startOffset !== undefined || params.endOffset !== undefined)
               ? "Matches and totals are limited to the requested half-open source byte interval [startOffset, endOffset)."
               : undefined,
+            params.sourceID && params.startOffset === undefined && params.endOffset === undefined
+              ? "WARNING: this search covers the entire transport source, which may include evidence before or after the intended document, episode, section, or other semantic unit. Do not use it for per-unit first/last/count conclusions until structural bounds are applied. If the unit opens near this source's end, ignore earlier bytes and continue in later chronological sources."
+              : undefined,
             !params.sourceID && !params.summaryID && matches.some((match) => match.kind === "summary")
               ? "Summaries and raw descendants can overlap. For exact counts or lists, use summary matches only to find candidate source regions and verify raw src_ records."
               : undefined,
           ].filter((item): item is string => item !== undefined)
           const result = {
+            callGuidance,
+            ...(chronology ? { chronology } : {}),
+            ...(params.sourceID
+              ? {
+                  scope: {
+                    kind:
+                      params.startOffset !== undefined || params.endOffset !== undefined
+                        ? ("bounded_source_interval" as const)
+                        : ("entire_transport_source" as const),
+                    semanticUnitGuaranteed: false,
+                  },
+                }
+              : {}),
             matches,
             ...(nextOffset < found.length ? { nextCursor: encodeCursor(query, nextOffset) } : {}),
             totals: {
@@ -432,7 +458,7 @@ export const LcmGrepTool = Tool.define(
               sources: values.filter((value) => value.kind === "source").length,
               summaries: values.filter((value) => value.kind === "summary").length,
               complete,
-              ...(params.sourceID && (params.startOffset !== undefined || params.endOffset !== undefined)
+              ...(params.sourceID
                 ? {
                     byteRange: {
                       start: values[0]?.byteOffset ?? 0,
@@ -447,6 +473,7 @@ export const LcmGrepTool = Tool.define(
             output: inertOutput(result),
             metadata: {
               matches: matches.length,
+              repeatedInput: previousIdenticalCalls > 0,
               truncated:
                 result.searched.complete === false ||
                 matches.some((match) => !match.rangesComplete || !match.occurrencesComplete),
