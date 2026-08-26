@@ -6,7 +6,47 @@ The product branch remains a direct, narrow augmentation of upstream tag `v7.4.2
 (`40fa10e50a75c4887978d892520d1246515413bf`). Correct the product branch with ordinary reviewable commits; do not
 rewrite its published history or replay old LCM branches.
 
-The current public prerelease is `v7.4.23-lcm.3`. It was published on 2026-08-25 from candidate
+The current public prerelease is `v7.4.23-lcm.4`. It was published on 2026-08-26 from candidate
+`08e446abf764525b42634da9fcaf60c2bff8e75c`, containing verified product
+`e68e034a87212c5c80781cd4416af661337e6edd`. Exact-SHA workflow run
+[`32917997402`](https://github.com/KertarTheDev/LCM/actions/runs/32917997402) completed successfully, including exact
+27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
+typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
+runtime smoke. Release [`376822950`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.4) is a non-draft
+prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
+
+|Asset|Bytes|SHA-256|
+|---|---:|---|
+|`kilo-darwin-arm64.zip`|52,523,054|`57100763e22791fb69994569720ba9c0914ddd378019ea9d8a01cf971254c921`|
+|`kilo-darwin-x64-baseline.zip`|54,778,027|`ad2007a86dc958d8a17f2f4e23981c576eec5d45d38096736ff94b5a1300e803`|
+|`kilo-darwin-x64.zip`|54,778,027|`93b998e0d0482706a12bce7274c57b7300965b8296c6dcca14b8be2ee1102ed5`|
+|`kilo-linux-arm64-musl.tar.gz`|69,295,716|`2884a456dea2c7a1e4ff50de584191a96a570fc0dd3d615748b21a650768475b`|
+|`kilo-linux-arm64.tar.gz`|67,191,480|`623d933ccb2394411b23251cee6412ce4e7caf96323135c39c42089fb29fa779`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|69,783,852|`b13700190c88fa2873bd4edc90d9d677a7d0c916050f9eed465cb2da59e4a3bf`|
+|`kilo-linux-x64-baseline.tar.gz`|67,435,049|`abf7d7e3896f247bc87a241c9941fc2f581303353160979311787a39f54b1961`|
+|`kilo-linux-x64-musl.tar.gz`|69,784,636|`af6aa62ef2a0c18e0c994ce73e76963d55b4fedf677a40331a225f0f306ddec5`|
+|`kilo-linux-x64.tar.gz`|67,435,566|`4edf4012fa9ffb35b40cfbaa8bc433309c67c58f04c21987c431410e6672add1`|
+|`kilo-vscode-alpine-arm64.vsix`|110,106,250|`f44e8597373b2fd1212aa6c5fa49a5dd111102093102d75932f25c3302cd91d6`|
+|`kilo-vscode-alpine-x64.vsix`|117,311,285|`a64c7a17fbeee1ec5eed898a86749617217ab172fa5534ae3bb4f5ac1eafaaa9`|
+|`kilo-vscode-darwin-arm64.vsix`|92,839,365|`f416709e9fd56a21848a1784663c74633488c1cbfb71e9882b3bccded5a5ceef`|
+|`kilo-vscode-darwin-x64.vsix`|100,911,724|`f6124dd1bbcd106939180285f83528168f14f2fd50496f49ac0e1113548d614b`|
+|`kilo-vscode-linux-arm64.vsix`|107,941,191|`e6434e708b07140a1b436cf32370a8f7de8d04c0479fc3e73fda28cf28bb6aa7`|
+|`kilo-vscode-linux-x64.vsix`|114,885,625|`d870c95013575e97381495de98ba2314122483bbe2aa123c72a088f220d5626b`|
+|`kilo-vscode-win32-arm64.vsix`|89,716,502|`590c1f356d84d23f860fd779e33ac0ae59f3ff39efa14619f9fe828bea8cc9e0`|
+|`kilo-vscode-win32-x64.vsix`|113,757,293|`b053914bc8f1585df55b9edb8f2a83e943229aca17642af4d8f9f162182d9e62`|
+|`kilo-windows-arm64.zip`|65,107,800|`129a019e56dd8b1cfd8e86ac3dbc4e8c9a7b0987477d700829fbf672df8e58d2`|
+|`kilo-windows-x64-baseline.zip`|66,784,544|`271202b37251b07d4803a9c39e77d4c9bd145a0103481178d8ce7c6f0ee73092`|
+|`kilo-windows-x64.zip`|66,784,544|`96d66251b654db3715e4d856ee5af195421f7e0180773d9a33cf96389e9a6a06`|
+
+`.4` supersedes `.3` as the recommended build after high-quality-model trace review exposed several general recovery
+and maintenance quality defects. It constrains transformation output at the model boundary, accepts model summaries
+only after a terminal `stop`, rebuilds disposable caches that could contain truncated summaries, improves summary and
+query prompts, makes recovery output smaller and better scoped, provides fair match-centred candidate extraction,
+hardens cursor validation and regex cancellation cleanup, and removes cancelled maintenance work from the queue
+immediately. The retained raw Kilo transcript remains the source of truth. The healthy `.3` release remains published
+as historical prerelease evidence; publishing `.4` does not authorize deleting it or any other retained release.
+
+The previous retained public prerelease is `v7.4.23-lcm.3`. It was published on 2026-08-25 from candidate
 `4a0b14cc0c1aac5027fa9f6c1ee76308824546cd`, containing verified product
 `7837cb58afd07677641eb728db2f56485f013d18`. Exact-SHA workflow run
 [`32856216753`](https://github.com/KertarTheDev/LCM/actions/runs/32856216753) completed successfully, including exact
