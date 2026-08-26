@@ -5,6 +5,7 @@ import { priorTurnSourceCutoff } from "@/kilocode/tool/lcm-common"
 import {
   grepRangeLimit,
   grepCursorQuery,
+  grepTotalsComplete,
   literalPatternAdvice,
   literalRanges,
   occurrenceTotals,
@@ -41,6 +42,9 @@ describe("LCM tool contracts", () => {
         ]),
       ),
     ).toEqual({ sourceRecords: 1, summaryRecords: 1, sourceOccurrences: 3, summaryOccurrences: 2 })
+    expect(grepTotalsComplete("literal", false)).toBe(true)
+    expect(grepTotalsComplete("regex", false)).toBe(false)
+    expect(grepTotalsComplete("regex", true)).toBe(true)
   })
 
   test("bounds unscoped recovery before the current user turn", () => {
@@ -131,6 +135,7 @@ describe("LCM tool contracts", () => {
     expect(decodeCursor(query, cursor)).toBe(12)
     expect(() => decodeCursor({ ...query, pattern: "other" }, cursor)).toThrow("lcm_invalid_cursor")
     expect(() => decodeCursor(query, `${cursor.slice(0, -1)}x`)).toThrow("lcm_invalid_cursor")
+    expect(() => decodeCursor(query, `${cursor}.extra`)).toThrow("lcm_invalid_cursor")
     const expansion = expandCursorQuery("sum_a")
     expect(decodeCursor(expansion, encodeCursor(expansion, 10))).toBe(10)
   })

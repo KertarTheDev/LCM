@@ -258,6 +258,7 @@ type ModelTask = {
   signal: AbortSignal
   resolve: (value: unknown) => void
   reject: (error: unknown) => void
+  dequeue: () => void
 }
 
 export class MaintenanceModelQueue {
@@ -267,22 +268,48 @@ export class MaintenanceModelQueue {
 
   enqueue<T>(input: { priority: "foreground" | "soft"; signal: AbortSignal; run: () => Promise<T> }) {
     return new Promise<T>((resolve, reject) => {
+      const queue = input.priority === "foreground" ? this.foreground : this.soft
+      let queued = true
+      let aborted = () => {}
       const task: ModelTask = {
         run: input.run,
         signal: input.signal,
         resolve: (value) => resolve(value as T),
         reject,
+        dequeue: () => {
+          if (!queued) return
+          queued = false
+          input.signal.removeEventListener("abort", aborted)
+        },
       }
-      const queue = input.priority === "foreground" ? this.foreground : this.soft
+      aborted = () => {
+        if (!queued) return
+        const index = queue.indexOf(task)
+        if (index === -1) return
+        queue.splice(index, 1)
+        task.dequeue()
+        task.reject(input.signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
+        this.pump()
+      }
       queue.push(task)
+      input.signal.addEventListener("abort", aborted, { once: true })
+      if (input.signal.aborted) {
+        aborted()
+        return
+      }
       this.pump()
     })
+  }
+
+  pendingCount() {
+    return this.foreground.length + this.soft.length
   }
 
   private pump() {
     if (this.running) return
     const task = this.foreground.shift() ?? this.soft.shift()
     if (!task) return
+    task.dequeue()
     if (task.signal.aborted) {
       task.reject(task.signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
       this.pump()
@@ -442,8 +469,10 @@ export const layer: Layer.Layer<
     }
 
     const abortable = <T>(promise: Promise<T>, signal: AbortSignal) => {
-      if (signal.aborted)
+      if (signal.aborted) {
+        void promise.catch(() => undefined)
         return Promise.reject(signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
+      }
       return new Promise<T>((resolve, reject) => {
         const aborted = () => reject(signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
         signal.addEventListener("abort", aborted, { once: true })

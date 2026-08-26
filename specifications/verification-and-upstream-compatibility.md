@@ -14,7 +14,7 @@ Acceptance must prove:
 - disabled prompt, idle, deletion, API, CLI, and tool paths neither create nor mutate a sidecar, while re-enable
   reuses or rebuilds retained state;
 - newest-first stream normalization and stable chronology for new, legacy, imported, and 100+ source sessions;
-- schema-v6/tree-v3 discard-and-rebuild without raw-body duplication or derived-cache migration;
+- schema-v7/tree-v4 discard-and-rebuild of earlier derived caches without raw-body duplication or semantic migration;
 - durable per-provider-step successful-request consumption, proof-based recovery after an unconsumed retry-suffix
   replacement, and protection after cancel/failure/overflow;
 - sequential and parallel LCM recovery-tool results entering source lineage, becoming eligible after a later
@@ -23,8 +23,8 @@ Acceptance must prove:
   dismissed blocking question resumes;
 - 15%-clamped exact tail plus explicit override;
 - incremental one-call soft quanta that leave raw history unchanged, apply bounded retry delay after model failure,
-  and use a non-reasoning transformation variant when available; stable projection, multi-level hard convergence, and
-  deterministic strict compression;
+  use a non-reasoning transformation variant when available, and immediately release aborted queued model work;
+  stable projection, multi-level hard convergence, and deterministic strict compression;
 - optimistic provider overlap, observed single-flight blocking, fair session quanta, and hard/manual priority;
 - irreducible constrained state and fail-closed `lcm_hard_limit_unresolved`;
 - no legacy threshold preflight or post-success automatic compaction scheduling in enabled LCM flow for every
@@ -36,8 +36,9 @@ Acceptance must prove:
 - VS Code, `/compact`, TUI, remote, HTTP, and SDK manual affordances invoke exactly one LCM cycle without a transcript
   summary when enabled and the upstream legacy cycle when disabled;
 - all five real tool handlers, cancellation/cursors/current-session isolation, reachable `active`, direct `frontier`,
-  compact grep previews with separate raw/summary totals and actionable regex guidance, page-size-independent read
-  continuation, and one-call cited `lcm_expand_query` recovery with fair match-centered excerpts;
+  compact nonduplicated grep previews with separate raw/summary totals and actionable regex guidance,
+  page-size-independent continuation, and one-call cited `lcm_expand_query` recovery with fair match-centered excerpts
+  and fallback;
 - substantive, exact-lineage summary citations with rejection of missing, invented, stale, content-free, or
   non-`stop`/length-truncated model output; transformation caps enforced through the model rather than provider options;
   preservation of structural boundary/completeness evidence for reference data, an explicit lossy-summary recovery

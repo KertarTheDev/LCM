@@ -21,13 +21,21 @@ export function encodeCursor(query: unknown, offset: number) {
 
 export function decodeCursor(query: unknown, cursor?: string) {
   if (!cursor) return 0
-  const [payload, encoded] = cursor.split(".")
+  const parts = cursor.split(".")
+  if (parts.length !== 2) throw new Error("lcm_invalid_cursor")
+  const [payload, encoded] = parts
   if (!payload || !encoded) throw new Error("lcm_invalid_cursor")
+  const payloadBytes = Buffer.from(payload, "base64url")
   const expected = signature(payload)
   const actual = Buffer.from(encoded, "base64url")
-  if (expected.byteLength !== actual.byteLength || !timingSafeEqual(expected, actual))
+  if (
+    payloadBytes.toString("base64url") !== payload ||
+    actual.toString("base64url") !== encoded ||
+    expected.byteLength !== actual.byteLength ||
+    !timingSafeEqual(expected, actual)
+  )
     throw new Error("lcm_invalid_cursor")
-  const value = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Cursor
+  const value = JSON.parse(payloadBytes.toString("utf8")) as Cursor
   if (value.version !== 1 || value.query !== sha256(JSON.stringify(query)) || !Number.isSafeInteger(value.offset))
     throw new Error("lcm_invalid_cursor")
   if (value.offset < 0) throw new Error("lcm_invalid_cursor")

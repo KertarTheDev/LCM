@@ -34,8 +34,9 @@ whether to shorten the pattern, narrow the scope, or switch to literal mode. A l
 operators returns actionable advice to select regex mode rather than silently implying that alternatives were absent.
 Success, worker failure, cancellation, and timeout all terminate the worker and detach the request's abort listener.
 Every result reports separate source/summary record and occurrence totals for the returned page, plus complete-scope
-totals when known. Summaries can overlap their raw descendants and must not be added to raw totals as independent
-evidence; tool output and descriptions say so explicitly.
+totals when known. Literal search scans the whole bounded scope and therefore reports complete-scope totals on its
+first page; regex reports them only after its bounded scan proves completion. Summaries can overlap their raw
+descendants and must not be added to raw totals as independent evidence; tool output and descriptions say so explicitly.
 Unscoped search excludes the current user turn and its later assistant/tool sources, which remain visible in protected
 ordinary context; this prevents a recovery query from matching its own search terms. An explicit `sourceID` or
 `summaryID` can still address any trusted current-lineage item.
@@ -86,8 +87,8 @@ the continuation cursor. Immutable persisted media may be returned through
 Kilo's normal attachment channel after digest verification. Current filesystem or remote URL bytes are never
 substituted.
 
-Cursors are signed and bind semantic query or source identity while permitting a different page-size limit. Changing
-any other bound field invalidates a cursor. All operations
+Cursors are signed, require one canonical base64url encoding, and bind semantic query or source identity while
+permitting a different page-size limit. Changing any other bound field or the opaque cursor text invalidates it. All operations
 consume Kilo's cancellation signal and run through ordinary permission requests.
 
 Safe error codes are:

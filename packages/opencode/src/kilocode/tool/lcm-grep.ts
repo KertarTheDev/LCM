@@ -124,6 +124,10 @@ export function grepCursorQuery(input: {
   return input
 }
 
+export function grepTotalsComplete(mode: "literal" | "regex", pageComplete: boolean) {
+  return mode === "literal" || pageComplete
+}
+
 function regexToolError(error: unknown) {
   const message = error instanceof Error ? error.message : ""
   if (message === "lcm_cancelled")
@@ -300,6 +304,7 @@ export const LcmGrepTool = Tool.define(
           const nextOffset = offset + selected.length
           const kinds = new Map(values.map((value) => [value.id, value.kind]))
           const complete = nextOffset >= found.length
+          const totalsComplete = grepTotalsComplete(params.mode ?? "literal", complete)
           const advice = [
             literalPatternAdvice(params.pattern, params.mode ?? "literal"),
             !params.sourceID && !params.summaryID && matches.some((match) => match.kind === "summary")
@@ -311,7 +316,7 @@ export const LcmGrepTool = Tool.define(
             ...(nextOffset < found.length ? { nextCursor: encodeCursor(query, nextOffset) } : {}),
             totals: {
               returned: occurrenceTotals(selected, kinds),
-              ...(complete ? { complete: occurrenceTotals(found, kinds) } : {}),
+              ...(totalsComplete ? { complete: occurrenceTotals(found, kinds) } : {}),
             },
             ...(advice.length > 0 ? { advice } : {}),
             searched: {

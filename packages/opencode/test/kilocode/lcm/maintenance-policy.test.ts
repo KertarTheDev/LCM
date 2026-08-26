@@ -184,6 +184,38 @@ describe("LCM maintenance policy", () => {
     expect(order).toEqual(["soft-1", "hard", "soft-2"])
   })
 
+  test("releases aborted waiting model work immediately", async () => {
+    const queue = new MaintenanceModelQueue()
+    let release!: () => void
+    const active = queue.enqueue({
+      priority: "foreground",
+      signal: new AbortController().signal,
+      run: () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        }),
+    })
+    const waiting = new AbortController()
+    let executed = false
+    const pending = queue
+      .enqueue({
+        priority: "soft",
+        signal: waiting.signal,
+        run: async () => {
+          executed = true
+        },
+      })
+      .catch((error) => error)
+
+    expect(queue.pendingCount()).toBe(1)
+    waiting.abort(new DOMException("Superseded", "AbortError"))
+    expect(await pending).toBeInstanceOf(DOMException)
+    expect(queue.pendingCount()).toBe(0)
+    release()
+    await active
+    expect(executed).toBe(false)
+  })
+
   test("does not join an active revision to stale pressure from another frame", () => {
     const frame = (id: string, revisionID: string, lineageDigest: string): ContextFrame => ({
       id,

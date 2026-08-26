@@ -18,6 +18,9 @@ checkpoint can retry the exact raw history; transient model trouble is never mat
 summary. Failed soft generation also starts a bounded internal retry delay so rapid tool checkpoints do not repeatedly
 spend provider calls on the same unavailable window. Deterministic generation remains available to direct tree callers
 that have no summary model.
+Foreground query and hard/manual work take priority over queued soft calls in one fair single-flight model queue. An
+aborted task that is still waiting is removed immediately so retries and recovery preemption do not retain stale
+transcript/content closures behind a long-running provider call.
 
 Hard and manual maintenance summarize all eligible raw windows, then repeatedly promote bounded adjacent active
 summary groups until the full LCM-owned frontier reaches
