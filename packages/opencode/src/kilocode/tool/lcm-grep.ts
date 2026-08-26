@@ -24,7 +24,7 @@ export function grepRangeLimit(sourceScoped: boolean) {
 const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({
     description:
-      "Literal text in literal mode, or a regular expression of at most 512 characters in regex mode; alternatives using | require regex mode.",
+      "Exact unescaped text in literal mode, or a regular expression of at most 512 characters in regex mode; alternatives using | require regex mode.",
   }),
   mode: Schema.optional(Schema.Literals(["literal", "regex"])).annotate({
     description: "Search mode. Defaults to literal, where regex syntax such as | has no special meaning.",
@@ -114,6 +114,8 @@ export function utf8SearchWindow(text: string, startOffset = 0, endOffset?: numb
 
 export function literalPatternAdvice(pattern: string, mode: "literal" | "regex") {
   if (mode !== "literal") return
+  if (["[", "]", "(", ")", "{", "}", ".", "^", "$", "+", "*", "?", "|"].some((item) => pattern.includes(`\\${item}`)))
+    return "Literal mode treats backslashes literally. Remove regex escaping when you mean punctuation; for example, search for [START] rather than \\[START\\]."
   if (/(?:^|[^\\])\||\\[dDsSwWbB]|\.\*|\(\?:|\[[^\]]+\]/u.test(pattern))
     return "This literal pattern looks like a regular expression. Set mode to regex for operators such as |, \\d, .*, groups, or character classes."
 }
@@ -156,24 +158,37 @@ export function grepTotalsComplete(mode: "literal" | "regex", pageComplete: bool
   return mode === "literal" || pageComplete
 }
 
+export function regexErrorMessage(error: unknown) {
+  const seen = new Set<unknown>()
+  const visit = (value: unknown): string => {
+    if (!value || typeof value !== "object" || seen.has(value)) return ""
+    seen.add(value)
+    const record = value as { message?: unknown; cause?: unknown }
+    const nested = visit(record.cause)
+    if (nested.startsWith("lcm_")) return nested
+    return typeof record.message === "string" ? record.message : nested
+  }
+  return visit(error)
+}
+
 export function regexToolError(error: unknown) {
-  const message = error instanceof Error ? error.message : ""
+  const message = regexErrorMessage(error)
   if (message === "lcm_cancelled")
     return new LcmToolError("lcm_cancelled", "The Conversation Memory search was cancelled.")
   if (message === "lcm_regex_pattern_too_long")
     return new LcmToolError(
       "lcm_invalid_regex",
-      `The regular expression exceeds ${REGEX_SEARCH_LIMITS.patternCharacters} characters. Split it into shorter focused searches.`,
+      `The regular expression exceeds ${REGEX_SEARCH_LIMITS.patternCharacters} characters. Do not retry it unchanged; split it into shorter focused searches.`,
     )
   if (message === "lcm_regex_record_too_large")
     return new LcmToolError(
       "lcm_invalid_regex",
-      "A source is too large for regex search. Narrow to a smaller source or use literal mode.",
+      "A source is too large for regex search. Do not retry it unchanged; narrow to a smaller source byte interval or use literal mode.",
     )
   if (message === "lcm_regex_scope_too_large")
     return new LcmToolError(
       "lcm_invalid_regex",
-      "The regex scope is too large. Narrow it with summaryID or sourceID, or use literal mode.",
+      "The regex scope is too large. Do not retry it unchanged; narrow it with summaryID or sourceID, or use literal mode.",
     )
   if (message === "lcm_regex_worker_unavailable")
     return new LcmToolError(
@@ -211,7 +226,7 @@ export const LcmGrepTool = Tool.define(
     const database = yield* Database.Service
     return {
       description:
-        "Discover earlier current-session evidence in exact finalized raw text and active summaries. Literal mode is the default; set mode to regex for alternatives such as foo|bar and keep regexes focused. Unscoped results include one preview plus exact counts and may contain overlapping summaries and raw descendants, so do not add both occurrence totals. For exact or exhaustive work, identify candidate src_ handles, repeat with sourceID, and use startOffset/endOffset when structural boundaries share a source, then seek with lcm_read.",
+        "Discover earlier current-session evidence in exact finalized raw text and active summaries. Literal mode is the default: enter punctuation exactly without regex backslashes; set mode to regex for alternatives such as foo|bar and keep every regex within 512 characters. Unscoped results include one preview plus exact counts and may contain overlapping summaries and raw descendants, so do not add both occurrence totals. For exact or exhaustive work, identify candidate src_ handles, repeat with sourceID, and use startOffset/endOffset when structural boundaries share a source, then seek with lcm_read.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {

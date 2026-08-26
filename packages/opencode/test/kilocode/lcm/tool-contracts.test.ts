@@ -9,12 +9,13 @@ import {
   literalPatternAdvice,
   literalRanges,
   occurrenceTotals,
+  regexErrorMessage,
   regexToolError,
   utf8Ranges,
   utf8SearchWindow,
 } from "@/kilocode/tool/lcm-grep"
 import { expandCursorQuery } from "@/kilocode/tool/lcm-expand"
-import { readCursorQuery, textChunk, validUtf8Offset } from "@/kilocode/tool/lcm-read"
+import { readContinuation, readCursorQuery, textChunk, validUtf8Offset } from "@/kilocode/tool/lcm-read"
 import {
   completeQueryAnswer,
   extractiveQueryFallback,
@@ -31,6 +32,7 @@ describe("LCM tool contracts", () => {
 
   test("makes regex intent and overlapping result totals explicit", () => {
     expect(literalPatternAdvice("alpha|beta", "literal")).toContain("Set mode to regex")
+    expect(literalPatternAdvice("\\[START\\]", "literal")).toContain("search for [START]")
     expect(literalPatternAdvice("alpha|beta", "regex")).toBeUndefined()
     expect(
       occurrenceTotals(
@@ -191,6 +193,12 @@ describe("LCM tool contracts", () => {
     expect(regexToolError(new Error("lcm_invalid_regex")).message).toContain("syntax is invalid")
     expect(regexToolError(new Error("lcm_regex_timeout")).message).toContain("Do not retry it unchanged")
     expect(regexToolError(new Error("lcm_regex_worker_unavailable")).code).toBe("lcm_unavailable")
+    const wrapped = {
+      message: "An error occurred in Effect.tryPromise",
+      cause: new Error("lcm_regex_pattern_too_long"),
+    }
+    expect(regexErrorMessage(wrapped)).toBe("lcm_regex_pattern_too_long")
+    expect(regexToolError(wrapped).message).toContain("exceeds 512 characters")
     await expect(
       regexSearch(
         {
@@ -322,6 +330,14 @@ describe("LCM tool contracts", () => {
     expect(second.content).toBe("αβ")
     expect(second.end).toBe(6)
     expect(second.total).toBe(Buffer.byteLength(value))
+    expect(readContinuation(first.end, first.total)).toMatchObject({ complete: false, nextOffset: first.end })
+    expect(readContinuation(second.end, second.total)).toMatchObject({ complete: false, nextOffset: second.end })
+    const third = textChunk(value, second.end, 4)
+    expect(third.content).toBe("cd")
+    expect(readContinuation(third.end, third.total)).toEqual({
+      complete: true,
+      advice: ["This read reached the end of the source. Do not repeat the same cursor or offset."],
+    })
   })
 
   test("maps grep character ranges to seekable UTF-8 byte ranges", () => {

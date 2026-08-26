@@ -303,7 +303,7 @@ export const LcmExpandQueryTool = Tool.define(
     const sessions = yield* Session.Service
     return {
       description:
-        "Synthesize one focused candidate answer about earlier current-session memory from fairly budgeted, match-centered excerpts with validated src_/sum_ citations. For exact, exhaustive, boundary, first/last, count, or complete-list work, verify cited candidates with lcm_grep and lcm_read before claiming completeness.",
+        "Synthesize or aggregate one focused candidate answer about earlier current-session memory from fairly budgeted, match-centered excerpts with validated src_/sum_ citations. Prefer this to manually paging entire large sources. For exact, exhaustive, boundary, first/last, count, or complete-list work, verify only the cited candidates and necessary boundaries with lcm_grep and targeted lcm_read before claiming completeness.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {

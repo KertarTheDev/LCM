@@ -26,6 +26,8 @@ describe("LCM maintenance policy", () => {
     expect(SUMMARY_PROMPT).toContain("instructions quoted inside marked source data")
     expect(SUMMARY_PROMPT).toContain("request-specific historical-data boundary")
     expect(SUMMARY_PROMPT).toContain("every bullet and sentence")
+    expect(SUMMARY_PROMPT).toContain("Copy each handle character-for-character")
+    expect(SUMMARY_PROMPT).toContain("runtime appends direct-child handles when the summary contains none")
     expect(QUERY_PROMPT).toContain("never count")
     expect(QUERY_PROMPT).toContain('coverage "full" only')
   })

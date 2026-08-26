@@ -18,8 +18,9 @@ or `regex`), `caseSensitive`, `summaryID`, `sourceID`, `startOffset`, `endOffset
 opaque `cursor`. Default record limit is 20; maximum is 50. A source scope accepts inclusive `startOffset` and exclusive
 `endOffset` UTF-8 byte bounds. They let callers search only inside a structural unit that begins or ends within a
 transport source; intervals are cursor-bound and returned character/byte ranges remain relative to the complete
-source. Literal mode treats regex syntax such as `|` as ordinary text; alternatives require regex
-mode. A summary scope
+source. Literal mode treats regex syntax such as `|` as ordinary text; alternatives require regex mode. Literal
+punctuation is entered without regex escaping (`[START]`, not `\[START\]`); escaped punctuation returns actionable
+advice because the backslashes would otherwise be matched literally. A summary scope
 searches its cycle-safe descendant closure; a source scope searches one exact current-lineage source, and both scopes
 may be combined. Each returned record reports an exact `matchCount`, bounded character
 `ranges`, matching UTF-8 `byteRanges`, and local `occurrences` (one compact preview per global record or all 20 retained
@@ -33,8 +34,9 @@ cancellable isolated worker with bounded per-source and aggregate input, matchin
 and elapsed time. Oversized scopes fail explicitly
 instead of silently omitting sources, so the caller can narrow the search to a summary or source, or use literal mode.
 Regex patterns are capped at 512 characters. Worker startup has a separate 10,000 ms allowance; only after the embedded
-worker reports ready does the 2,000 ms execution limit begin. Invalid syntax, execution timeout, and worker-unavailable
-failures are distinguished. Their guidance says not to repeat an unchanged failed call and explains whether to fix the
+worker reports ready does the 2,000 ms execution limit begin. Invalid syntax, over-512-character patterns, execution
+timeout, and worker-unavailable failures are distinguished even when the Effect promise boundary wraps the worker's
+specific error. Their guidance says not to repeat an unchanged failed call and explains whether to split or fix the
 pattern, narrow the source byte interval, or switch to literal mode. A literal pattern containing common regex
 operators returns actionable advice to select regex mode rather than silently implying that alternatives were absent.
 Success, worker failure, cancellation, and timeout all terminate the worker and detach the request's abort listener.
@@ -85,11 +87,14 @@ current-lineage summary beyond that boundary.
 ## `lcm_read`
 
 Read a digest-verified source from the persisted Kilo transcript. Text reads default to 8 KiB and are capped at
-32 KiB. A non-negative UTF-8 byte `offset`, including a `lcm_grep` byte-range start, seeks directly to relevant exact
-text; an opaque cursor continues sequentially, and the two inputs are mutually exclusive. Reads preserve UTF-8
+32 KiB. A non-negative UTF-8 byte `offset`, including a `lcm_grep` byte-range start or returned `nextOffset`, seeks
+directly to relevant exact text; an opaque cursor also continues sequentially, and the two inputs are mutually
+exclusive. Reads preserve UTF-8
 boundaries and bind cursors to source ID and digest. A caller may change `maxBytes` on the next page without invalidating
-the continuation cursor. Descriptions explicitly require the returned `nextCursor`, not reuse of the cursor just
-consumed. Immutable persisted media may be returned through
+the continuation cursor. Every text result reports `complete`; incomplete results provide both a numeric `nextOffset`
+and opaque `nextCursor`, while complete results explicitly say the end was reached. Descriptions and per-page advice
+forbid reusing the consumed cursor or offset and direct aggregation/cross-source work to focused query or search rather
+than repeated maximum-size sequential reads. Immutable persisted media may be returned through
 Kilo's normal attachment channel after digest verification. Current filesystem or remote URL bytes are never
 substituted.
 

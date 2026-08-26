@@ -11,11 +11,11 @@ const Parameters = Schema.Struct({
     description: "Maximum UTF-8 bytes to return (default 8192, maximum 32768).",
   }),
   offset: Schema.optional(Schema.Number).annotate({
-    description: "Optional UTF-8 byte offset, such as a byteRange start returned by lcm_grep.",
+    description: "Optional UTF-8 byte offset, such as a byteRange start from lcm_grep or nextOffset from lcm_read.",
   }),
   cursor: Schema.optional(Schema.String).annotate({
     description:
-      "Opaque nextCursor returned by the immediately preceding page of this source; never reuse the cursor just consumed. Mutually exclusive with offset; maxBytes may change between pages.",
+      "Opaque nextCursor returned by the immediately preceding page of this source. Prefer returned nextOffset when copying an opaque cursor is error-prone. Never reuse the cursor just consumed. Mutually exclusive with offset; maxBytes may change between pages.",
   }),
 })
 
@@ -44,6 +44,21 @@ export function readCursorQuery(source: { id: string; digest: string }) {
   return { sourceID: source.id, digest: source.digest }
 }
 
+export function readContinuation(end: number, total: number) {
+  const complete = end >= total
+  return {
+    complete,
+    ...(complete
+      ? { advice: ["This read reached the end of the source. Do not repeat the same cursor or offset."] }
+      : {
+          nextOffset: end,
+          advice: [
+            "For the next contiguous page, use nextOffset or nextCursor; never repeat the cursor or offset just consumed. Prefer targeted lcm_grep or lcm_expand_query recovery over scanning an entire large source page by page.",
+          ],
+        }),
+  }
+}
+
 export const LcmReadTool = Tool.define(
   "lcm_read",
   Effect.gen(function* () {
@@ -51,7 +66,7 @@ export const LcmReadTool = Tool.define(
     const database = yield* Database.Service
     return {
       description:
-        "Read bounded digest-verified exact text from one current-session src_ source. Seek directly with a structural or lcm_grep byteRange start in offset. To continue, pass the returned nextCursor, never the cursor just consumed; maxBytes may change. Recent ordinary context is already visible and does not need recovery reads.",
+        "Read a bounded digest-verified exact excerpt from one current-session src_ source. Seek directly with a structural or lcm_grep byteRange start. For aggregation or cross-source questions, prefer lcm_expand_query or lcm_grep over sequential 32 KiB scans. To continue a necessary contiguous read, use returned nextOffset or nextCursor and never repeat the cursor or offset just consumed. Stop when complete is true. Recent ordinary context is already visible and does not need recovery reads.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -120,6 +135,7 @@ export const LcmReadTool = Tool.define(
             totalBytes: chunk.total,
             digest: source.digest,
             content: chunk.content,
+            ...readContinuation(chunk.end, chunk.total),
             ...(chunk.end < chunk.total ? { nextCursor: encodeCursor(query, chunk.end) } : {}),
           }
           return {
