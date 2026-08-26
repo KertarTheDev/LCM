@@ -35,7 +35,7 @@ export async function regexSearch(input: {
   return new Promise<Match[]>((resolve, reject) => {
     const worker = new Worker(new URL("./regex-worker.ts", import.meta.url))
     const timer = setTimeout(() => {
-      worker.terminate()
+      cleanup()
       reject(new Error("lcm_invalid_regex"))
     }, REGEX_SEARCH_LIMITS.timeoutMs)
     const cleanup = () => {

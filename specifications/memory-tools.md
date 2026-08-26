@@ -32,6 +32,7 @@ instead of silently omitting sources, so the caller can narrow the search to a s
 Regex patterns are capped at 512 characters and isolated work has a 2,000 ms safety limit. Limit failures explain
 whether to shorten the pattern, narrow the scope, or switch to literal mode. A literal pattern containing common regex
 operators returns actionable advice to select regex mode rather than silently implying that alternatives were absent.
+Success, worker failure, cancellation, and timeout all terminate the worker and detach the request's abort listener.
 Every result reports separate source/summary record and occurrence totals for the returned page, plus complete-scope
 totals when known. Summaries can overlap their raw descendants and must not be added to raw totals as independent
 evidence; tool output and descriptions say so explicitly.
