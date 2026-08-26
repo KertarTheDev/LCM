@@ -6,9 +6,11 @@ Kilo SQLite is the sole raw conversation source of truth. Conversation Memory us
 sidecar and never stores full raw source bodies. Exact reads resolve the retained Kilo message/part and verify its
 digest.
 
-Schema version 6 contains session lineage and durable `consumed_through`, bounded source metadata/excerpts, immutable
+Schema version 7 contains session lineage and durable `consumed_through`, bounded source metadata/excerpts, immutable
 summary nodes/edges/attempts, frontier revisions, activity, normalized context frames/blobs, and leases. Tree policy
-`lcm-tree-v3` is part of summary structural identity.
+`lcm-tree-v4` is part of summary structural identity. Version 7 deliberately rebuilds version-6 sidecars because a
+completed-looking summary could previously be accepted after a provider length finish and the requested transformation
+output cap was not enforced at the model boundary.
 
 Consumption advances only for the exact lineage and only after a successful terminal provider response. It is clamped
 to indexed history. On first cache creation or recovery, retained successful non-summary assistant responses
@@ -26,7 +28,7 @@ frontier and to `raw` otherwise.
 Historical evidence may remain for export but cannot be authorized by current tools or projection.
 
 An absent sidecar is created lazily. A corrupt or incompatible file is closed, renamed with
-`.incompatible-<timestamp>`, and replaced with a fresh current-schema file. All pre-v6 caches are deliberately
+`.incompatible-<timestamp>`, and replaced with a fresh current-schema file. All pre-v7 caches are deliberately
 incompatible and receive this rebuild treatment. There is no derived-cache migration: current source metadata and the
 tree are rebuilt from retained Kilo SQLite, while raw chats remain untouched. No PGlite detection or Kilo transcript
 cleanup is performed.

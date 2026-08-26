@@ -207,6 +207,21 @@ describe("LCM summary tree", () => {
       generate: async (request) => ({
         text: `${sources[0]!.id} preserves the binding implementation decision and its supporting detail.`,
         mode: request.mode,
+        attempt: {
+          id: "attempt_complete",
+          nodeKey: "",
+          sessionID: request.sessionID,
+          mode: request.mode,
+          inputTokens: 100,
+          outputTokens: 20,
+          reasoningTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cost: 0.001,
+          finish: "stop",
+          durationMs: 1,
+          createdAt: 1,
+        },
       }),
     }).build({
       sessionID: "ses_tree",
@@ -219,6 +234,50 @@ describe("LCM summary tree", () => {
     const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
     expect(summary?.generationMode).toBe("normal")
     expect(summary?.text).toContain(sources[0]!.id)
+    store.close()
+  })
+
+  test("rejects length-truncated model summaries and records incomplete provenance", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = [makeSource(0)]
+    const digest = lineageDigest(sources)
+    const lineage = { sessionID: "ses_tree", digest, sourceCount: 1, lastSourceID: sources[0]?.id }
+    await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
+    const revision = await new SummaryTree(store, {
+      generate: async (request) => ({
+        text: `${sources[0]!.id} preserves useful evidence but ends in an unfinished`,
+        mode: request.mode,
+        attempt: {
+          id: `attempt_${request.mode}`,
+          nodeKey: "",
+          sessionID: request.sessionID,
+          mode: request.mode,
+          inputTokens: 100,
+          outputTokens: request.targetTokens,
+          reasoningTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cost: 0.001,
+          finish: "length",
+          durationMs: 1,
+          createdAt: 1,
+        },
+      }),
+    }).build({
+      sessionID: "ses_tree",
+      lineage,
+      usableInputTokens: 8_000,
+      protectedSources: 0,
+      reason: "hard_built",
+    })
+
+    const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
+    expect(summary?.generationMode).toBe("deterministic")
+    expect(summary?.text).not.toContain("unfinished")
+    expect((await store.listAttempts("ses_tree")).map((attempt) => attempt.errorCode)).toEqual([
+      "lcm_summary_incomplete",
+      "lcm_summary_incomplete",
+    ])
     store.close()
   })
 

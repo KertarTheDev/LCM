@@ -15,7 +15,7 @@ export const LcmDescribeTool = Tool.define(
     const database = yield* Database.Service
     return {
       description:
-        "Describe one current-session Conversation Memory source or summary, including provenance and navigation metadata.",
+        "Inspect one current-session src_ source or sum_ summary without dumping its body. Use its provenance, exact ordinal range, active/frontier state, and parent/child metadata to decide whether to lcm_read a source or lcm_expand a summary.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {

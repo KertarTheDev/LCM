@@ -153,13 +153,20 @@ function deterministic(children: TreeItem[], limit: number, allowed: Set<string>
     .replace(/\uFFFD+$/u, "")}${suffix}`
 }
 
-function valid(candidate: string, sourceTokens: number, sourceBytes: number, target: number, allowed: Set<string>) {
-  const candidateBytes = Buffer.byteLength(candidate)
+function valid(
+  candidate: SummaryCandidate,
+  sourceTokens: number,
+  sourceBytes: number,
+  target: number,
+  allowed: Set<string>,
+) {
+  const candidateBytes = Buffer.byteLength(candidate.text)
   const candidateTokens = Math.max(1, Math.ceil(candidateBytes / 4))
-  const handles = candidate.match(RECOVERY_HANDLE) ?? []
-  const contentCharacters = candidate.replace(RECOVERY_HANDLE, "").replace(/\s/gu, "").length
+  const handles = candidate.text.match(RECOVERY_HANDLE) ?? []
+  const contentCharacters = candidate.text.replace(RECOVERY_HANDLE, "").replace(/\s/gu, "").length
   return (
-    candidate.trim().length > 0 &&
+    candidate.text.trim().length > 0 &&
+    (!candidate.attempt || candidate.attempt.finish === "stop") &&
     candidateBytes < sourceBytes &&
     candidateTokens < sourceTokens &&
     candidateTokens <= Math.ceil(target * 1.15) &&
@@ -167,6 +174,15 @@ function valid(candidate: string, sourceTokens: number, sourceBytes: number, tar
     contentCharacters >= 16 &&
     handles.every((handle) => allowed.has(handle))
   )
+}
+
+function rejectedAttempt(candidate: SummaryCandidate) {
+  const attempt = candidate.attempt
+  if (!attempt) return
+  return {
+    ...attempt,
+    errorCode: attempt.errorCode ?? (attempt.finish === "stop" ? "lcm_summary_rejected" : "lcm_summary_incomplete"),
+  }
 }
 
 export class SummaryTree {
@@ -242,29 +258,29 @@ export class SummaryTree {
         }
       }
       candidate = await generate("normal")
-      if (!candidate || !valid(candidate.text, sourceTokens, sourceBytes, target, allowed)) {
-        if (candidate?.attempt)
+      if (!candidate || !valid(candidate, sourceTokens, sourceBytes, target, allowed)) {
+        const attempt = candidate && rejectedAttempt(candidate)
+        if (attempt)
           await this.store.recordAttempt({
-            ...candidate.attempt,
+            ...attempt,
             nodeKey: key,
             sessionID: input.sessionID,
-            errorCode: candidate.attempt.errorCode ?? "lcm_summary_rejected",
           })
         if (input.maintenanceMode === "soft") return
         candidate = await generate("aggressive")
       }
     }
-    if (!candidate || !valid(candidate.text, sourceTokens, sourceBytes, target, allowed)) {
-      if (candidate?.attempt)
+    if (!candidate || !valid(candidate, sourceTokens, sourceBytes, target, allowed)) {
+      const attempt = candidate && rejectedAttempt(candidate)
+      if (attempt)
         await this.store.recordAttempt({
-          ...candidate.attempt,
+          ...attempt,
           nodeKey: key,
           sessionID: input.sessionID,
-          errorCode: candidate.attempt.errorCode ?? "lcm_summary_rejected",
         })
       candidate = { text: deterministic(input.items, target, allowed), mode: "deterministic" }
     }
-    if (!valid(candidate.text, sourceTokens, sourceBytes, target, allowed)) return
+    if (!valid(candidate, sourceTokens, sourceBytes, target, allowed)) return
     const id = summaryID({ nodeKey: key, text: candidate.text })
     for (const child of children) child.summaryID = id
     const summary: SummaryNode = {

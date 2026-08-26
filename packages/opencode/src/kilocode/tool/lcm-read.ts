@@ -14,7 +14,8 @@ const Parameters = Schema.Struct({
     description: "Optional UTF-8 byte offset, such as a byteRange start returned by lcm_grep.",
   }),
   cursor: Schema.optional(Schema.String).annotate({
-    description: "Opaque nextCursor from the preceding read of this source; mutually exclusive with offset.",
+    description:
+      "Opaque nextCursor from the preceding read of this source; mutually exclusive with offset. maxBytes may change between pages.",
   }),
 })
 
@@ -39,6 +40,10 @@ export function validUtf8Offset(value: string, offset: number) {
   return offset === buffer.byteLength || (buffer[offset]! & 0xc0) !== 0x80
 }
 
+export function readCursorQuery(source: { id: string; digest: string }) {
+  return { sourceID: source.id, digest: source.digest }
+}
+
 export const LcmReadTool = Tool.define(
   "lcm_read",
   Effect.gen(function* () {
@@ -46,7 +51,7 @@ export const LcmReadTool = Tool.define(
     const database = yield* Database.Service
     return {
       description:
-        "Read a bounded digest-verified byte range from one exact current-session conversation source. Start at a lcm_grep byteRange with offset, or continue sequentially with nextCursor.",
+        "Read bounded digest-verified exact text from one current-session src_ source. Seek directly with a lcm_grep byteRange start in offset, or pass nextCursor for the next page; a cursor remains valid if maxBytes changes. Recent ordinary context is already visible and does not need recovery reads.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -65,7 +70,7 @@ export const LcmReadTool = Tool.define(
             throw new LcmToolError("lcm_invalid_cursor", "The source byte offset must be a non-negative integer.")
           if (params.offset !== undefined && params.cursor)
             throw new LcmToolError("lcm_invalid_cursor", "Use either a source byte offset or a cursor, not both.")
-          const query = { sourceID: source.id, digest: source.digest, maxBytes }
+          const query = readCursorQuery(source)
           let offset: number
           if (params.offset !== undefined) {
             offset = params.offset

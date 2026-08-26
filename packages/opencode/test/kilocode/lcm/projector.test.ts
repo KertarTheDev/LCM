@@ -53,9 +53,7 @@ describe("LCM projector", () => {
   test("recognizes exact structural boundary lines without indexing ordinary bracketed logs", () => {
     expect(
       exactStructuralAnchors(
-        ["[INFO]", "<source_data>", "  [START OF EPISODE]  ", "--- END DOCUMENT ---", "not a boundary"].join(
-          "\n",
-        ),
+        ["[INFO]", "<source_data>", "  [START OF EPISODE]  ", "--- END DOCUMENT ---", "not a boundary"].join("\n"),
       ),
     ).toEqual(["<source_data>", "[START OF EPISODE]", "--- END DOCUMENT ---"])
   })
@@ -110,6 +108,10 @@ describe("LCM projector", () => {
     expect(memory).toContain("Summaries are lossy indexes, not complete")
     expect(memory).toContain("first/last, count, or complete-list questions")
     expect(memory).toContain("never treat an omitted fact or boundary as evidence that it did not occur")
+    expect(memory).toContain("a transport record, not a semantic unit")
+    expect(memory).toContain("Pair ordered openings and closings")
+    expect(memory).toContain("lcm_grep defaults to literal mode")
+    expect(memory).toContain("never add both counts")
     expect(memory).toContain("Deterministic structural anchors copied verbatim")
     expect(memory).toContain(`- ${sources[0]!.id} (source 0): [START OF EPISODE]`)
     expect(memory).toContain(`- ${sources[5]!.id} (source 5): [END OF EPISODE]`)

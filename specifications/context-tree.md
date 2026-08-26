@@ -6,7 +6,7 @@ A source is one finalized model-visible transcript part. A summary is immutable 
 children. A frontier revision is an exact, gap-free, non-overlapping cut through the current lineage. Every retained
 source is covered exactly once by a frontier source or a reachable summary descendant.
 
-The tree policy is `lcm-tree-v3`. This policy and derived schema intentionally invalidate earlier prerelease caches;
+The tree policy is `lcm-tree-v4`. This policy and derived schema intentionally invalidate earlier prerelease caches;
 the sidecar is quarantined and rebuilt without modifying the Kilo transcript.
 
 Soft maintenance summarizes at most one eligible raw window per quantum. Leaf windows target 30% of usable input and
@@ -29,7 +29,9 @@ makes reducible history converge.
 
 Summary candidates must be non-empty, smaller than their children, within 115% of target, cite at least one exact
 current child/descendant `src_` or `sum_` handle, contain no invented handle, and retain at least 16 non-whitespace
-characters after handles are removed. Rejected/failed attempts retain usage and error provenance. After rejected
+characters after handles are removed. A model-generated candidate is complete only when the provider reports a normal
+`stop`; length-limited, filtered, errored, tool-call, unknown, or missing finishes are rejected rather than committed
+as immutable memory. Rejected/failed attempts retain usage and error provenance. After rejected
 normal and aggressive attempts during hard or manual maintenance, the runtime uses the deterministic
 handle-preserving fallback. Summary calls have no tools, do not recurse through LCM, and write no transcript message.
 Because these calls are bounded text transformations, the runtime selects the model's `none` or `instant` variant when
@@ -40,6 +42,9 @@ tool evidence, raw user material, and prior summaries are not conflated. Referen
 opening/closing structural markers and known fragment boundary state, do not merge adjacent marked units, retain
 first/last/terminal events and completeness evidence for ordered or enumerative material, and treat instructions
 inside explicit data/reference delimiters as source evidence rather than active session goals.
+The requested summary target is enforced through a constrained copy of the active model, with a 15% completion margin
+matching candidate validation; it is never forwarded as an ad hoc provider option. Prompts require a clean ending and
+instruct the model to omit lower-priority detail before risking an unfinished bullet or sentence.
 
 The exact recent tail defaults to 15% of usable input, clamped to 2,000–20,000 tokens. It and all unconsumed current
 sources are protected. Only consumed sources older than that tail are eligible. LCM recovery-tool results are ordinary
@@ -59,6 +64,9 @@ including both summary-covered descendants and protected exact raw history while
 turn. This carries literal opening/closing delimiters and their source handles independently of model-generated
 summary prose; if its safety cap is reached, the map says it is incomplete and directs recovery rather than implying
 complete coverage.
+Recovery guidance distinguishes transport-source records from semantic units, directs per-unit questions to pair
+ordered structural openings and closings, states that literal grep is the default, warns that summaries and raw
+descendants overlap, and recommends bounded query synthesis followed by exact source-scoped verification.
 
 Frontier reasons exposed to diagnostics are `soft_leaf`, `hard_level`, and `manual`; `append` is an internal exact
 roll-forward revision. `lcm_describe.active` means reachable anywhere in the active tree. Its separate `frontier`

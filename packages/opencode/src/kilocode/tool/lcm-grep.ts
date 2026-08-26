@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect"
 import * as Tool from "@/tool/tool"
 import { ConversationMemory } from "@/kilocode/session/lcm/service"
 import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
-import { regexSearch } from "@/kilocode/session/lcm/regex-search"
+import { REGEX_SEARCH_LIMITS, regexSearch } from "@/kilocode/session/lcm/regex-search"
 import {
   inertOutput,
   LcmToolError,
@@ -15,7 +15,7 @@ import {
 import type { SummaryChild } from "@/kilocode/session/lcm/types"
 
 const MAX_RANGES_PER_RECORD = 20
-const MAX_UNSCOPED_RANGES_PER_RECORD = 3
+const MAX_UNSCOPED_RANGES_PER_RECORD = 1
 
 export function grepRangeLimit(sourceScoped: boolean) {
   return sourceScoped ? MAX_RANGES_PER_RECORD : MAX_UNSCOPED_RANGES_PER_RECORD
@@ -24,7 +24,7 @@ export function grepRangeLimit(sourceScoped: boolean) {
 const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({
     description:
-      "Literal text in literal mode, or a regular expression in regex mode; alternatives using | require regex mode.",
+      "Literal text in literal mode, or a regular expression of at most 512 characters in regex mode; alternatives using | require regex mode.",
   }),
   mode: Schema.optional(Schema.Literals(["literal", "regex"])).annotate({
     description: "Search mode. Defaults to literal, where regex syntax such as | has no special meaning.",
@@ -45,7 +45,8 @@ const Parameters = Schema.Struct({
     description: "Maximum records to return (default 20, maximum 50).",
   }),
   cursor: Schema.optional(Schema.String).annotate({
-    description: "Opaque nextCursor from the preceding identical search.",
+    description:
+      "Opaque nextCursor from the preceding search with the same pattern, mode, case, and scope. limit may change between pages.",
   }),
 })
 
@@ -85,6 +86,69 @@ export function utf8Ranges(text: string, ranges: Array<{ start: number; end: num
   })
 }
 
+export function literalPatternAdvice(pattern: string, mode: "literal" | "regex") {
+  if (mode !== "literal") return
+  if (/(?:^|[^\\])\||\\[dDsSwWbB]|\.\*|\(\?:|\[[^\]]+\]/u.test(pattern))
+    return "This literal pattern looks like a regular expression. Set mode to regex for operators such as |, \\d, .*, groups, or character classes."
+}
+
+export function occurrenceTotals(
+  matches: Array<{ id: string; matchCount: number }>,
+  kinds: Map<string, "source" | "summary">,
+) {
+  return matches.reduce(
+    (totals, match) => {
+      const kind = kinds.get(match.id)
+      if (kind === "source") {
+        totals.sourceRecords++
+        totals.sourceOccurrences += match.matchCount
+      }
+      if (kind === "summary") {
+        totals.summaryRecords++
+        totals.summaryOccurrences += match.matchCount
+      }
+      return totals
+    },
+    { sourceRecords: 0, summaryRecords: 0, sourceOccurrences: 0, summaryOccurrences: 0 },
+  )
+}
+
+export function grepCursorQuery(input: {
+  pattern: string
+  mode: "literal" | "regex"
+  caseSensitive: boolean
+  summaryID?: string
+  sourceID?: string
+  occurrenceOffset: number
+}) {
+  return input
+}
+
+function regexToolError(error: unknown) {
+  const message = error instanceof Error ? error.message : ""
+  if (message === "lcm_cancelled")
+    return new LcmToolError("lcm_cancelled", "The Conversation Memory search was cancelled.")
+  if (message === "lcm_regex_pattern_too_long")
+    return new LcmToolError(
+      "lcm_invalid_regex",
+      `The regular expression exceeds ${REGEX_SEARCH_LIMITS.patternCharacters} characters. Split it into shorter focused searches.`,
+    )
+  if (message === "lcm_regex_record_too_large")
+    return new LcmToolError(
+      "lcm_invalid_regex",
+      "A source is too large for regex search. Narrow to a smaller source or use literal mode.",
+    )
+  if (message === "lcm_regex_scope_too_large")
+    return new LcmToolError(
+      "lcm_invalid_regex",
+      "The regex scope is too large. Narrow it with summaryID or sourceID, or use literal mode.",
+    )
+  return new LcmToolError(
+    "lcm_invalid_regex",
+    `The regular expression is invalid or exceeded the ${REGEX_SEARCH_LIMITS.timeoutMs} ms safety limit. Simplify or narrow it.`,
+  )
+}
+
 function descendants(summaryID: string, children: Map<string, SummaryChild[]>) {
   const ids = new Set<string>()
   const visit = (id: string) => {
@@ -105,7 +169,7 @@ export const LcmGrepTool = Tool.define(
     const database = yield* Database.Service
     return {
       description:
-        "Search exact finalized raw conversation text and active Conversation Memory summaries in the current session. Unscoped results are compact discovery previews with exact per-record match counts; scope by sourceID and use lcm_read to inspect or page exact source text.",
+        "Discover earlier current-session evidence in exact finalized raw text and active summaries. Literal mode is the default; set mode to regex for alternatives such as foo|bar and keep regexes focused. Unscoped results include one preview plus exact counts and may contain overlapping summaries and raw descendants, so do not add both occurrence totals. For exact or exhaustive work, identify candidate src_ handles, repeat with sourceID, then seek with lcm_read.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -126,15 +190,16 @@ export const LcmGrepTool = Tool.define(
             throw new LcmToolError("lcm_unavailable", "Occurrence paging requires a sourceID scope.")
           const occurrenceOffset = params.occurrenceOffset ?? 0
           const rangeLimit = grepRangeLimit(params.sourceID !== undefined)
-          const query = {
+          const query = grepCursorQuery({
             pattern: params.pattern,
             mode: params.mode ?? "literal",
             caseSensitive: params.caseSensitive ?? false,
             summaryID: params.summaryID,
             sourceID: params.sourceID,
             occurrenceOffset,
-            limit,
-          }
+          })
+          if (params.pattern.length === 0)
+            throw new LcmToolError("lcm_unavailable", "The search pattern must not be empty.")
           let offset: number
           try {
             offset = decodeCursor(query, params.cursor)
@@ -185,18 +250,7 @@ export const LcmGrepTool = Tool.define(
                     rangeLimit,
                     signal: ctx.abort,
                   }),
-                ).pipe(
-                  Effect.catch((error) =>
-                    Effect.fail(
-                      new LcmToolError(
-                        error instanceof Error && error.message === "lcm_cancelled"
-                          ? "lcm_cancelled"
-                          : "lcm_invalid_regex",
-                        "The regular expression is invalid, too expensive, or was cancelled.",
-                      ),
-                    ),
-                  ),
-                )
+                ).pipe(Effect.catch((error) => Effect.fail(regexToolError(error))))
               : values
                   .map((value) => ({
                     id: value.id,
@@ -248,13 +302,26 @@ export const LcmGrepTool = Tool.define(
             }
           })
           const nextOffset = offset + selected.length
+          const kinds = new Map(values.map((value) => [value.id, value.kind]))
+          const complete = nextOffset >= found.length
+          const advice = [
+            literalPatternAdvice(params.pattern, params.mode ?? "literal"),
+            !params.sourceID && !params.summaryID && matches.some((match) => match.kind === "summary")
+              ? "Summaries and raw descendants can overlap. For exact counts or lists, use summary matches only to find candidate source regions and verify raw src_ records."
+              : undefined,
+          ].filter((item): item is string => item !== undefined)
           const result = {
             matches,
             ...(nextOffset < found.length ? { nextCursor: encodeCursor(query, nextOffset) } : {}),
+            totals: {
+              returned: occurrenceTotals(selected, kinds),
+              ...(complete ? { complete: occurrenceTotals(found, kinds) } : {}),
+            },
+            ...(advice.length > 0 ? { advice } : {}),
             searched: {
               sources: values.filter((value) => value.kind === "source").length,
               summaries: values.filter((value) => value.kind === "summary").length,
-              complete: nextOffset >= found.length,
+              complete,
             },
           }
           return {

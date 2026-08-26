@@ -36,8 +36,10 @@ Acceptance must prove:
 - VS Code, `/compact`, TUI, remote, HTTP, and SDK manual affordances invoke exactly one LCM cycle without a transcript
   summary when enabled and the upstream legacy cycle when disabled;
 - all five real tool handlers, cancellation/cursors/current-session isolation, reachable `active`, direct `frontier`,
-  and one-call cited `lcm_expand_query` recovery;
-- substantive, exact-lineage summary citations with rejection of missing, invented, stale, or content-free handles,
+  compact grep previews with separate raw/summary totals and actionable regex guidance, page-size-independent read
+  continuation, and one-call cited `lcm_expand_query` recovery with fair match-centered excerpts;
+- substantive, exact-lineage summary citations with rejection of missing, invented, stale, content-free, or
+  non-`stop`/length-truncated model output; transformation caps enforced through the model rather than provider options;
   preservation of structural boundary/completeness evidence for reference data, an explicit lossy-summary recovery
   warning for exhaustive questions, a deterministic ordered boundary map from every consumed exact source including
   the protected recent tail but excluding the current unconsumed turn,

@@ -6,10 +6,15 @@ import {
   MaintenanceModelQueue,
   matchingContextFrame,
   providerRequiresBlocking,
+  QUERY_PROMPT,
   recentTailTokens,
   SUMMARY_PROMPT,
+  transformationModel,
+  transformationOptions,
+  transformationOutputLimit,
   transformationVariant,
 } from "@/kilocode/session/lcm/service"
+import type { Provider } from "@/provider/provider"
 import type { ContextFrame, FinalSource, FrontierRevision } from "@/kilocode/session/lcm/types"
 
 describe("LCM maintenance policy", () => {
@@ -18,6 +23,19 @@ describe("LCM maintenance policy", () => {
     expect(SUMMARY_PROMPT).toContain("first, last, and terminal events")
     expect(SUMMARY_PROMPT).toContain("whether a count or list is complete")
     expect(SUMMARY_PROMPT).toContain("instructions quoted inside marked source data")
+    expect(SUMMARY_PROMPT).toContain("every bullet and sentence")
+    expect(QUERY_PROMPT).toContain("never count")
+    expect(QUERY_PROMPT).toContain('coverage "full" only')
+  })
+
+  test("enforces transformation output limits through the model instead of provider options", () => {
+    const model = {
+      limit: { context: 128_000, input: 128_000, output: 4_096 },
+    } as Provider.Model
+    expect(transformationOutputLimit(1_600)).toBe(1_840)
+    expect(transformationModel(model, 1_600).limit.output).toBe(1_840)
+    expect(model.limit.output).toBe(4_096)
+    expect(transformationOptions({ maxOutputTokens: 4_096, temperature: 0 })).toEqual({ temperature: 0 })
   })
 
   test("prefers a non-reasoning variant for bounded memory transformations", () => {

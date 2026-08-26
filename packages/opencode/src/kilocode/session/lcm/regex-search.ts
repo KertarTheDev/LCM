@@ -5,9 +5,20 @@ interface Match {
   rangesComplete: boolean
 }
 
-const MAX_PATTERN_LENGTH = 512
-const MAX_VALUE_LENGTH = 1_000_000
-const MAX_TOTAL_LENGTH = 8_000_000
+export const REGEX_SEARCH_LIMITS = {
+  patternCharacters: 512,
+  recordCharacters: 1_000_000,
+  scopeCharacters: 8_000_000,
+  timeoutMs: 2_000,
+} as const
+
+export function regexSearchIssue(input: { pattern: string; values: Array<{ text: string }> }) {
+  if (input.pattern.length > REGEX_SEARCH_LIMITS.patternCharacters) return "pattern_too_long" as const
+  if (input.values.some((value) => value.text.length > REGEX_SEARCH_LIMITS.recordCharacters))
+    return "record_too_large" as const
+  if (input.values.reduce((total, value) => total + value.text.length, 0) > REGEX_SEARCH_LIMITS.scopeCharacters)
+    return "scope_too_large" as const
+}
 
 export async function regexSearch(input: {
   pattern: string
@@ -19,18 +30,14 @@ export async function regexSearch(input: {
   signal?: AbortSignal
 }) {
   if (input.signal?.aborted) throw new Error("lcm_cancelled")
-  if (
-    input.pattern.length > MAX_PATTERN_LENGTH ||
-    input.values.some((value) => value.text.length > MAX_VALUE_LENGTH) ||
-    input.values.reduce((total, value) => total + value.text.length, 0) > MAX_TOTAL_LENGTH
-  )
-    throw new Error("lcm_invalid_regex")
+  const issue = regexSearchIssue(input)
+  if (issue) throw new Error(`lcm_regex_${issue}`)
   return new Promise<Match[]>((resolve, reject) => {
     const worker = new Worker(new URL("./regex-worker.ts", import.meta.url))
     const timer = setTimeout(() => {
       worker.terminate()
       reject(new Error("lcm_invalid_regex"))
-    }, 250)
+    }, REGEX_SEARCH_LIMITS.timeoutMs)
     const cleanup = () => {
       clearTimeout(timer)
       input.signal?.removeEventListener("abort", cancelled)

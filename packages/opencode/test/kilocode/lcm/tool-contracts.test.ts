@@ -1,15 +1,40 @@
 import { describe, expect, test } from "bun:test"
 import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
-import { regexSearch } from "@/kilocode/session/lcm/regex-search"
+import { regexSearch, regexSearchIssue } from "@/kilocode/session/lcm/regex-search"
 import { priorTurnSourceCutoff } from "@/kilocode/tool/lcm-common"
-import { grepRangeLimit, literalRanges, utf8Ranges } from "@/kilocode/tool/lcm-grep"
-import { textChunk, validUtf8Offset } from "@/kilocode/tool/lcm-read"
-import { parseQueryAnswer, queryParts } from "@/kilocode/tool/lcm-expand-query"
+import {
+  grepRangeLimit,
+  grepCursorQuery,
+  literalPatternAdvice,
+  literalRanges,
+  occurrenceTotals,
+  utf8Ranges,
+} from "@/kilocode/tool/lcm-grep"
+import { expandCursorQuery } from "@/kilocode/tool/lcm-expand"
+import { readCursorQuery, textChunk, validUtf8Offset } from "@/kilocode/tool/lcm-read"
+import { completeQueryAnswer, parseQueryAnswer, queryExcerpt, queryParts } from "@/kilocode/tool/lcm-expand-query"
 
 describe("LCM tool contracts", () => {
   test("keeps global grep as discovery and reserves wider occurrence pages for exact source scopes", () => {
-    expect(grepRangeLimit(false)).toBe(3)
+    expect(grepRangeLimit(false)).toBe(1)
     expect(grepRangeLimit(true)).toBe(20)
+  })
+
+  test("makes regex intent and overlapping result totals explicit", () => {
+    expect(literalPatternAdvice("alpha|beta", "literal")).toContain("Set mode to regex")
+    expect(literalPatternAdvice("alpha|beta", "regex")).toBeUndefined()
+    expect(
+      occurrenceTotals(
+        [
+          { id: "src_a", matchCount: 3 },
+          { id: "sum_b", matchCount: 2 },
+        ],
+        new Map<string, "source" | "summary">([
+          ["src_a", "source"],
+          ["sum_b", "summary"],
+        ]),
+      ),
+    ).toEqual({ sourceRecords: 1, summaryRecords: 1, sourceOccurrences: 3, summaryOccurrences: 2 })
   })
 
   test("bounds unscoped recovery before the current user turn", () => {
@@ -54,14 +79,46 @@ describe("LCM tool contracts", () => {
     expect(
       parseQueryAnswer('{"answer":"Invented","citations":["src_other"],"coverage":"full"}', allowed),
     ).toBeUndefined()
+    expect(
+      completeQueryAnswer(
+        '{"answer":"Use the release branch.","citations":["src_alpha"],"coverage":"full"}',
+        "length",
+        allowed,
+      ),
+    ).toBeUndefined()
   })
 
-  test("binds opaque cursors to the complete query", () => {
-    const query = { pattern: "needle", mode: "literal", limit: 20 }
+  test("centers bounded recovery excerpts on early and late matches", () => {
+    const text = `early needle ${"unrelated ".repeat(600)}late needle`
+    const excerpt = queryExcerpt(text, ["needle"], 500)
+    expect(excerpt).toContain("early needle")
+    expect(excerpt).toContain("late needle")
+    expect(excerpt).toContain("omitted")
+    expect(excerpt.length).toBeLessThanOrEqual(500)
+  })
+
+  test("binds opaque cursors to semantic queries while allowing page-size changes", () => {
+    const query = grepCursorQuery({
+      pattern: "needle",
+      mode: "literal",
+      caseSensitive: false,
+      occurrenceOffset: 0,
+    })
     const cursor = encodeCursor(query, 12)
     expect(decodeCursor(query, cursor)).toBe(12)
     expect(() => decodeCursor({ ...query, pattern: "other" }, cursor)).toThrow("lcm_invalid_cursor")
     expect(() => decodeCursor(query, `${cursor.slice(0, -1)}x`)).toThrow("lcm_invalid_cursor")
+    const expansion = expandCursorQuery("sum_a")
+    expect(decodeCursor(expansion, encodeCursor(expansion, 10))).toBe(10)
+  })
+
+  test("binds read cursors to immutable source identity rather than page size", () => {
+    const query = readCursorQuery({ id: "src_a", digest: "digest_a" })
+    const cursor = encodeCursor(query, 8_192)
+    expect(decodeCursor(readCursorQuery({ id: "src_a", digest: "digest_a" }), cursor)).toBe(8_192)
+    expect(() => decodeCursor(readCursorQuery({ id: "src_a", digest: "digest_b" }), cursor)).toThrow(
+      "lcm_invalid_cursor",
+    )
   })
 
   test("runs bounded regex search in a worker", async () => {
@@ -189,6 +246,7 @@ describe("LCM tool contracts", () => {
   })
 
   test("rejects oversized regex input instead of silently skipping sources", async () => {
+    expect(regexSearchIssue({ pattern: "x".repeat(513), values: [{ text: "small" }] })).toBe("pattern_too_long")
     await expect(
       regexSearch({
         pattern: "binding",
@@ -197,7 +255,7 @@ describe("LCM tool contracts", () => {
         recordLimit: 20,
         rangeLimit: 20,
       }),
-    ).rejects.toThrow("lcm_invalid_regex")
+    ).rejects.toThrow("lcm_regex_record_too_large")
   })
 
   test("paginates text on valid UTF-8 byte boundaries", () => {

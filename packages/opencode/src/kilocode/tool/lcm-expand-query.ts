@@ -30,13 +30,24 @@ const Parameters = Schema.Struct({
 const STOP_WORDS = new Set([
   "and",
   "about",
+  "across",
   "after",
   "again",
+  "answer",
+  "character",
+  "comma",
   "could",
   "did",
+  "each",
+  "earlier",
   "from",
   "have",
   "into",
+  "list",
+  "only",
+  "return",
+  "separated",
+  "session",
   "that",
   "the",
   "this",
@@ -51,6 +62,7 @@ interface Candidate {
   id: string
   kind: "source" | "summary"
   ordinal: number
+  lastOrdinal: number
   text: string
   score: number
 }
@@ -87,6 +99,72 @@ export function queryParts(query: string) {
   return { handles, terms }
 }
 
+function bookends(text: string, maxChars: number) {
+  if (text.length <= maxChars) return text
+  const marker = "\n[… omitted …]\n"
+  if (maxChars <= marker.length + 2) return text.slice(0, maxChars)
+  const available = maxChars - marker.length
+  const head = Math.ceil(available / 2)
+  return `${text.slice(0, head)}${marker}${text.slice(text.length - (available - head))}`
+}
+
+export function queryExcerpt(text: string, terms: string[], maxChars: number) {
+  const limit = Math.max(1, Math.floor(maxChars))
+  if (text.length <= limit) return text
+  const lower = text.toLocaleLowerCase()
+  const positions = terms
+    .flatMap((term) => {
+      const first = lower.indexOf(term)
+      if (first < 0) return []
+      const last = lower.lastIndexOf(term)
+      return last === first
+        ? [{ start: first, end: first + term.length }]
+        : [
+            { start: first, end: first + term.length },
+            { start: last, end: last + term.length },
+          ]
+    })
+    .filter(
+      (position, index, all) =>
+        all.findIndex((other) => other.start === position.start && other.end === position.end) === index,
+    )
+    .toSorted((a, b) => a.start - b.start || a.end - b.end)
+  if (positions.length === 0) return bookends(text, limit)
+
+  const separator = "\n[… omitted …]\n"
+  const maxWindows = Math.max(1, Math.min(8, Math.floor(limit / 200)))
+  const chosen =
+    positions.length <= maxWindows
+      ? positions
+      : Array.from(
+          { length: maxWindows },
+          (_, index) => positions[Math.round((index * (positions.length - 1)) / Math.max(1, maxWindows - 1))]!,
+        )
+  const windowChars = Math.max(
+    Math.max(...chosen.map((position) => position.end - position.start)),
+    Math.floor((limit - separator.length * Math.max(0, chosen.length - 1)) / chosen.length),
+  )
+  const ranges = chosen
+    .map((position) => {
+      const before = Math.floor((windowChars - (position.end - position.start)) * 0.4)
+      const start = Math.max(0, position.start - before)
+      return { start, end: Math.min(text.length, start + windowChars) }
+    })
+    .reduce<Array<{ start: number; end: number }>>((merged, range) => {
+      const previous = merged.at(-1)
+      if (previous && range.start <= previous.end) {
+        previous.end = Math.max(previous.end, range.end)
+        return merged
+      }
+      merged.push(range)
+      return merged
+    }, [])
+  return ranges
+    .map((range) => text.slice(range.start, range.end))
+    .join(separator)
+    .slice(0, limit)
+}
+
 export function selectQueryExcerpts(
   view: MemoryView,
   query: string,
@@ -103,6 +181,7 @@ export function selectQueryExcerpts(
         id: source.id,
         kind: "source" as const,
         ordinal: source.ordinal,
+        lastOrdinal: source.ordinal,
         text: view.content.get(source.id)?.content ?? "",
         score: 0,
       })),
@@ -112,6 +191,7 @@ export function selectQueryExcerpts(
         id: summary.id,
         kind: "summary" as const,
         ordinal: summary.firstOrdinal,
+        lastOrdinal: summary.lastOrdinal,
         text: summary.text,
         score: 0,
       })),
@@ -124,14 +204,21 @@ export function selectQueryExcerpts(
       return { ...item, score: explicit + lexical }
     })
     .filter((item) => item.score > 0)
-    .toSorted((a, b) => b.score - a.score || b.ordinal - a.ordinal || a.id.localeCompare(b.id))
+    .toSorted(
+      (a, b) =>
+        b.score - a.score ||
+        (a.kind === b.kind ? 0 : a.kind === "source" ? -1 : 1) ||
+        b.ordinal - a.ordinal ||
+        a.id.localeCompare(b.id),
+    )
     .slice(0, 8)
 
   let remaining = Math.max(1, budgetTokens) * 4
   const selected: Candidate[] = []
-  for (const candidate of candidates) {
+  for (const [index, candidate] of candidates.entries()) {
     if (remaining <= 0) break
-    const text = candidate.text.slice(0, remaining)
+    const fair = Math.max(1, Math.floor(remaining / (candidates.length - index)))
+    const text = queryExcerpt(candidate.text, terms, fair)
     if (!text) continue
     selected.push({ ...candidate, text })
     remaining -= text.length
@@ -171,6 +258,11 @@ export function parseQueryAnswer(text: string, allowed: Set<string>): QueryAnswe
   }
 }
 
+export function completeQueryAnswer(text: string, finish: string | undefined, allowed: Set<string>) {
+  if (finish !== "stop") return
+  return parseQueryAnswer(text, allowed)
+}
+
 function activeModel(value: unknown) {
   if (!value || typeof value !== "object") return
   const model = value as Partial<Provider.Model>
@@ -187,7 +279,7 @@ export const LcmExpandQueryTool = Tool.define(
     const sessions = yield* Session.Service
     return {
       description:
-        "Answer one focused question about earlier current-session Conversation Memory with validated src_/sum_ citations.",
+        "Synthesize one focused candidate answer about earlier current-session memory from fairly budgeted, match-centered excerpts with validated src_/sum_ citations. For exact, exhaustive, boundary, first/last, count, or complete-list work, verify cited candidates with lcm_grep and lcm_read before claiming completeness.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -228,7 +320,16 @@ export const LcmExpandQueryTool = Tool.define(
             }
           }
           const excerpts = retrieval.selected
-            .map((item) => `[${item.id} | ${item.kind} | ordinal ${item.ordinal}]\n${item.text}`)
+            .map((item) =>
+              [
+                `[${item.id} | ${item.kind} | ${
+                  item.ordinal === item.lastOrdinal
+                    ? `ordinal ${item.ordinal}`
+                    : `ordinals ${item.ordinal}-${item.lastOrdinal}`
+                }]`,
+                item.text,
+              ].join("\n"),
+            )
             .join("\n\n")
           const generated = yield* memory
             .query({
@@ -256,7 +357,10 @@ export const LcmExpandQueryTool = Tool.define(
               Effect.provideService(Database.Service, database),
             )
           const allowed = new Set(retrieval.selected.map((item) => item.id))
-          const answer = generated.ok ? parseQueryAnswer(generated.value.text, allowed) : undefined
+          const completeResponse = generated.ok && generated.value.finish === "stop"
+          const answer = generated.ok
+            ? completeQueryAnswer(generated.value.text, generated.value.finish, allowed)
+            : undefined
           const mayExtract = retrieval.handles.length > 0 || retrieval.terms.length >= 2
           const fallback = mayExtract
             ? {
@@ -283,7 +387,13 @@ export const LcmExpandQueryTool = Tool.define(
               truncated: retrieval.truncated || answerTruncated,
               ...(!answer
                 ? mayExtract
-                  ? { providerFailureReason: generated.ok ? "invalid_response" : generated.reason }
+                  ? {
+                      providerFailureReason: generated.ok
+                        ? completeResponse
+                          ? "invalid_response"
+                          : "incomplete_response"
+                        : generated.reason,
+                    }
                   : { noAnswerReason: "insufficient_query_evidence" }
                 : {}),
             }),

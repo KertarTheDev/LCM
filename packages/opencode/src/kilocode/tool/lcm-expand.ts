@@ -11,9 +11,13 @@ const Parameters = Schema.Struct({
     description: "Maximum children to return (default 10, maximum 50).",
   }),
   cursor: Schema.optional(Schema.String).annotate({
-    description: "Opaque nextCursor from the preceding expansion of this summary.",
+    description: "Opaque nextCursor from the preceding expansion of this summary. limit may change between pages.",
   }),
 })
+
+export function expandCursorQuery(summaryID: string) {
+  return { summaryID }
+}
 
 export const LcmExpandTool = Tool.define(
   "lcm_expand",
@@ -21,7 +25,8 @@ export const LcmExpandTool = Tool.define(
     const memory = yield* ConversationMemory.Service
     const database = yield* Database.Service
     return {
-      description: "List the ordered immediate children of one current-session Conversation Memory summary.",
+      description:
+        "List one ordered tree level beneath an active current-session sum_ summary. Recurse with lcm_expand for child summaries or use lcm_read on child src_ sources; immediate children are not implicit grandchildren.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -34,7 +39,7 @@ export const LcmExpandTool = Tool.define(
           const view = yield* loadMemory({ sessionID: ctx.sessionID, signal: ctx.abort, memory, database })
           requireSummary(view, params.summaryID)
           const limit = Math.min(50, Math.max(1, Math.floor(params.limit ?? 10)))
-          const query = { summaryID: params.summaryID, limit }
+          const query = expandCursorQuery(params.summaryID)
           let offset: number
           try {
             offset = decodeCursor(query, params.cursor)

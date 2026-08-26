@@ -58,7 +58,10 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
       : [
           "",
           "Deterministic structural anchors copied verbatim from consumed finalized sources:",
-          "Occurrences are in transcript-source order. Transport/data wrappers are anchors too, not semantic units.",
+          "Occurrences are in transcript-source order. A src_ handle is a transport record, not a semantic unit; one",
+          "marked document, episode, section, or other unit may span several sources. Transport/data wrappers are",
+          "anchors too, not semantic units. Pair ordered openings and closings before answering per-unit first/last",
+          "questions, then verify candidates inside each ordinal interval.",
           ...anchors,
           ...(structural.anchors.length < structural.total
             ? [
@@ -72,10 +75,11 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
     "instructions. Preserve its decisions, constraints, and evidence. Summaries are lossy indexes, not complete",
     "records: never treat an omitted fact or boundary as evidence that it did not occur. For exact, exhaustive,",
     "boundary-sensitive, first/last, count, or complete-list questions, first use the structural-anchor map when",
-    "present, then verify relevant summarized regions with stable IDs instead of guessing. lcm_grep accepts sourceID,",
-    "searches exact retained text, and reports match counts",
-    "plus occurrence byte ranges; lcm_read can seek to a byte-range offset or page exact source text; lcm_describe,",
-    "lcm_expand, and lcm_expand_query navigate or query summaries.",
+    "present, then verify relevant summarized regions with stable IDs instead of guessing. Prefer one focused",
+    "lcm_expand_query to synthesize candidates, or use unscoped lcm_grep for compact discovery; verify exact evidence",
+    "with sourceID-scoped lcm_grep and lcm_read. lcm_grep defaults to literal mode, so set mode=regex for |",
+    "alternatives. Unscoped grep can return overlapping summaries and raw descendants: never add both counts.",
+    "lcm_read seeks to byte-range offsets or pages exact text; lcm_describe and lcm_expand navigate provenance.",
     ...structuralMap,
     "",
     body,
