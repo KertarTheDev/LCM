@@ -35,6 +35,8 @@ describe("LCM maintenance policy", () => {
     expect(SUMMARY_PROMPT).toContain("answer-wrapper tags")
     expect(QUERY_PROMPT).toContain("never count")
     expect(QUERY_PROMPT).toContain('coverage "full" only')
+    expect(QUERY_PROMPT).toContain("Never\nquote, restate, or summarize")
+    expect(QUERY_PROMPT).toContain("never fill the output allowance")
   })
 
   test("places untrusted history before a matching boundary and repeats the active task after it", () => {

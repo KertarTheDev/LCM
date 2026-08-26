@@ -5,7 +5,7 @@ import { ConversationMemory } from "@/kilocode/session/lcm/service"
 import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
 import { REGEX_SEARCH_LIMITS, regexSearch } from "@/kilocode/session/lcm/regex-search"
 import {
-  completedToolCallCount,
+  completedToolCallHistory,
   inertOutput,
   LcmToolError,
   loadMemory,
@@ -249,7 +249,8 @@ export const LcmGrepTool = Tool.define(
             always: ["*"],
             metadata: { mode: params.mode ?? "literal" },
           })
-          const previousIdenticalCalls = completedToolCallCount(ctx.messages, "lcm_grep", params)
+          const history = completedToolCallHistory(ctx.messages, "lcm_grep", params)
+          const previousIdenticalCalls = history.count
           const view = yield* loadMemory({ sessionID: ctx.sessionID, signal: ctx.abort, memory, database })
           const limit = Math.min(50, Math.max(1, Math.floor(params.limit ?? 20)))
           if (
@@ -348,6 +349,7 @@ export const LcmGrepTool = Tool.define(
             tool: "lcm_grep",
             previousIdenticalCalls,
             sourceScoped: Boolean(params.sourceID),
+            priorResult: history.priorResult,
           })
           if (repeated)
             return {
@@ -505,6 +507,13 @@ export const LcmGrepTool = Tool.define(
               truncated:
                 result.searched.complete === false ||
                 matches.some((match) => !match.rangesComplete || !match.occurrencesComplete),
+              lcmResult: {
+                kind: "grep",
+                matchedRecords: matches.length,
+                totals: result.totals,
+                searched: result.searched,
+                hasNextPage: result.nextCursor !== undefined,
+              },
             },
           }
         }).pipe(Effect.orDie),

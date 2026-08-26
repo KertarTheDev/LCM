@@ -548,9 +548,28 @@ export const LcmExpandQueryTool = Tool.define(
             ...unbounded,
             answer: unbounded.answer.slice(0, maxAnswerTokens * 4),
           }
+          const providerFailureReason = !answer
+            ? mayExtract
+              ? generated.ok
+                ? completeResponse
+                  ? "invalid_response"
+                  : "incomplete_response"
+                : generated.reason
+              : undefined
+            : undefined
           return {
             title: "Conversation Memory query",
             output: inertOutput({
+              ...(!answer && mayExtract
+                ? {
+                    answerKind: "extractive_fallback",
+                    callGuidance: {
+                      generatedAnswerAccepted: false,
+                      instruction:
+                        "The provider did not return a complete validated synthesis. The answer field contains bounded evidence excerpts, not a computed answer. Do not present it as the resolved answer or count omission markers as evidence. Use it to refine one genuinely different query or verify only the remaining candidates and boundaries.",
+                    },
+                  }
+                : { answerKind: "generated" }),
               ...result,
               ...(rangeScope ? { scope: rangeScope } : {}),
               searched,
@@ -559,13 +578,7 @@ export const LcmExpandQueryTool = Tool.define(
               truncated: retrieval.truncated || answerTruncated,
               ...(!answer
                 ? mayExtract
-                  ? {
-                      providerFailureReason: generated.ok
-                        ? completeResponse
-                          ? "invalid_response"
-                          : "incomplete_response"
-                        : generated.reason,
-                    }
+                  ? { providerFailureReason }
                   : { noAnswerReason: "insufficient_query_evidence" }
                 : {}),
             }),

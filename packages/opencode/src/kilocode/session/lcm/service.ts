@@ -103,6 +103,11 @@ When excerpts carry ordered source byte-range labels, use only bytes inside thos
 order. An omission marker means unseen text remains inside the requested scope, so do not infer that an event or fact
 was absent from the omitted region.
 
+Resolve the question before writing. Use the shortest answer that fully resolves it: for a numeric or count question,
+give the result and at most one compact supporting equation unless the question explicitly requests a list. Never
+quote, restate, or summarize the supplied excerpts in the answer field, and never fill the output allowance merely
+because it is available. Finish the JSON object immediately after the answer and citations.
+
 Return exactly one concise JSON object:
 {"answer":"...","citations":["src_...","sum_..."],"coverage":"full|partial|none"}.
 Every citation must name a supplied excerpt. Use coverage "none", an empty answer, and no citations when the excerpts do
@@ -1658,7 +1663,7 @@ export const layer: Layer.Layer<
                         {
                           role: "user",
                           content: [
-                            `Keep the answer field within ${input.maxOutputTokens} tokens.`,
+                            `Hard ceiling for the answer field: ${input.maxOutputTokens} tokens. This is not a target; use far fewer whenever possible and complete the JSON before the limit.`,
                             `Question: ${input.question}`,
                             "",
                             input.excerpts,

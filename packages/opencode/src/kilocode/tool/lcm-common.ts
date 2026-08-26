@@ -140,6 +140,8 @@ export function priorTurnSourceCutoff(
   )
 }
 
+type RecoveryTool = "lcm_grep" | "lcm_read"
+
 function canonicalToolInput(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalToolInput)
   if (!value || typeof value !== "object") return value
@@ -151,10 +153,35 @@ function canonicalToolInput(value: unknown): unknown {
   )
 }
 
+function finiteDefault(value: unknown, fallback: number, minimum: number, maximum: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return value ?? fallback
+  return Math.min(maximum, Math.max(minimum, Math.floor(value)))
+}
+
+// Tool schemas leave defaults implicit, while providers may emit those same defaults explicitly. Normalize only
+// execution-equivalent values so a model cannot replay a deterministic payload by spelling a default differently.
+export function canonicalRecoveryToolInput(tool: RecoveryTool, input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return canonicalToolInput(input)
+  const value = { ...(input as Record<string, unknown>) }
+  if (tool === "lcm_grep") {
+    value.mode ??= "literal"
+    value.caseSensitive ??= false
+    value.limit = finiteDefault(value.limit, 20, 1, 50)
+    if (typeof value.sourceID === "string") {
+      value.startOffset ??= 0
+      value.occurrenceOffset ??= 0
+    }
+  } else {
+    value.maxBytes = finiteDefault(value.maxBytes, 8 * 1024, 1, 32 * 1024)
+    if (value.cursor === undefined) value.offset ??= 0
+  }
+  return canonicalToolInput(value)
+}
+
 function historicalToolPart(part: unknown): part is {
   type: "tool"
   tool: string
-  state: { status: "completed"; input: unknown }
+  state: { status: "completed"; input: unknown; metadata?: unknown }
 } {
   if (!part || typeof part !== "object") return false
   const value = part as Record<string, unknown>
@@ -164,27 +191,42 @@ function historicalToolPart(part: unknown): part is {
   return state.status === "completed" && "input" in state
 }
 
-export function completedToolCallCount(
+export function completedToolCallHistory(
   messages: readonly { parts: readonly unknown[] }[],
-  tool: string,
+  tool: RecoveryTool,
   input: unknown,
 ) {
-  const signature = JSON.stringify(canonicalToolInput(input))
-  return messages.reduce(
-    (count, message) =>
-      count +
-      message.parts.filter(
-        (part) =>
-          historicalToolPart(part) &&
-          part.tool === tool &&
-          JSON.stringify(canonicalToolInput(part.state.input)) === signature,
-      ).length,
-    0,
-  )
+  const signature = JSON.stringify(canonicalRecoveryToolInput(tool, input))
+  let count = 0
+  let priorResult: unknown
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (
+        !historicalToolPart(part) ||
+        part.tool !== tool ||
+        JSON.stringify(canonicalRecoveryToolInput(tool, part.state.input)) !== signature
+      )
+        continue
+      count++
+      if (part.state.metadata && typeof part.state.metadata === "object") {
+        const candidate = (part.state.metadata as Record<string, unknown>).lcmResult
+        if (candidate !== undefined) priorResult = candidate
+      }
+    }
+  }
+  return { count, ...(priorResult !== undefined ? { priorResult } : {}) }
+}
+
+export function completedToolCallCount(
+  messages: readonly { parts: readonly unknown[] }[],
+  tool: RecoveryTool,
+  input: unknown,
+) {
+  return completedToolCallHistory(messages, tool, input).count
 }
 
 export function recoveryCallGuidance(input: {
-  tool: "lcm_grep" | "lcm_read"
+  tool: RecoveryTool
   previousIdenticalCalls: number
   sourceScoped: boolean
 }) {
@@ -194,15 +236,16 @@ export function recoveryCallGuidance(input: {
     previousIdenticalCalls: input.previousIdenticalCalls,
     instruction:
       input.previousIdenticalCalls > 0
-        ? `This exact ${input.tool} input already completed ${input.previousIdenticalCalls} previous time(s). It is deterministic for ${scope}; reuse this result and do not submit the identical input again. Change the scope, pattern, page, or offset, or answer now.`
+        ? `This semantically identical ${input.tool} input already completed ${input.previousIdenticalCalls} previous time(s). It is deterministic for ${scope}; reuse the prior result and do not resubmit it. Do not add explicit default values or rephrase an equivalent pattern merely to bypass suppression. Make a genuinely different evidence request only when needed, or answer now.`
         : `This completed ${input.tool} call is deterministic for ${scope}. Reuse this result instead of repeating identical input.`,
   }
 }
 
 export function repeatedRecoveryResult(input: {
-  tool: "lcm_grep" | "lcm_read"
+  tool: RecoveryTool
   previousIdenticalCalls: number
   sourceScoped: boolean
+  priorResult?: unknown
 }) {
   if (input.previousIdenticalCalls < 1) return
   return {
@@ -211,8 +254,9 @@ export function repeatedRecoveryResult(input: {
       suppressed: true,
       noNewEvidence: true,
       instruction:
-        "The full deterministic payload is intentionally not replayed because this exact completed call added no new evidence. Reuse the prior result if it is still visible; otherwise change the pattern, scope, page, or offset before recovering again, or answer now.",
+        "The full deterministic payload is intentionally not replayed. The prior call remains in protected current-turn context, and priorResult below repeats its compact facts when available. Do not alter default-valued fields or use an equivalent pattern merely to replay the payload. Request genuinely different evidence only if an unresolved question requires it, or answer now.",
     },
+    ...(input.priorResult !== undefined ? { priorResult: input.priorResult } : {}),
   }
 }
 

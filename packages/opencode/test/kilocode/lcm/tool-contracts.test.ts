@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
 import { regexSearch, regexSearchIssue, regexWorkerTarget } from "@/kilocode/session/lcm/regex-search"
 import {
+  canonicalRecoveryToolInput,
+  completedToolCallHistory,
   completedToolCallCount,
   priorTurnSourceCutoff,
   recoveryCallGuidance,
@@ -93,14 +95,18 @@ describe("LCM tool contracts", () => {
     expect(priorTurnSourceCutoff(view, [])).toBeUndefined()
   })
 
-  test("identifies completed identical tool inputs independent of object key order", () => {
+  test("identifies semantically identical completed recovery calls and retains compact prior facts", () => {
     const messages = [
       {
         parts: [
           {
             type: "tool",
             tool: "lcm_grep",
-            state: { status: "completed", input: { pattern: "needle", sourceID: "src_a" } },
+            state: {
+              status: "completed",
+              input: { pattern: "needle", sourceID: "src_a" },
+              metadata: { lcmResult: { kind: "grep", matchedRecords: 2 } },
+            },
           },
           {
             type: "tool",
@@ -110,18 +116,45 @@ describe("LCM tool contracts", () => {
         ],
       },
     ]
+    expect(
+      completedToolCallHistory(messages, "lcm_grep", {
+        sourceID: "src_a",
+        pattern: "needle",
+        mode: "literal",
+        caseSensitive: false,
+        startOffset: 0,
+        occurrenceOffset: 0,
+        limit: 20,
+      }),
+    ).toEqual({ count: 1, priorResult: { kind: "grep", matchedRecords: 2 } })
     expect(completedToolCallCount(messages, "lcm_grep", { sourceID: "src_a", pattern: "needle" })).toBe(1)
     expect(completedToolCallCount(messages, "lcm_grep", { sourceID: "src_b", pattern: "needle" })).toBe(0)
+    expect(canonicalRecoveryToolInput("lcm_read", { sourceID: "src_a" })).toEqual({
+      maxBytes: 8192,
+      offset: 0,
+      sourceID: "src_a",
+    })
+    expect(canonicalRecoveryToolInput("lcm_read", { sourceID: "src_a", cursor: "next" })).toEqual({
+      cursor: "next",
+      maxBytes: 8192,
+      sourceID: "src_a",
+    })
     expect(
       recoveryCallGuidance({ tool: "lcm_grep", previousIdenticalCalls: 3, sourceScoped: true }).instruction,
-    ).toContain("do not submit the identical input again")
+    ).toContain("do not resubmit it")
     expect(repeatedRecoveryResult({ tool: "lcm_grep", previousIdenticalCalls: 0, sourceScoped: true })).toBeUndefined()
-    expect(
-      repeatedRecoveryResult({ tool: "lcm_grep", previousIdenticalCalls: 1, sourceScoped: true }),
-    ).toMatchObject({
+    expect(repeatedRecoveryResult({ tool: "lcm_grep", previousIdenticalCalls: 1, sourceScoped: true })).toMatchObject({
       callGuidance: { previousIdenticalCalls: 1 },
       repeatedCall: { suppressed: true, noNewEvidence: true },
     })
+    expect(
+      repeatedRecoveryResult({
+        tool: "lcm_grep",
+        previousIdenticalCalls: 1,
+        sourceScoped: true,
+        priorResult: { matchedRecords: 2 },
+      }),
+    ).toMatchObject({ priorResult: { matchedRecords: 2 } })
   })
 
   test("reports chronological transport neighbors while skipping pure receipt records", () => {

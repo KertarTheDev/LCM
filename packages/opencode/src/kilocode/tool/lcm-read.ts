@@ -4,7 +4,7 @@ import * as Tool from "@/tool/tool"
 import { ConversationMemory } from "@/kilocode/session/lcm/service"
 import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
 import {
-  completedToolCallCount,
+  completedToolCallHistory,
   inertOutput,
   LcmToolError,
   loadMemory,
@@ -109,7 +109,8 @@ export const LcmReadTool = Tool.define(
             always: ["*"],
             metadata: { sourceID: params.sourceID },
           })
-          const previousIdenticalCalls = completedToolCallCount(ctx.messages, "lcm_read", params)
+          const history = completedToolCallHistory(ctx.messages, "lcm_read", params)
+          const previousIdenticalCalls = history.count
           const view = yield* loadMemory({ sessionID: ctx.sessionID, signal: ctx.abort, memory, database })
           const { source, content } = requireSource(view, params.sourceID)
           const chronology = sourceChronology(view, source.id)
@@ -142,6 +143,7 @@ export const LcmReadTool = Tool.define(
             tool: "lcm_read",
             previousIdenticalCalls,
             sourceScoped: true,
+            priorResult: history.priorResult,
           })
           if (content.immutableMedia) {
             if (offset !== 0 || params.endOffset !== undefined)
@@ -172,6 +174,12 @@ export const LcmReadTool = Tool.define(
                 bytes: media.bytes.byteLength,
                 repeatedInput: previousIdenticalCalls > 0,
                 truncated: false,
+                lcmResult: {
+                  kind: "media",
+                  sourceID: source.id,
+                  totalBytes: media.bytes.byteLength,
+                  attached: true,
+                },
               },
               attachments: [
                 {
@@ -247,6 +255,16 @@ export const LcmReadTool = Tool.define(
               bytes: result.bytesReturned,
               repeatedInput: previousIdenticalCalls > 0,
               truncated: chunk.end < chunk.rangeEnd,
+              lcmResult: {
+                kind: "text",
+                sourceID: source.id,
+                offset: result.offset,
+                bytesReturned: result.bytesReturned,
+                totalBytes: result.totalBytes,
+                complete: result.complete,
+                nextOffset: result.nextOffset,
+                ...(result.scope ? { scope: result.scope } : {}),
+              },
             },
           }
         }),

@@ -43,9 +43,12 @@ specific error. Their guidance says not to repeat an unchanged failed call and e
 pattern, narrow the source byte interval, or switch to literal mode. A literal pattern containing common regex
 operators returns actionable advice to select regex mode rather than silently implying that alternatives were absent.
 Success, worker failure, cancellation, and timeout all terminate the worker and detach the request's abort listener.
-Completed `lcm_grep` and `lcm_read` calls are deterministic for their reported current-session scope. The first exact
-repeat returns only compact repeat guidance and deliberately suppresses the duplicate evidence payload (including
-media attachments); callers must reuse the prior result, change the scope/pattern/page/offset, or answer.
+Completed `lcm_grep` and `lcm_read` calls are deterministic for their reported current-session scope. Canonical repeat
+identity normalizes execution-equivalent omitted and explicit defaults, including zero offsets, default modes, limits,
+and page sizes. The first semantic repeat returns compact facts from the prior result plus repeat guidance and
+deliberately suppresses the duplicate evidence payload (including media attachments). The protected current-turn
+result remains available; callers must not vary default fields or equivalent patterns merely to replay it, and should
+request genuinely different evidence only when needed or answer.
 Every result reports separate source/summary record and occurrence totals for the returned page, plus complete-scope
 totals when known. Literal search scans the whole bounded scope and therefore reports complete-scope totals on its
 first page; regex reports them only after its bounded scan proves completion. Summaries can overlap their raw
@@ -55,9 +58,8 @@ ordinary context; this prevents a recovery query from matching its own search te
 `summaryID` can still address any trusted current-lineage item.
 Record cursors bind the pattern, mode, case setting, scope, and occurrence offset; `limit` may change between pages.
 Every successful search reports the number of prior completed calls with the same canonical input and states that the
-result is deterministic for its scope. Repeated input is not blocked because a caller may legitimately need a result
-again after context projection, but the current result directs the model to reuse it and change the next call or
-answer rather than entering an identical-call loop.
+result is deterministic for its scope. A suppressed repeat reports the prior compact counts, searched scope, and
+continuation availability rather than misleading zero-result facts.
 
 ## `lcm_describe`
 
@@ -99,7 +101,9 @@ normal provider `stop` can
 produce a generated answer; a length-limited, filtered, errored, tool-call, unknown, or absent finish is reported as an
 incomplete response and uses the same bounded fallback. The query output limit is enforced through a constrained model
 copy rather than provider options. Query instructions prevent double-counting overlapping summary/raw evidence and
-require partial coverage unless exact or exhaustive completeness is actually supported.
+require partial coverage unless exact or exhaustive completeness is actually supported. They make the output allowance
+a ceiling rather than a target, require concise numeric/count results, and prohibit copying excerpts into a generated
+answer. A fallback is labeled `extractive_fallback` before its evidence and explicitly says it is not a computed answer.
 Unscoped retrieval uses the same prior-turn boundary as `lcm_grep`; an explicit summary scope may address a trusted
 current-lineage summary beyond that boundary.
 
