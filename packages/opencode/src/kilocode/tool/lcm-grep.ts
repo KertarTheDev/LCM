@@ -245,7 +245,7 @@ export const LcmGrepTool = Tool.define(
   Effect.gen(function* () {
     const memory = yield* ConversationMemory.Service
     const database = yield* Database.Service
-    return {
+    const definition: Tool.DefWithoutID<typeof Parameters, LcmGrepMetadata> = {
       description:
         "Discover earlier current-session evidence in exact finalized raw text and active summaries. Literal mode is the default: enter punctuation exactly without regex backslashes; set mode to regex for alternatives such as foo|bar and keep every regex within 512 characters. A src_ handle is one transport record, never proof of a complete document, episode, section, or other semantic unit. Unscoped results include one preview plus exact counts and may contain overlapping summaries and raw descendants, so do not add both occurrence totals. For exact or exhaustive per-unit work, identify candidate src_ handles, apply structural startOffset/endOffset bounds, continue across chronological sources when needed, and seek with lcm_read.",
       parameters: Parameters,
@@ -525,6 +525,7 @@ export const LcmGrepTool = Tool.define(
             },
           }
         }).pipe(Effect.orDie),
-    } satisfies Tool.DefWithoutID<typeof Parameters, LcmGrepMetadata>
+    }
+    return definition
   }),
 )

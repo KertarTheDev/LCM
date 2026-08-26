@@ -105,7 +105,7 @@ export const LcmReadTool = Tool.define(
   Effect.gen(function* () {
     const memory = yield* ConversationMemory.Service
     const database = yield* Database.Service
-    return {
+    const definition: Tool.DefWithoutID<typeof Parameters, LcmReadMetadata> = {
       description:
         "Read a bounded digest-verified exact excerpt from one current-session src_ transport source. A source is never proof of a complete document, episode, section, or other semantic unit. Seek directly with a structural or lcm_grep byteRange start, and pass the matching structural close as endOffset when the unit ends in this source so the read cannot cross it. For aggregation or cross-source questions, prefer sourceRanges with lcm_expand_query or bounded lcm_grep over sequential 32 KiB scans. To continue within this interval, copy returned nextOffset or nextCursor; never calculate an offset from content length or repeat one just consumed. When complete is true, both continuations are null for the requested interval. Recent ordinary context is already visible and does not need recovery reads.",
       parameters: Parameters,
@@ -276,6 +276,7 @@ export const LcmReadTool = Tool.define(
             },
           }
         }),
-    } satisfies Tool.DefWithoutID<typeof Parameters, LcmReadMetadata>
+    }
+    return definition
   }),
 )
