@@ -71,6 +71,14 @@ const Parameters = Schema.Struct({
   }),
 })
 
+type LcmGrepMetadata = {
+  matches: number
+  repeatedInput: boolean
+  duplicatePayloadSuppressed?: boolean
+  truncated: boolean
+  lcmResult?: Record<string, unknown>
+}
+
 export function literalRanges(
   text: string,
   pattern: string,
@@ -517,6 +525,6 @@ export const LcmGrepTool = Tool.define(
             },
           }
         }).pipe(Effect.orDie),
-    }
+    } satisfies Tool.DefWithoutID<typeof Parameters, LcmGrepMetadata>
   }),
 )

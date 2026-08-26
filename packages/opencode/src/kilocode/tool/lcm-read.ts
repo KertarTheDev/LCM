@@ -33,6 +33,14 @@ const Parameters = Schema.Struct({
   }),
 })
 
+type LcmReadMetadata = {
+  bytes: number
+  repeatedInput: boolean
+  duplicatePayloadSuppressed?: boolean
+  truncated: boolean
+  lcmResult?: Record<string, unknown>
+}
+
 export function textChunk(value: string, offset: number, limit: number, endOffset?: number) {
   const buffer = Buffer.from(value)
   const rangeEnd = Math.min(buffer.byteLength, endOffset ?? buffer.byteLength)
@@ -268,6 +276,6 @@ export const LcmReadTool = Tool.define(
             },
           }
         }),
-    }
+    } satisfies Tool.DefWithoutID<typeof Parameters, LcmReadMetadata>
   }),
 )
