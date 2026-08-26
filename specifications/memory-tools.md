@@ -90,13 +90,17 @@ Read a digest-verified source from the persisted Kilo transcript. Text reads def
 32 KiB. A non-negative UTF-8 byte `offset`, including a `lcm_grep` byte-range start or returned `nextOffset`, seeks
 directly to relevant exact text; an opaque cursor also continues sequentially, and the two inputs are mutually
 exclusive. Reads preserve UTF-8
-boundaries and bind cursors to source ID and digest. A caller may change `maxBytes` on the next page without invalidating
-the continuation cursor. Every text result reports `complete`; incomplete results provide both a numeric `nextOffset`
-and opaque `nextCursor`, while complete results explicitly say the end was reached. Descriptions and per-page advice
-forbid reusing the consumed cursor or offset and direct aggregation/cross-source work to focused query or search rather
-than repeated maximum-size sequential reads. Immutable persisted media may be returned through
-Kilo's normal attachment channel after digest verification. Current filesystem or remote URL bytes are never
-substituted.
+boundaries and bind cursors to source ID and digest. Callers copy byte offsets from grep ranges or read continuations
+instead of calculating them from decoded content length. A caller may change `maxBytes` on the next page without
+invalidating the continuation cursor. Every text result reports `complete`; incomplete results provide both a numeric
+`nextOffset` and opaque `nextCursor`, while complete results set both continuations to `null` and explicitly say the end
+was reached. A requested offset past the source end is clamped to a disclosed terminal empty read rather than producing
+a misleading UTF-8-boundary error. Descriptions and per-page advice forbid reusing the consumed cursor or offset and
+direct aggregation/cross-source work to focused query or search rather than repeated maximum-size sequential reads.
+Source-scoped grep pages with additional occurrences similarly advise exhaustive pagination only when it is actually
+necessary and otherwise direct the caller to a refined pattern or focused query. Immutable persisted media may be
+returned through Kilo's normal attachment channel after digest verification. Current filesystem or remote URL bytes
+are never substituted.
 
 Cursors are signed, require one canonical base64url encoding, and bind semantic query or source identity while
 permitting a different page-size limit. Changing any other bound field or the opaque cursor text invalidates it. All operations

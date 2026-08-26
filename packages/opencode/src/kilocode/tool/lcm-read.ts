@@ -11,7 +11,8 @@ const Parameters = Schema.Struct({
     description: "Maximum UTF-8 bytes to return (default 8192, maximum 32768).",
   }),
   offset: Schema.optional(Schema.Number).annotate({
-    description: "Optional UTF-8 byte offset, such as a byteRange start from lcm_grep or nextOffset from lcm_read.",
+    description:
+      "Optional UTF-8 byte offset copied from a byteRange start in lcm_grep or nextOffset from lcm_read. Do not calculate it from returned content length.",
   }),
   cursor: Schema.optional(Schema.String).annotate({
     description:
@@ -40,6 +41,15 @@ export function validUtf8Offset(value: string, offset: number) {
   return offset === buffer.byteLength || (buffer[offset]! & 0xc0) !== 0x80
 }
 
+export function resolveTextReadOffset(value: string, requestedOffset: number) {
+  const total = Buffer.byteLength(value)
+  return {
+    offset: Math.min(requestedOffset, total),
+    total,
+    adjusted: requestedOffset > total,
+  }
+}
+
 export function readCursorQuery(source: { id: string; digest: string }) {
   return { sourceID: source.id, digest: source.digest }
 }
@@ -48,10 +58,14 @@ export function readContinuation(end: number, total: number) {
   const complete = end >= total
   return {
     complete,
+    nextOffset: complete ? null : end,
     ...(complete
-      ? { advice: ["This read reached the end of the source. Do not repeat the same cursor or offset."] }
+      ? {
+          advice: [
+            "This read reached the end of the source. nextOffset and nextCursor are null; do not calculate or retry another offset for this source.",
+          ],
+        }
       : {
-          nextOffset: end,
           advice: [
             "For the next contiguous page, use nextOffset or nextCursor; never repeat the cursor or offset just consumed. Prefer targeted lcm_grep or lcm_expand_query recovery over scanning an entire large source page by page.",
           ],
@@ -66,7 +80,7 @@ export const LcmReadTool = Tool.define(
     const database = yield* Database.Service
     return {
       description:
-        "Read a bounded digest-verified exact excerpt from one current-session src_ source. Seek directly with a structural or lcm_grep byteRange start. For aggregation or cross-source questions, prefer lcm_expand_query or lcm_grep over sequential 32 KiB scans. To continue a necessary contiguous read, use returned nextOffset or nextCursor and never repeat the cursor or offset just consumed. Stop when complete is true. Recent ordinary context is already visible and does not need recovery reads.",
+        "Read a bounded digest-verified exact excerpt from one current-session src_ source. Seek directly with a structural or lcm_grep byteRange start. For aggregation or cross-source questions, prefer lcm_expand_query or lcm_grep over sequential 32 KiB scans. To continue a necessary contiguous read, copy returned nextOffset or nextCursor; never calculate an offset from content length or repeat one just consumed. When complete is true, both continuations are null: stop reading that source. Recent ordinary context is already visible and does not need recovery reads.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -123,20 +137,37 @@ export const LcmReadTool = Tool.define(
               ],
             }
           }
+          const requestedOffset = offset
+          const resolvedOffset = resolveTextReadOffset(content.content, requestedOffset)
+          offset = resolvedOffset.offset
           if (!validUtf8Offset(content.content, offset))
-            throw new LcmToolError("lcm_invalid_cursor", "The source byte offset is not a UTF-8 boundary.")
+            throw new LcmToolError(
+              "lcm_invalid_cursor",
+              "The source byte offset is not a UTF-8 boundary. Copy nextOffset/nextCursor from lcm_read or a byteRange start from lcm_grep; do not probe nearby offsets.",
+            )
           const chunk = textChunk(content.content, offset, maxBytes)
+          const continuation = readContinuation(chunk.end, chunk.total)
           const result = {
             kind: "text",
             sourceID: source.id,
             mediaType: source.mediaType ?? "text/plain",
             offset,
+            ...(resolvedOffset.adjusted
+              ? { requestedOffset, adjustedOffsetReason: "past_source_end" as const }
+              : {}),
             bytesReturned: chunk.end - offset,
             totalBytes: chunk.total,
             digest: source.digest,
             content: chunk.content,
-            ...readContinuation(chunk.end, chunk.total),
-            ...(chunk.end < chunk.total ? { nextCursor: encodeCursor(query, chunk.end) } : {}),
+            ...continuation,
+            nextCursor: chunk.end < chunk.total ? encodeCursor(query, chunk.end) : null,
+            ...(resolvedOffset.adjusted
+              ? {
+                  advice: [
+                    "The requested offset was past totalBytes and was clamped to the source end. This source is complete; do not retry nearby offsets. Use focused search or a different source.",
+                  ],
+                }
+              : {}),
           }
           return {
             title: `Read Conversation Memory: ${source.id}`,

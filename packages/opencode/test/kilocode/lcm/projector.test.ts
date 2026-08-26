@@ -128,7 +128,9 @@ describe("LCM projector", () => {
     expect(memory).toContain("startOffset")
     expect(memory).toContain("lcm_grep defaults to literal mode")
     expect(memory).toContain("stop recovery and answer immediately")
-    expect(memory).toContain("nextOffset/nextCursor")
+    expect(memory).toContain("copy nextOffset or")
+    expect(memory).toContain("when complete is true both are null")
+    expect(memory).toContain("Never calculate byte offsets")
     expect(memory).toContain("never add both counts")
     expect(memory).toContain("Deterministic structural anchors copied verbatim")
     for (const [ordinal, marker] of [

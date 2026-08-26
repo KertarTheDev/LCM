@@ -157,6 +157,50 @@ describe("LCM summary tree", () => {
     store.close()
   })
 
+  test("rejects truncated recovery handles before appending an exact footer", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = [makeSource(0)]
+    const digest = lineageDigest(sources)
+    const lineage = { sessionID: "ses_tree", digest, sourceCount: 1, lastSourceID: sources[0]?.id }
+    await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
+    const revision = await new SummaryTree(store, {
+      generate: async (request) => ({
+        text: "The detail is attributed to abbreviated source src_aaaaaaaa.",
+        mode: request.mode,
+        attempt: {
+          id: `attempt_${request.mode}`,
+          nodeKey: "",
+          sessionID: request.sessionID,
+          mode: request.mode,
+          inputTokens: 100,
+          outputTokens: 10,
+          reasoningTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cost: 0,
+          finish: "stop",
+          durationMs: 1,
+          createdAt: 1,
+        },
+      }),
+    }).build({
+      sessionID: "ses_tree",
+      lineage,
+      usableInputTokens: 8_000,
+      protectedSources: 0,
+      reason: "hard_built",
+    })
+
+    const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
+    expect(summary?.generationMode).toBe("deterministic")
+    expect(summary?.text).not.toContain("src_aaaaaaaa")
+    expect((await store.listAttempts("ses_tree")).map((attempt) => attempt.errorCode)).toEqual([
+      "lcm_summary_unknown_handle",
+      "lcm_summary_unknown_handle",
+    ])
+    store.close()
+  })
+
   test("leaves the frontier unchanged after one rejected soft summary attempt", async () => {
     const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
     const sources = [makeSource(0)]

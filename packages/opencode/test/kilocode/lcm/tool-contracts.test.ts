@@ -8,6 +8,7 @@ import {
   grepTotalsComplete,
   literalPatternAdvice,
   literalRanges,
+  occurrencePaginationAdvice,
   occurrenceTotals,
   regexErrorMessage,
   regexToolError,
@@ -15,7 +16,13 @@ import {
   utf8SearchWindow,
 } from "@/kilocode/tool/lcm-grep"
 import { expandCursorQuery } from "@/kilocode/tool/lcm-expand"
-import { readContinuation, readCursorQuery, textChunk, validUtf8Offset } from "@/kilocode/tool/lcm-read"
+import {
+  readContinuation,
+  readCursorQuery,
+  resolveTextReadOffset,
+  textChunk,
+  validUtf8Offset,
+} from "@/kilocode/tool/lcm-read"
 import {
   completeQueryAnswer,
   extractiveQueryFallback,
@@ -34,6 +41,9 @@ describe("LCM tool contracts", () => {
     expect(literalPatternAdvice("alpha|beta", "literal")).toContain("Set mode to regex")
     expect(literalPatternAdvice("\\[START\\]", "literal")).toContain("search for [START]")
     expect(literalPatternAdvice("alpha|beta", "regex")).toBeUndefined()
+    expect(occurrencePaginationAdvice(true, [21])).toContain("refine the pattern")
+    expect(occurrencePaginationAdvice(true, [20])).toBeUndefined()
+    expect(occurrencePaginationAdvice(false, [100])).toBeUndefined()
     expect(
       occurrenceTotals(
         [
@@ -336,7 +346,10 @@ describe("LCM tool contracts", () => {
     expect(third.content).toBe("cd")
     expect(readContinuation(third.end, third.total)).toEqual({
       complete: true,
-      advice: ["This read reached the end of the source. Do not repeat the same cursor or offset."],
+      nextOffset: null,
+      advice: [
+        "This read reached the end of the source. nextOffset and nextCursor are null; do not calculate or retry another offset for this source.",
+      ],
     })
   })
 
@@ -353,6 +366,8 @@ describe("LCM tool contracts", () => {
     expect(textChunk("aé🙂z", 3, 4).content).toBe("🙂")
     expect(validUtf8Offset("aé🙂z", 3)).toBe(true)
     expect(validUtf8Offset("aé🙂z", 2)).toBe(false)
+    expect(resolveTextReadOffset("aé", 99)).toEqual({ offset: 3, total: 3, adjusted: true })
+    expect(resolveTextReadOffset("aé", 1)).toEqual({ offset: 1, total: 3, adjusted: false })
   })
 
   test("searches an exact half-open UTF-8 source interval", () => {

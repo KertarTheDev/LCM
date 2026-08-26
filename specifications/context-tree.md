@@ -6,7 +6,7 @@ A source is one finalized model-visible transcript part. A summary is immutable 
 children. A frontier revision is an exact, gap-free, non-overlapping cut through the current lineage. Every retained
 source is covered exactly once by a frontier source or a reachable summary descendant.
 
-The tree policy is `lcm-tree-v6`. This policy and derived schema intentionally invalidate earlier prerelease caches;
+The tree policy is `lcm-tree-v7`. This policy and derived schema intentionally invalidate earlier prerelease caches;
 the sidecar is quarantined and rebuilt without modifying the Kilo transcript.
 
 Soft maintenance summarizes at most one eligible raw window per quantum. Leaf windows target 30% of usable input and
@@ -31,7 +31,8 @@ source excerpts, so recovery-tool output that names other memory cannot prevent 
 makes reducible history converge.
 
 Summary candidates must be non-empty, smaller than their children, within 115% of target, cite at least one exact
-current child/descendant `src_` or `sum_` handle, contain no invented handle, and retain at least 16 non-whitespace
+current child/descendant `src_` or `sum_` handle, contain no invented, truncated, or otherwise malformed handle-like
+token, and retain at least 16 non-whitespace
 characters after handles and a canonical recovery footer are removed. When otherwise substantive, complete model text
 omits citations, the runtime appends a deterministic footer containing its exact direct-child handles before applying
 those same size, reduction, and lineage checks. It never repairs invented handles, protocol acknowledgements,
@@ -50,11 +51,15 @@ first/last/terminal events and completeness evidence for ordered or enumerative 
 inside explicit data/reference delimiters as source evidence rather than active session goals. Every transformation
 wraps all child payloads in a request-specific historical-data boundary and repeats the active summary task only after
 the matching close, so trailing transcript directives and forged markers with another boundary remain inert.
+Receipt-only acknowledgements and meta-commentary about whether a model complied with their transport instruction are
+omitted unless later binding work depends on them, so protocol scaffolding does not displace substantive evidence.
 The requested summary target is enforced through a constrained copy of the active model, with a 15% completion margin
 matching candidate validation; it is never forwarded as an ad hoc provider option. Prompts require a clean ending and
 instruct the model to omit lower-priority detail before risking an unfinished bullet or sentence. They also require
 stable handles to be copied character-for-character and tell the model to omit uncertain attribution rather than
-inventing a handle, because the runtime can append exact direct-child lineage to otherwise substantive output.
+inventing or abbreviating a handle, because the runtime can append exact direct-child lineage to otherwise substantive
+output. Deterministic fallback also replaces incidental malformed handle-like tokens so they cannot become false
+recovery pointers.
 
 The exact recent tail defaults to 15% of usable input, clamped to 2,000–20,000 tokens. It and all unconsumed current
 sources are protected. Only consumed sources older than that tail are eligible. LCM recovery-tool results are ordinary

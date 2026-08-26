@@ -17,6 +17,7 @@ const MAX_LEAF_TOKENS = 20_000
 const MAX_ROOTS = 8
 const CONDENSE_COUNT = 4
 const RECOVERY_HANDLE = /\b(?:src|sum)_[a-f0-9]{24}\b/g
+const RECOVERY_HANDLE_LIKE = /\b(?:src|sum)_(?:[a-z0-9][a-z0-9_-]*|\.{2,})/gi
 const RECOVERY_FOOTER = /\n\nRecovery handles: (?:\b(?:src|sum)_[a-f0-9]{24}\b(?:, )?)+\s*$/u
 const PROTOCOL_ONLY = /^(?:received|acknowledged|understood|ok(?:ay)?)[.!]?$/iu
 const REFUSAL = /^(?:i(?:'m| am) sorry\b|i (?:cannot|can't|won't|am unable to)\b)/iu
@@ -139,7 +140,7 @@ function deterministic(children: TreeItem[], limit: number, allowed: Set<string>
   const header = children
     .map((item) => {
       const excerpt = item.excerpt
-        .replace(RECOVERY_HANDLE, (handle) => (allowed.has(handle) ? handle : "[referenced memory]"))
+        .replace(RECOVERY_HANDLE_LIKE, (handle) => (allowed.has(handle) ? handle : "[referenced memory]"))
         .replace(/\s+/g, " ")
         .trim()
       return `${item.id} [${item.firstOrdinal}-${item.lastOrdinal}] ${excerpt}`
@@ -171,12 +172,13 @@ function candidateIssue(
   const candidateBytes = Buffer.byteLength(candidate.text)
   const candidateTokens = Math.max(1, Math.ceil(candidateBytes / 4))
   const handles = candidate.text.match(RECOVERY_HANDLE) ?? []
+  const handleLike = candidate.text.match(RECOVERY_HANDLE_LIKE) ?? []
   if (trimmed.length === 0) return "empty" as const
   if (candidate.attempt && candidate.attempt.finish !== "stop") return "incomplete" as const
   if (PROTOCOL_ONLY.test(trimmed) || REFUSAL.test(trimmed)) return "protocol_output" as const
   if (candidateBytes >= sourceBytes || candidateTokens >= sourceTokens) return "not_reduced" as const
   if (candidateTokens > Math.ceil(target * 1.15)) return "too_long" as const
-  if (handles.some((handle) => !allowed.has(handle))) return "unknown_handle" as const
+  if (handleLike.some((handle) => !allowed.has(handle))) return "unknown_handle" as const
   if (handles.length === 0) return "missing_handle" as const
   if (substantiveCharacters(candidate.text) < 16) return "content_free" as const
 }

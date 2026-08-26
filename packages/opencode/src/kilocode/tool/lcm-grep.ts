@@ -21,6 +21,11 @@ export function grepRangeLimit(sourceScoped: boolean) {
   return sourceScoped ? MAX_RANGES_PER_RECORD : MAX_UNSCOPED_RANGES_PER_RECORD
 }
 
+export function occurrencePaginationAdvice(sourceScoped: boolean, matchCounts: number[]) {
+  if (!sourceScoped || !matchCounts.some((count) => count > MAX_RANGES_PER_RECORD)) return
+  return "This source has more matches than one page. Continue with occurrenceOffset only for necessary exhaustive lexical enumeration; otherwise refine the pattern or use lcm_expand_query for focused semantic synthesis."
+}
+
 const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({
     description:
@@ -404,6 +409,10 @@ export const LcmGrepTool = Tool.define(
           const totalsComplete = grepTotalsComplete(params.mode ?? "literal", complete)
           const advice = [
             literalPatternAdvice(params.pattern, params.mode ?? "literal"),
+            occurrencePaginationAdvice(
+              Boolean(params.sourceID),
+              matches.map((match) => match.matchCount),
+            ),
             params.sourceID && (params.startOffset !== undefined || params.endOffset !== undefined)
               ? "Matches and totals are limited to the requested half-open source byte interval [startOffset, endOffset)."
               : undefined,
