@@ -6,7 +6,72 @@ The product branch remains a direct, narrow augmentation of upstream tag `v7.4.2
 (`40fa10e50a75c4887978d892520d1246515413bf`). Correct the product branch with ordinary reviewable commits; do not
 rewrite its published history or replay old LCM branches.
 
-The current public prerelease is `v7.4.23-lcm.8`. It was published on 2026-08-26 from candidate
+Public retention is one verified best-performing healthy prerelease per upstream Kilo version. A newer tag is not a
+reason to delete a different upstream version. For the same upstream version, publish and independently verify the
+replacement first, then remove each exact superseded release ID and matching tag while retaining Actions audit
+history. Never select a deletion target from `latest` or tag ordering; capture and re-resolve its tag, release ID, and
+candidate SHA immediately before deletion.
+
+The current public prerelease is `v7.4.23-lcm.9`. It was published on 2026-08-26 from candidate
+`f9721629bda860f84b497bc9efe6f1fd73929dec`, containing verified product
+`b74948920f6a0aebfd30aa7150b15311ad78206d`. Exact-SHA workflow run
+[`32947939389`](https://github.com/KertarTheDev/LCM/actions/runs/32947939389) completed successfully, including exact
+27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
+typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
+runtime smoke. Release [`376985526`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.9) is a non-draft
+prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
+
+|Asset|Bytes|SHA-256|
+|---|---:|---|
+|`kilo-darwin-arm64.zip`|52,541,247|`777d92d5d33dc3f795ce6a3f98117fefe927b835679422ac8656ca930fca4ca4`|
+|`kilo-darwin-x64-baseline.zip`|54,795,377|`aec110173beb8cb320cd3f38f771570f99b2dfaffee95736d0f0166b6d7152fe`|
+|`kilo-darwin-x64.zip`|54,795,377|`15d67841f0b9af4d62cd8c4a96c71f1b138e5972b37dacd914e6a6a4cd6fcb26`|
+|`kilo-linux-arm64-musl.tar.gz`|69,316,384|`de20a1b3a97543ac035f4580bed986453c3be25dafa44bddf172bcde12d125f4`|
+|`kilo-linux-arm64.tar.gz`|67,198,802|`476352263c9572cc2d3250d18f427ef909014fe6d4cb29278ddb31295bc859c9`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|69,811,330|`5b50bd8e9feed4e8b4f5309d6376c83679d88039a7337331b63b5d93fadf4274`|
+|`kilo-linux-x64-baseline.tar.gz`|67,445,822|`703ee153da9be166f7ddbdb8b77acd73569d9aa01c17936411670a36f95b1056`|
+|`kilo-linux-x64-musl.tar.gz`|69,811,608|`837bee08b2c2e1a831a98c61a29df5e401561ac5f857a5fadab54a0fe02c9f7e`|
+|`kilo-linux-x64.tar.gz`|67,443,170|`40692b1f13ee4dc0a51d065be25d67113d5fb0f0d8097595d4fbef71d3a5529a`|
+|`kilo-vscode-alpine-arm64.vsix`|110,121,930|`ac00a19b340461ab2f347605f4e086c4b6739ab80f756108f44e7b7b4bb336bb`|
+|`kilo-vscode-alpine-x64.vsix`|117,331,151|`5fdaf5c12fe9d422e546019f310334e0aa225724987cf58996cb5066482d42f8`|
+|`kilo-vscode-darwin-arm64.vsix`|92,865,614|`e52358547f98d38ae3f01c9f098cbd70bce80dcb5483a99d04c3a96249b86655`|
+|`kilo-vscode-darwin-x64.vsix`|100,927,435|`f014f1db7d6d806dfd3d8f9bfa5454f8a0cdf100b09df51d1b32e78a454b6a84`|
+|`kilo-vscode-linux-arm64.vsix`|107,955,456|`655d485cb2cb00b436641636ca09c6b2759dc190d62689902db670c809c40184`|
+|`kilo-vscode-linux-x64.vsix`|114,902,128|`62c6cf569e4f27e5c76135141838e4abd91c93ae05b3ed1e967426afc06ec2a0`|
+|`kilo-vscode-win32-arm64.vsix`|89,736,824|`0b3fec48af2d5806c66ed08d157244e3651b97bfcea90d04cde940f23e161b47`|
+|`kilo-vscode-win32-x64.vsix`|113,776,507|`304847d6bc930b6e4aabb50d6c35d3239a3036470021d78d30574515359bebea`|
+|`kilo-windows-arm64.zip`|65,129,769|`742575b6d680e90427ba036991f7261c5a13819b632cf04e5f6704d626bb50a8`|
+|`kilo-windows-x64-baseline.zip`|66,805,394|`842ae10ba9b2827277fa66843955e344612907e4a608a864392c7a3909681159`|
+|`kilo-windows-x64.zip`|66,805,394|`947496fbad8585f4ce4d7c15b7fd63a5ebe9edf1eab0590cc5119640dd85ce49`|
+
+`.9` supersedes `.8` as the recommended build after the exact published `.8` 175k trace exposed remaining general
+summary-quality and semantic-recovery defects. Summary requests now quote every historical payload line as inert data,
+preserve investigation uncertainty and exact verified bounds, and reject generic historical answer wrappers. Rejected
+foreground generations prefer a fair, bounded full-content extractive fallback with exact structural markers,
+bookends, sanitized recovery handles, and no partial sanitization markers. Recovery projection now directs the model
+to construct ordered exact byte ranges for a semantic unit. `lcm_expand_query` accepts 1–32 chronological,
+non-overlapping source ranges, fairly represents every range, samples useful occurrences throughout long records, and
+reports relevant, selected, and truncated coverage separately. `lcm_read` can enforce an exclusive structural
+`endOffset`, while `lcm_grep` exposes a direct last-occurrence page offset and places guidance before recovered
+content. Schema-v12/tree-v9 rebuilds disposable `.8` sidecars so retained summaries use these rules; Kilo SQLite
+remains the raw source of truth. The exact published `.9` 175k diagnostic later showed that repeated deterministic
+tool calls still replayed full evidence payloads and that summary-task commentary could survive validation. `.9`
+therefore remains the temporary public v7.4.23 baseline while a fixed local binary is iterated through 175k evidence;
+no replacement prerelease is published until that local cycle has no clear major issue.
+
+The following same-upstream releases are known inferior to verified `.9` for the defects described in their retained
+records below and are authorized for exact-ID/tag removal under the one-best policy:
+
+|Tag|Release ID|Candidate|
+|---|---:|---|
+|`v7.4.23-lcm.3`|`376453274`|`4a0b14cc0c1aac5027fa9f6c1ee76308824546cd`|
+|`v7.4.23-lcm.4`|`376822950`|`08e446abf764525b42634da9fcaf60c2bff8e75c`|
+|`v7.4.23-lcm.5`|`376851777`|`b84ce3b28383d9674395fcdea9c6b6406fba1155`|
+|`v7.4.23-lcm.6`|`376875819`|`7bb325306df2fa3e4318e9875a61e8f9b3b1432b`|
+|`v7.4.23-lcm.7`|`376895230`|`9d296d785f21af51d9cd050c0b3d41aa5330a404`|
+|`v7.4.23-lcm.8`|`376933665`|`5ae5396a540f1698272bce345c30714d8172e393`|
+
+The previous public prerelease was `v7.4.23-lcm.8`. It was published on 2026-08-26 from candidate
 `5ae5396a540f1698272bce345c30714d8172e393`, containing verified product
 `d67d15b0dc9831a94e93fb056dbcf710ae1144af`. Exact-SHA workflow run
 [`32939810930`](https://github.com/KertarTheDev/LCM/actions/runs/32939810930) completed successfully, including exact
@@ -47,10 +112,9 @@ opened unit closes and requires structural bounds before per-unit aggregation. S
 authoritative handle allowlist, replace receipt-only source bodies with typed omission labels, and reject embedded
 protocol receipts, transformation-completion scaffolding, invalid handles, and conservatively detected zero-overlap
 output. Schema-v11/tree-v8 rebuilds disposable `.7` sidecars so retained summaries use those rules; Kilo SQLite
-remains the raw source of truth. The usable `.7`, `.6`, `.5`, `.4`, and `.3` releases remain published as historical
-prerelease evidence.
+remains the raw source of truth. `.8` and the earlier v7.4.23 iterations are superseded by `.9`.
 
-The previous retained public prerelease is `v7.4.23-lcm.7`. It was published on 2026-08-26 from candidate
+The previous public prerelease was `v7.4.23-lcm.7`. It was published on 2026-08-26 from candidate
 `9d296d785f21af51d9cd050c0b3d41aa5330a404`, containing verified product
 `075dd6274053f557c025046ddf620014157a4461`. Exact-SHA workflow run
 [`32932738149`](https://github.com/KertarTheDev/LCM/actions/runs/32932738149) completed successfully, including exact
@@ -90,10 +154,9 @@ clamps past-EOF reads to a terminal empty result with the requested and effectiv
 searches now recommend refinement or `lcm_expand_query` when paging is unlikely to help. Summary validation rejects
 malformed or truncated handle-like tokens, and summary instructions omit receipt-only acknowledgements and unrelated
 compliance commentary. Schema-v10/tree-v7 rebuilds disposable `.6` sidecars so retained summaries use those rules;
-Kilo SQLite remains the raw source of truth. The healthy `.6`, `.5`, `.4`, and `.3` releases remain published as
-historical prerelease evidence.
+Kilo SQLite remains the raw source of truth. `.7` and the earlier v7.4.23 iterations are superseded by `.9`.
 
-The previous retained public prerelease is `v7.4.23-lcm.6`. It was published on 2026-08-26 from candidate
+The previous public prerelease was `v7.4.23-lcm.6`. It was published on 2026-08-26 from candidate
 `7bb325306df2fa3e4318e9875a61e8f9b3b1432b`, containing verified product
 `a19d1a8c4142ee2911f946b70b6b1ba95487b322`. Exact-SHA workflow run
 [`32928803641`](https://github.com/KertarTheDev/LCM/actions/runs/32928803641) completed successfully, including exact
@@ -132,10 +195,10 @@ wrapper. `.6` unwraps specific worker failures, explains literal punctuation and
 reports explicit read completion plus a copy-safe numeric continuation, directs aggregation to focused query/search,
 and tells the agent to stop recovery and answer once exact evidence resolves the task. Summary instructions now require
 handles to be copied character-for-character. Schema-v9/tree-v6 rebuilds disposable earlier sidecars so retained
-summaries use that guidance; Kilo SQLite remains the raw source of truth. The healthy `.5`, `.4`, and `.3` releases
-remain published as historical prerelease evidence.
+summaries use that guidance; Kilo SQLite remains the raw source of truth. `.6` and the earlier v7.4.23 iterations are
+superseded by `.9`.
 
-The previous retained public prerelease is `v7.4.23-lcm.5`. It was published on 2026-08-26 from candidate
+The previous public prerelease was `v7.4.23-lcm.5`. It was published on 2026-08-26 from candidate
 `b84ce3b28383d9674395fcdea9c6b6406fba1155`, containing verified product
 `ce2455b4cb3ab4aecd7e12f13498e9e69d21be9c`. Exact-SHA workflow run
 [`32923865662`](https://github.com/KertarTheDev/LCM/actions/runs/32923865662) completed successfully, including exact
@@ -175,7 +238,7 @@ boundary, repeat the active task after it, reject protocol-only output, and add 
 otherwise valid reduced summary that omitted handles. Structural anchors now include exact half-open UTF-8 byte
 intervals, and `lcm_grep` can constrain a source search to those intervals so evidence outside a semantic unit cannot
 answer a per-unit question. Schema-v8/tree-v5 rebuilds disposable earlier sidecars; Kilo SQLite remains the raw source
-of truth. The healthy `.4` and `.3` releases remain published as historical prerelease evidence.
+of truth. `.5` and the earlier v7.4.23 iterations are superseded by `.9`.
 
 Audit run [`32923478082`](https://github.com/KertarTheDev/LCM/actions/runs/32923478082) failed safely before versioning,
 tag, or draft creation. Canonical OpenCode typecheck found two worker-response discriminant narrowings that were lost
@@ -183,7 +246,7 @@ inside completion closures and a request-boundary ID prefix omitted from the int
 product commit `ce2455b4cb3ab4aecd7e12f13498e9e69d21be9c` fixes those types; the successful replacement run above proves the
 canonical package typechecks. The failed run's Actions audit history is retained.
 
-The previous retained public prerelease is `v7.4.23-lcm.4`. It was published on 2026-08-26 from candidate
+The previous public prerelease was `v7.4.23-lcm.4`. It was published on 2026-08-26 from candidate
 `08e446abf764525b42634da9fcaf60c2bff8e75c`, containing verified product
 `e68e034a87212c5c80781cd4416af661337e6edd`. Exact-SHA workflow run
 [`32917997402`](https://github.com/KertarTheDev/LCM/actions/runs/32917997402) completed successfully, including exact
@@ -220,10 +283,9 @@ and maintenance quality defects. It constrains transformation output at the mode
 only after a terminal `stop`, rebuilds disposable caches that could contain truncated summaries, improves summary and
 query prompts, makes recovery output smaller and better scoped, provides fair match-centred candidate extraction,
 hardens cursor validation and regex cancellation cleanup, and removes cancelled maintenance work from the queue
-immediately. The retained raw Kilo transcript remains the source of truth. The healthy `.3` release remains published
-as historical prerelease evidence; publishing `.4` does not authorize deleting it or any other retained release.
+immediately. The retained raw Kilo transcript remains the source of truth. `.4` and `.3` are superseded by `.9`.
 
-The previous retained public prerelease is `v7.4.23-lcm.3`. It was published on 2026-08-25 from candidate
+The previous public prerelease was `v7.4.23-lcm.3`. It was published on 2026-08-25 from candidate
 `4a0b14cc0c1aac5027fa9f6c1ee76308824546cd`, containing verified product
 `7837cb58afd07677641eb728db2f56485f013d18`. Exact-SHA workflow run
 [`32856216753`](https://github.com/KertarTheDev/LCM/actions/runs/32856216753) completed successfully, including exact
@@ -266,7 +328,7 @@ legacy durable `preparing` mode. `.3` preserves an ordered exact structural-anch
 including the protected recent tail; bounds unscoped recovery before the current turn; adds exact occurrence totals,
 source-scoped paging, and seekable byte ranges; repairs stale mode; improves summary provenance and retry behavior; and
 exports sanitized summary-attempt evidence. The raw Kilo transcript was never affected. Deletion removed `.2`'s
-release assets and tag; its Actions audit history is retained, and no older historical prerelease was removed.
+release assets and tag; its Actions audit history is retained.
 
 The superseded `v7.4.23-lcm.1` release ID `375779703` and matching tag were removed only after `.2` passed exact
 publication verification. `.1` was published from candidate `cc4db8d99fea02c8ab057b884607354ea290a680`, containing
@@ -278,14 +340,14 @@ been consumed. Hard maintenance then saw no eligible sources and failed closed w
 `.2` preserves replacement invalidation while reapplying only that proof-backed retained prefix; the replacement
 suffix remains protected. It also records the required activity evidence for changed and irreducible direct
 hard-pressure preparation. The raw Kilo transcript was never affected. Deletion removed `.1`'s release assets and tag;
-its Actions audit history is retained, and no older historical prerelease was removed.
+its Actions audit history is retained.
 
 An exact retained-release audit on 2026-08-25 found the same retry-lineage implementation in every still-published
 LCM prerelease from v7.4.16 through v7.4.22. Under hard context pressure, replacing a retried suffix can erase the
 proof-backed consumed prefix, leave no eligible history for maintenance, and make the request fail closed even though
 the retained transcript is reducible. These builds remain usable outside that specific long-session retry/recovery
-edge case and are retained as historical prereleases rather than current recommendations. The separate missing
-hard-preparation activity record is an observability defect and is not by itself a removal reason. The exact affected
+edge case but are the sole retained prerelease for their respective upstream versions. The separate missing
+hard-preparation activity record is an observability defect. The exact affected
 public identities are:
 
 |Tag|Release ID|Candidate|Product|
@@ -296,10 +358,9 @@ public identities are:
 |`v7.4.17-lcm.2`|`364019885`|`f44368ca82defa4aeeb2dd822e95b96061132a0a`|`d934b8332a81dacd9617a6a0be8dad362b35f96e`|
 |`v7.4.16-lcm.3`|`360907867`|`2cab563d6c58552b9abd4e7b58579cdc7ba39a3a`|`82b79ba06fa892b3e3a778a420992ed67938c68e`|
 
-Keep those exact older releases and tags published as historical prereleases after `v7.4.23-lcm.3` is verified. The
-completed v7.4.23 cleanup does not authorize deleting any of these five releases. Only the separately captured
-`v7.4.23-lcm.1` and `v7.4.23-lcm.2` releases and matching tags were removed after their fixed replacements passed exact
-release, tag, asset, and packaged-runtime verification. Older already-absent faulty releases require no action.
+Keep those exact older releases and tags published because each is the only remaining prerelease for its upstream
+version. The v7.4.23 consolidation does not authorize deleting them. Older already-absent faulty releases require no
+action.
 
 The previous affected prerelease `v7.4.22-lcm.1` remains published as retained history. It was published on 2026-08-16
 from candidate
@@ -421,13 +482,10 @@ heterogeneous-tool typings in the focused registry fixture during canonical type
 that inspected only stdout even though this CLI emitted help on stderr. Both defects were corrected on the product
 branch, their Actions audit history is retained, and unrelated upstream version/build/publish jobs remained skipped.
 
-Historical prereleases are retained by default. Publishing a newer prerelease does not authorize deleting the
-release it replaces. A successful differently tagged replacement may delete an older published prerelease only when
-this document already identifies that exact tag and release ID as known faulty, states the defect, and requires its
-removal after the fixed replacement is verified. Capture and re-resolve the exact release ID/tag/SHA before deletion;
-never infer the target from "latest" or from tag order. The completed v7.4.23 replacement cleanup removed only release
-ID `375779703` and tag `v7.4.23-lcm.1`, followed by release ID `376067342` and tag `v7.4.23-lcm.2` after `.3` was
-verified. No further replacement deletion is authorized.
+Release notes retain the audit history of superseded builds, but the public release list retains only one verified
+best-performing healthy prerelease for each upstream Kilo version. After a same-upstream replacement is independently
+verified, this document must identify every exact inferior tag, release ID, candidate SHA, and corrected defect before
+deletion. Capture and re-resolve those identities immediately before deleting only that release ID and matching tag.
 
 Failed same-run publication cleanup is separate from replacement cleanup. If publication fails after creating a new
 draft or release, delete only that captured failed release ID and its matching tag. If failure occurs before draft
