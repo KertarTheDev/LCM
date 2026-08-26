@@ -22,24 +22,29 @@ const Parameters = Schema.Struct({
     description:
       "Optional UTF-8 byte offset copied from a byteRange start in lcm_grep or nextOffset from lcm_read. Do not calculate it from returned content length.",
   }),
+  endOffset: Schema.optional(Schema.Number).annotate({
+    description:
+      "Optional exclusive UTF-8 byte bound copied from a structural closing marker. It prevents a read from crossing past the intended semantic interval and remains bound to continuation cursors.",
+  }),
   cursor: Schema.optional(Schema.String).annotate({
     description:
-      "Opaque nextCursor returned by the immediately preceding page of this source. Prefer returned nextOffset when copying an opaque cursor is error-prone. Never reuse the cursor just consumed. Mutually exclusive with offset; maxBytes may change between pages.",
+      "Opaque nextCursor returned by the immediately preceding page of this source. Prefer returned nextOffset when copying an opaque cursor is error-prone. Never reuse the cursor just consumed. Mutually exclusive with offset; maxBytes may change between pages, while endOffset must remain identical.",
   }),
 })
 
-export function textChunk(value: string, offset: number, limit: number) {
+export function textChunk(value: string, offset: number, limit: number, endOffset?: number) {
   const buffer = Buffer.from(value)
-  let end = Math.min(buffer.byteLength, offset + limit)
+  const rangeEnd = Math.min(buffer.byteLength, endOffset ?? buffer.byteLength)
+  let end = Math.min(rangeEnd, offset + limit)
   const decoder = new TextDecoder("utf-8", { fatal: true })
   while (end > offset) {
     try {
-      return { content: decoder.decode(buffer.subarray(offset, end)), end, total: buffer.byteLength }
+      return { content: decoder.decode(buffer.subarray(offset, end)), end, total: buffer.byteLength, rangeEnd }
     } catch {
       end--
     }
   }
-  return { content: "", end: offset, total: buffer.byteLength }
+  return { content: "", end: offset, total: buffer.byteLength, rangeEnd }
 }
 
 export function validUtf8Offset(value: string, offset: number) {
@@ -58,24 +63,29 @@ export function resolveTextReadOffset(value: string, requestedOffset: number) {
   }
 }
 
-export function readCursorQuery(source: { id: string; digest: string }) {
-  return { sourceID: source.id, digest: source.digest }
+export function readCursorQuery(source: { id: string; digest: string }, endOffset?: number) {
+  return { sourceID: source.id, digest: source.digest, endOffset }
 }
 
-export function readContinuation(end: number, total: number) {
-  const complete = end >= total
+export function readContinuation(end: number, total: number, rangeEnd = total) {
+  const complete = end >= rangeEnd
+  const bounded = rangeEnd < total
   return {
     complete,
     nextOffset: complete ? null : end,
     ...(complete
       ? {
           advice: [
-            "This read reached the end of this transport source, not necessarily the end of a document, episode, section, or other semantic unit. nextOffset and nextCursor are null; do not retry this source. If verified boundaries show the unit continues, follow chronology.nextNonReceiptSource at offset 0.",
+            bounded
+              ? "This read reached the requested exclusive endOffset. nextOffset and nextCursor are null; do not read beyond that verified interval for the current semantic unit."
+              : "This read reached the end of this transport source, not necessarily the end of a document, episode, section, or other semantic unit. nextOffset and nextCursor are null; do not retry this source. If verified boundaries show the unit continues, follow chronology.nextNonReceiptSource at offset 0.",
           ],
         }
       : {
           advice: [
-            "For the next contiguous page, use nextOffset or nextCursor; never repeat the cursor or offset just consumed. Prefer targeted lcm_grep or lcm_expand_query recovery over scanning an entire large source page by page.",
+            bounded
+              ? "For the next contiguous page, keep the same endOffset and use nextOffset or nextCursor; never repeat the cursor or offset just consumed."
+              : "For the next contiguous page, use nextOffset or nextCursor; never repeat the cursor or offset just consumed. Prefer targeted lcm_grep or lcm_expand_query recovery over scanning an entire large source page by page.",
           ],
         }),
   }
@@ -88,7 +98,7 @@ export const LcmReadTool = Tool.define(
     const database = yield* Database.Service
     return {
       description:
-        "Read a bounded digest-verified exact excerpt from one current-session src_ transport source. A source is never proof of a complete document, episode, section, or other semantic unit. Seek directly with a structural or lcm_grep byteRange start. For aggregation or cross-source questions, prefer lcm_expand_query or lcm_grep over sequential 32 KiB scans. To continue within this source, copy returned nextOffset or nextCursor; never calculate an offset from content length or repeat one just consumed. When complete is true, both continuations are null: stop reading this source, then use chronology.nextNonReceiptSource at offset 0 only if verified semantic boundaries continue. Recent ordinary context is already visible and does not need recovery reads.",
+        "Read a bounded digest-verified exact excerpt from one current-session src_ transport source. A source is never proof of a complete document, episode, section, or other semantic unit. Seek directly with a structural or lcm_grep byteRange start, and pass the matching structural close as endOffset when the unit ends in this source so the read cannot cross it. For aggregation or cross-source questions, prefer sourceRanges with lcm_expand_query or bounded lcm_grep over sequential 32 KiB scans. To continue within this interval, copy returned nextOffset or nextCursor; never calculate an offset from content length or repeat one just consumed. When complete is true, both continuations are null for the requested interval. Recent ordinary context is already visible and does not need recovery reads.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -112,9 +122,11 @@ export const LcmReadTool = Tool.define(
           const maxBytes = Math.min(32 * 1024, Math.max(1, Math.floor(params.maxBytes ?? 8 * 1024)))
           if (params.offset !== undefined && (!Number.isSafeInteger(params.offset) || params.offset < 0))
             throw new LcmToolError("lcm_invalid_cursor", "The source byte offset must be a non-negative integer.")
+          if (params.endOffset !== undefined && (!Number.isSafeInteger(params.endOffset) || params.endOffset < 0))
+            throw new LcmToolError("lcm_invalid_cursor", "The source end offset must be a non-negative integer.")
           if (params.offset !== undefined && params.cursor)
             throw new LcmToolError("lcm_invalid_cursor", "Use either a source byte offset or a cursor, not both.")
-          const query = readCursorQuery(source)
+          const query = readCursorQuery(source, params.endOffset)
           let offset: number
           if (params.offset !== undefined) {
             offset = params.offset
@@ -126,7 +138,8 @@ export const LcmReadTool = Tool.define(
             }
           }
           if (content.immutableMedia) {
-            if (offset !== 0) throw new LcmToolError("lcm_invalid_cursor", "Media sources do not use byte cursors.")
+            if (offset !== 0 || params.endOffset !== undefined)
+              throw new LcmToolError("lcm_invalid_cursor", "Media sources do not use byte bounds or cursors.")
             const media = content.immutableMedia
             const result = {
               callGuidance,
@@ -159,6 +172,15 @@ export const LcmReadTool = Tool.define(
             }
           }
           const requestedOffset = offset
+          if (params.endOffset !== undefined) {
+            if (!validUtf8Offset(content.content, params.endOffset))
+              throw new LcmToolError(
+                "lcm_invalid_cursor",
+                "The source end offset is outside the source or is not a UTF-8 boundary. Copy it from a structural or lcm_grep byte range.",
+              )
+            if (requestedOffset > params.endOffset)
+              throw new LcmToolError("lcm_invalid_cursor", "The source offset must not exceed endOffset.")
+          }
           const resolvedOffset = resolveTextReadOffset(content.content, requestedOffset)
           offset = resolvedOffset.offset
           if (!validUtf8Offset(content.content, offset))
@@ -166,8 +188,8 @@ export const LcmReadTool = Tool.define(
               "lcm_invalid_cursor",
               "The source byte offset is not a UTF-8 boundary. Copy nextOffset/nextCursor from lcm_read or a byteRange start from lcm_grep; do not probe nearby offsets.",
             )
-          const chunk = textChunk(content.content, offset, maxBytes)
-          const continuation = readContinuation(chunk.end, chunk.total)
+          const chunk = textChunk(content.content, offset, maxBytes, params.endOffset)
+          const continuation = readContinuation(chunk.end, chunk.total, chunk.rangeEnd)
           const result = {
             callGuidance,
             chronology,
@@ -178,10 +200,17 @@ export const LcmReadTool = Tool.define(
             ...(resolvedOffset.adjusted ? { requestedOffset, adjustedOffsetReason: "past_source_end" as const } : {}),
             bytesReturned: chunk.end - offset,
             totalBytes: chunk.total,
-            digest: source.digest,
-            content: chunk.content,
+            ...(params.endOffset !== undefined
+              ? {
+                  scope: {
+                    kind: "bounded_source_interval" as const,
+                    startOffset: offset,
+                    endOffset: params.endOffset,
+                  },
+                }
+              : {}),
             ...continuation,
-            nextCursor: chunk.end < chunk.total ? encodeCursor(query, chunk.end) : null,
+            nextCursor: chunk.end < chunk.rangeEnd ? encodeCursor(query, chunk.end) : null,
             ...(resolvedOffset.adjusted
               ? {
                   advice: [
@@ -190,6 +219,8 @@ export const LcmReadTool = Tool.define(
                   ],
                 }
               : {}),
+            digest: source.digest,
+            content: chunk.content,
           }
           return {
             title: `Read Conversation Memory: ${source.id}`,
@@ -197,7 +228,7 @@ export const LcmReadTool = Tool.define(
             metadata: {
               bytes: result.bytesReturned,
               repeatedInput: previousIdenticalCalls > 0,
-              truncated: chunk.end < chunk.total,
+              truncated: chunk.end < chunk.rangeEnd,
             },
           }
         }),

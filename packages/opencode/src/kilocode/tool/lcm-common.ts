@@ -112,7 +112,7 @@ export const loadMemory = Effect.fn("LcmTool.loadMemory")(function* (input: {
   } satisfies MemoryView
 })
 
-export function requireSource(view: MemoryView, id: string) {
+export function requireSource(view: Pick<MemoryView, "sources" | "content">, id: string) {
   const source = view.sources.get(id)
   if (!source) throw new LcmToolError("lcm_not_found", "No current-session source has that ID.")
   const content = view.content.get(id)

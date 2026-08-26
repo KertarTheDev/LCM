@@ -421,6 +421,52 @@ describe("LCM summary tree", () => {
     }
   })
 
+  test("uses a valid full-content extractive fallback after rejected foreground generations", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = [makeSource(0)]
+    const digest = lineageDigest(sources)
+    const lineage = { sessionID: "ses_tree", digest, sourceCount: 1, lastSourceID: sources[0]?.id }
+    await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
+    const fallbackText = `Extractive evidence retains the terminal verified result.\n\nRecovery handles: ${sources[0]!.id}`
+    const revision = await new SummaryTree(store, {
+      generate: async (request) => ({
+        text: "RECEIVED",
+        fallbackText,
+        mode: request.mode,
+        attempt: {
+          id: `attempt_${request.mode}`,
+          nodeKey: "",
+          sessionID: request.sessionID,
+          mode: request.mode,
+          inputTokens: 100,
+          outputTokens: 4,
+          reasoningTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cost: 0,
+          finish: "stop",
+          durationMs: 1,
+          createdAt: 1,
+        },
+      }),
+    }).build({
+      sessionID: "ses_tree",
+      lineage,
+      usableInputTokens: 8_000,
+      protectedSources: 0,
+      reason: "hard_built",
+    })
+
+    const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
+    expect(summary?.generationMode).toBe("deterministic")
+    expect(summary?.text).toBe(fallbackText)
+    expect((await store.listAttempts("ses_tree")).map((attempt) => attempt.errorCode)).toEqual([
+      "lcm_summary_protocol_output",
+      "lcm_summary_protocol_output",
+    ])
+    store.close()
+  })
+
   test("rejects embedded protocol scaffolding instead of preserving it as immutable memory", async () => {
     const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
     const sources = [makeSource(0)]
@@ -432,7 +478,7 @@ describe("LCM summary tree", () => {
         text:
           request.mode === "normal"
             ? `I've updated unrelated project files. Durable source detail is retained. ${sources[0]!.id}`
-            : `Durable source detail is retained.\nRECEIVED\n${sources[0]!.id}`,
+            : `<result_answer>Embedded task answer</result_answer> ${sources[0]!.id}`,
         mode: request.mode,
         attempt: {
           id: `attempt_${request.mode}`,
@@ -460,7 +506,7 @@ describe("LCM summary tree", () => {
 
     const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
     expect(summary?.generationMode).toBe("deterministic")
-    expect(summary?.text).not.toContain("RECEIVED")
+    expect(summary?.text).not.toContain("result_answer")
     expect((await store.listAttempts("ses_tree")).map((attempt) => attempt.errorCode)).toEqual([
       "lcm_summary_protocol_scaffolding",
       "lcm_summary_protocol_scaffolding",

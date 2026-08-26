@@ -83,7 +83,10 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
           "spanning sources, apply the opening offset to the first source, the closing offset to the last, and search",
           "intermediate sources in full. Do not use evidence before the opening or after the closing. Source EOF is",
           "never semantic-unit EOF: if an opening is near source end, ignore earlier bytes and continue later",
-          "chronological sources from offset 0 until the matching close. lcm_read reports those source neighbors.",
+          "chronological sources from offset 0 until the matching close. Pass that ordered list as sourceRanges to",
+          "lcm_expand_query for one scoped synthesis call. For exact inspection, give lcm_read the opening offset and",
+          "the matching closing byte start as endOffset so it cannot cross the unit boundary. lcm_read reports source",
+          "neighbors.",
           ...anchors,
           ...(structural.anchors.length < structural.total
             ? [
@@ -98,7 +101,8 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
     "records: never treat an omitted fact or boundary as evidence that it did not occur. For exact, exhaustive,",
     "boundary-sensitive, first/last, count, or complete-list questions, first use the structural-anchor map when",
     "present, then verify relevant summarized regions with stable IDs instead of guessing. Recover economically:",
-    "use one focused lcm_expand_query for synthesis or aggregation, or unscoped lcm_grep for compact discovery; then",
+    "use one focused lcm_expand_query for synthesis or aggregation (with ordered sourceRanges for a bounded semantic",
+    "unit), or unscoped lcm_grep for compact discovery; then",
     "verify only necessary candidates with sourceID-scoped lcm_grep and targeted lcm_read. Do not page whole large",
     "sources when focused search or query can answer. lcm_grep defaults to literal mode: enter punctuation without",
     "regex escapes (for example [START], not \\[START\\]); set mode=regex for | alternatives. Unscoped grep can",

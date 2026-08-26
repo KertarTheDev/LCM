@@ -13,6 +13,7 @@ import {
   grepTotalsComplete,
   literalPatternAdvice,
   literalRanges,
+  lastOccurrencePageOffset,
   occurrencePaginationAdvice,
   occurrenceTotals,
   regexErrorMessage,
@@ -34,6 +35,8 @@ import {
   parseQueryAnswer,
   queryExcerpt,
   queryParts,
+  resolveSourceRanges,
+  selectQueryExcerpts,
 } from "@/kilocode/tool/lcm-expand-query"
 import type { FinalSource } from "@/kilocode/session/lcm/types"
 
@@ -48,6 +51,8 @@ describe("LCM tool contracts", () => {
     expect(literalPatternAdvice("\\[START\\]", "literal")).toContain("search for [START]")
     expect(literalPatternAdvice("alpha|beta", "regex")).toBeUndefined()
     expect(occurrencePaginationAdvice(true, [21])).toContain("refine the pattern")
+    expect(lastOccurrencePageOffset(21)).toBe(1)
+    expect(lastOccurrencePageOffset(40)).toBe(20)
     expect(occurrencePaginationAdvice(true, [20])).toBeUndefined()
     expect(occurrencePaginationAdvice(false, [100])).toBeUndefined()
     expect(
@@ -177,12 +182,58 @@ describe("LCM tool contracts", () => {
   })
 
   test("centers bounded recovery excerpts on early and late matches", () => {
-    const text = `early needle ${"unrelated ".repeat(600)}late needle`
+    const text = `early needle ${"unrelated ".repeat(200)}middle needle ${"unrelated ".repeat(200)}late needle`
     const excerpt = queryExcerpt(text, ["needle"], 500)
     expect(excerpt).toContain("early needle")
+    expect(excerpt).toContain("middle needle")
     expect(excerpt).toContain("late needle")
     expect(excerpt).toContain("omitted")
     expect(excerpt.length).toBeLessThanOrEqual(500)
+  })
+
+  test("resolves ordered non-overlapping UTF-8 source ranges and retrieves only their bytes", () => {
+    const makeSource = (id: string, ordinal: number, content: string): FinalSource => ({
+      id,
+      sessionID: "ses_ranges",
+      messageID: `msg_${ordinal}`,
+      partID: `part_${ordinal}`,
+      ordinal,
+      kind: "user_text",
+      digest: `digest_${ordinal}`,
+      tokens: Math.ceil(Buffer.byteLength(content) / 4),
+      bytes: Buffer.byteLength(content),
+      excerpt: content,
+    })
+    const firstText = "outside before\n[START]\ninside first needle\n"
+    const secondText = "inside second needle\n[END]\noutside after"
+    const first = makeSource("src_0123456789abcdef01234567", 4, firstText)
+    const second = makeSource("src_89abcdef0123456789abcdef", 6, secondText)
+    const view = {
+      sources: new Map([
+        [first.id, first],
+        [second.id, second],
+      ]),
+      summaries: new Map(),
+      children: new Map(),
+      content: new Map([
+        [first.id, { metadata: first, content: firstText }],
+        [second.id, { metadata: second, content: secondText }],
+      ]),
+    }
+    const startOffset = Buffer.byteLength("outside before\n[START]\n")
+    const endOffset = Buffer.byteLength("inside second needle\n")
+    const ranges = resolveSourceRanges(view, [
+      { sourceID: first.id, startOffset },
+      { sourceID: second.id, endOffset },
+    ])
+    expect(ranges.map((range) => range.text)).toEqual(["inside first needle\n", "inside second needle\n"])
+    const retrieval = selectQueryExcerpts(view, "find every needle", undefined, 1_000, undefined, ranges)
+    expect(retrieval.selected.map((item) => item.text)).toEqual(["inside first needle\n", "inside second needle\n"])
+    expect(retrieval.relevant).toBe(2)
+    expect(retrieval.truncated).toBe(false)
+    expect(() => resolveSourceRanges(view, [{ sourceID: second.id }, { sourceID: first.id }])).toThrow(
+      "chronological order",
+    )
   })
 
   test("keeps extractive query fallback fair across candidate records", () => {
@@ -221,10 +272,13 @@ describe("LCM tool contracts", () => {
   })
 
   test("binds read cursors to immutable source identity rather than page size", () => {
-    const query = readCursorQuery({ id: "src_a", digest: "digest_a" })
+    const query = readCursorQuery({ id: "src_a", digest: "digest_a" }, 12_000)
     const cursor = encodeCursor(query, 8_192)
-    expect(decodeCursor(readCursorQuery({ id: "src_a", digest: "digest_a" }), cursor)).toBe(8_192)
-    expect(() => decodeCursor(readCursorQuery({ id: "src_a", digest: "digest_b" }), cursor)).toThrow(
+    expect(decodeCursor(readCursorQuery({ id: "src_a", digest: "digest_a" }, 12_000), cursor)).toBe(8_192)
+    expect(() => decodeCursor(readCursorQuery({ id: "src_a", digest: "digest_a" }, 13_000), cursor)).toThrow(
+      "lcm_invalid_cursor",
+    )
+    expect(() => decodeCursor(readCursorQuery({ id: "src_a", digest: "digest_b" }, 12_000), cursor)).toThrow(
       "lcm_invalid_cursor",
     )
   })
@@ -413,6 +467,16 @@ describe("LCM tool contracts", () => {
       nextOffset: null,
       advice: [
         "This read reached the end of this transport source, not necessarily the end of a document, episode, section, or other semantic unit. nextOffset and nextCursor are null; do not retry this source. If verified boundaries show the unit continues, follow chronology.nextNonReceiptSource at offset 0.",
+      ],
+    })
+    const bounded = textChunk(value, 2, 32, 6)
+    expect(bounded.content).toBe("αβ")
+    expect(bounded.rangeEnd).toBe(6)
+    expect(readContinuation(bounded.end, bounded.total, bounded.rangeEnd)).toEqual({
+      complete: true,
+      nextOffset: null,
+      advice: [
+        "This read reached the requested exclusive endOffset. nextOffset and nextCursor are null; do not read beyond that verified interval for the current semantic unit.",
       ],
     })
   })

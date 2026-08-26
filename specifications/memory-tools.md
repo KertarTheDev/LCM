@@ -31,7 +31,8 @@ occurrence-page offset/total/next offset, `rangesComplete`, `occurrencesComplete
 and source records identify their `sourceKind`, so a range cap or assistant/tool record is never mistaken for
 exhaustive user-source evidence. The caller can pass a
 `byteRange.start` to `lcm_read.offset` to inspect exact source text around any retained match. If a source has more than
-20 matches, repeat the source-scoped search with its `occurrencePage.nextOffset`. Regex work runs in a
+20 matches, repeat the source-scoped search with its `occurrencePage.nextOffset`, or copy
+`occurrencePage.lastOffset` to jump directly to the final retained page for a last-occurrence question. Regex work runs in a
 cancellable isolated worker with bounded per-source and aggregate input, matching records, retained ranges per record,
 and elapsed time. Oversized scopes fail explicitly
 instead of silently omitting sources, so the caller can narrow the search to a summary or source, or use literal mode.
@@ -69,20 +70,29 @@ while `limit` may change between pages.
 
 ## `lcm_expand_query`
 
-Answer one focused question from current-lineage memory. Inputs are `query`, optional `summaryID`, and optional
-`maxAnswerTokens` (default 1,000; maximum 2,000). Retrieval ranks explicit stable handles and lexical evidence, selects
-at most eight excerpts, and uses at most 20% of known usable input capped at 16,000 tokens; unknown capacity uses a
-4,000-token retrieval budget. The budget is divided fairly across selected records. Long records contribute bounded
-windows around the first and last useful term occurrences rather than an unrelated prefix, with bounded bookends when
-only an explicit handle is available. The bounded extractive fallback applies the same fair, match-centered allocation
-across candidate records instead of allowing the first candidates to consume the answer budget. A summary scope is
-limited to that summary and its cycle-safe descendants.
+Answer one focused question from current-lineage memory. Inputs are `query`, optional `summaryID`, optional ordered
+`sourceRanges`, and optional `maxAnswerTokens` (default 1,000; maximum 2,000). `summaryID` and `sourceRanges` are
+mutually exclusive. A range scope contains 1–32 chronological, non-overlapping `sourceID` records with optional
+inclusive `startOffset` and exclusive `endOffset` UTF-8 byte bounds. It is designed for an exact semantic unit copied
+from the structural-anchor map: use the opening marker's byte end, every chronological intermediate source, and the
+closing marker's byte start. Only bytes inside those ranges enter retrieval, ranges retain their supplied order, and
+the result echoes the effective bounds and total scoped bytes.
+
+Unscoped or summary-scoped retrieval ranks explicit stable handles and lexical evidence and selects at most eight
+excerpts. Exact range retrieval fairly represents every supplied range. Both use at most 20% of known usable input
+capped at 16,000 tokens; unknown capacity uses a 4,000-token retrieval budget. Long records contribute bounded windows
+sampled across useful term occurrences rather than an unrelated prefix, with bounded bookends when no term occurs.
+The result distinguishes total relevant candidates from selected excerpts and reports truncation when a candidate or
+in-scope range was omitted or clipped. The bounded extractive fallback applies the same fair, match-centered
+allocation across candidate records instead of allowing the first candidates to consume the answer budget. A summary
+scope is limited to that summary and its cycle-safe descendants.
 
 The tool preempts same-session soft work, shares the LCM model-call queue, and makes at most one call through the active
 Kilo provider/model runtime with no tools. It does not create a child session, second provider protocol, or transcript
 turn. The answer is validated as `answer`, selected `citations`, and `coverage` (`full`, `partial`, or `none`), and its
 cost is added to the calling assistant message. Provider failure or invalid output is explicit. A bounded extractive
-fallback is allowed only for an explicit handle or at least two useful query terms. Only a normal provider `stop` can
+fallback is allowed for an exact `sourceRanges` scope, an explicit handle, or at least two useful query terms. Only a
+normal provider `stop` can
 produce a generated answer; a length-limited, filtered, errored, tool-call, unknown, or absent finish is reported as an
 incomplete response and uses the same bounded fallback. The query output limit is enforced through a constrained model
 copy rather than provider options. Query instructions prevent double-counting overlapping summary/raw evidence and
@@ -94,13 +104,16 @@ current-lineage summary beyond that boundary.
 
 Read a digest-verified source from the persisted Kilo transcript. Text reads default to 8 KiB and are capped at
 32 KiB. A non-negative UTF-8 byte `offset`, including a `lcm_grep` byte-range start or returned `nextOffset`, seeks
-directly to relevant exact text; an opaque cursor also continues sequentially, and the two inputs are mutually
-exclusive. Reads preserve UTF-8
-boundaries and bind cursors to source ID and digest. Callers copy byte offsets from grep ranges or read continuations
-instead of calculating them from decoded content length. A caller may change `maxBytes` on the next page without
-invalidating the continuation cursor. Every text result reports `complete`; incomplete results provide both a numeric
+directly to relevant exact text. An optional exclusive UTF-8 `endOffset`, normally copied from a matching structural
+closing marker, prevents every page from crossing the intended interval. An opaque cursor also continues
+sequentially, and cursor and offset inputs are mutually exclusive. Reads preserve UTF-8 boundaries and bind cursors
+to source ID, digest, and `endOffset`. Callers copy byte offsets from grep ranges, structural anchors, or read
+continuations instead of calculating them from decoded content length. A caller may change `maxBytes` on the next page
+without invalidating the continuation cursor, but retains the same `endOffset`. Every text result reports `complete`;
+incomplete results provide both a numeric
 `nextOffset` and opaque `nextCursor`, while complete results set both continuations to `null` and explicitly say the end
-of that transport source was reached, not necessarily the end of a semantic unit. Results include the source ordinal,
+of the requested interval or transport source was reached. Unbounded source EOF is not necessarily semantic-unit EOF.
+Results include the source ordinal,
 immediate chronological neighbors, and nearest prior/later non-receipt source. A verified unit that crosses a source
 boundary therefore continues at offset zero in the reported later non-receipt source rather than scanning bytes before
 an opening near the current source's end. A requested offset past the source end is clamped to a disclosed terminal

@@ -26,7 +26,11 @@ export function grepRangeLimit(sourceScoped: boolean) {
 
 export function occurrencePaginationAdvice(sourceScoped: boolean, matchCounts: number[]) {
   if (!sourceScoped || !matchCounts.some((count) => count > MAX_RANGES_PER_RECORD)) return
-  return "This source has more matches than one page. Continue with occurrenceOffset only for necessary exhaustive lexical enumeration; otherwise refine the pattern or use lcm_expand_query for focused semantic synthesis."
+  return "This source has more matches than one page. Copy occurrencePage.nextOffset for forward enumeration or occurrencePage.lastOffset to jump directly to the final page for a last-occurrence question. Otherwise refine the pattern or use sourceRanges with lcm_expand_query for focused semantic synthesis."
+}
+
+export function lastOccurrencePageOffset(matchCount: number) {
+  return Math.max(0, matchCount - MAX_RANGES_PER_RECORD)
 }
 
 const Parameters = Schema.Struct({
@@ -400,6 +404,9 @@ export const LcmGrepTool = Tool.define(
                 returned: item.ranges.length,
                 total: item.matchCount,
                 complete: occurrenceOffset + item.ranges.length >= item.matchCount,
+                ...(params.sourceID && item.matchCount > MAX_RANGES_PER_RECORD
+                  ? { lastOffset: lastOccurrencePageOffset(item.matchCount) }
+                  : {}),
                 ...(params.sourceID && occurrenceOffset + item.ranges.length < item.matchCount
                   ? { nextOffset: occurrenceOffset + item.ranges.length }
                   : {}),
@@ -447,13 +454,13 @@ export const LcmGrepTool = Tool.define(
                   },
                 }
               : {}),
+            ...(advice.length > 0 ? { advice } : {}),
             matches,
             ...(nextOffset < found.length ? { nextCursor: encodeCursor(query, nextOffset) } : {}),
             totals: {
               returned: occurrenceTotals(selected, kinds),
               ...(totalsComplete ? { complete: occurrenceTotals(found, kinds) } : {}),
             },
-            ...(advice.length > 0 ? { advice } : {}),
             searched: {
               sources: values.filter((value) => value.kind === "source").length,
               summaries: values.filter((value) => value.kind === "summary").length,

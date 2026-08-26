@@ -6,7 +6,7 @@ A source is one finalized model-visible transcript part. A summary is immutable 
 children. A frontier revision is an exact, gap-free, non-overlapping cut through the current lineage. Every retained
 source is covered exactly once by a frontier source or a reachable summary descendant.
 
-The tree policy is `lcm-tree-v8`. This policy and derived schema intentionally invalidate earlier prerelease caches;
+The tree policy is `lcm-tree-v9`. This policy and derived schema intentionally invalidate earlier prerelease caches;
 the sidecar is quarantined and rebuilt without modifying the Kilo transcript.
 
 Soft maintenance summarizes at most one eligible raw window per quantum. Leaf windows target 30% of usable input and
@@ -41,12 +41,17 @@ refusals, or content-free output. A model-generated candidate is complete only w
 `stop`; length-limited, filtered, errored, tool-call, unknown, or missing finishes are rejected rather than committed
 as immutable memory. Rejected/failed attempts retain usage and error provenance. After rejected
 normal and aggressive attempts during hard or manual maintenance, the runtime uses the deterministic
-handle-preserving fallback. Summary calls have no tools, do not recurse through LCM, and write no transcript message.
+handle-preserving fallback. When the product generator can access exact Kilo transcript bodies, that fallback fairly
+allocates its bounded output across every direct child, retains exact structural markers plus beginning/terminal
+bookends, sanitizes incidental handle-shaped references, and labels itself as a lossy extractive index. Direct tree
+callers without raw bodies retain the smaller metadata-excerpt fallback. Summary calls have no tools, do not recurse
+through LCM, and write no transcript message.
 Because these calls are bounded text transformations, the runtime selects the model's `none` or `instant` variant when
 one is available; otherwise it preserves the configured compaction-agent variant. This prevents hidden reasoning from
 consuming a small summary output allowance without producing summary text.
-Generator input labels every child with its source kind and ordinal range so protocol acknowledgements, reasoning,
-tool evidence, raw user material, and prior summaries are not conflated. Reference-data summaries preserve literal
+Generator input labels every child with its source kind and ordinal range and prefixes every historical payload line
+as quoted data so protocol acknowledgements, trailing transport directives, reasoning, tool evidence, raw user
+material, and prior summaries are not conflated. Reference-data summaries preserve literal
 opening/closing structural markers and known fragment boundary state, do not merge adjacent marked units, retain
 first/last/terminal events and completeness evidence for ordered or enumerative material, and treat instructions
 inside explicit data/reference delimiters as source evidence rather than active session goals. Every transformation
@@ -55,7 +60,10 @@ the matching close, so trailing transcript directives and forged markers with an
 Receipt-only acknowledgement bodies are replaced by a typed omission label while their exact source lineage remains
 covered. The post-boundary task supplies an authoritative allowlist of exact child/descendant recovery handles;
 handle-shaped text inside historical payloads is citeable only when it also appears in that allowlist. Receipt and
-task/compliance meta-commentary are rejected rather than becoming immutable memory. The conservative grounding check
+task/compliance meta-commentary, direct answer wrappers, and JSON answer envelopes are rejected rather than becoming
+immutable memory. For in-progress analysis and recovery turns, prompts require exact verified observations,
+boundaries, gaps, and next actions while keeping assistant hypotheses, draft answers, and tool-model candidates
+explicitly provisional; the transformer must not solve the embedded historical task. The conservative grounding check
 rejects a sufficiently substantive candidate only when none of its distinctive lexical terms occurs in the supplied
 children; short candidates remain governed by all other validation, and deterministic fallback is grounded directly
 in child excerpts. This blocks unrelated transformation output without requiring a second provider or semantic judge.
@@ -88,10 +96,13 @@ summary prose; if its safety cap is reached, the map says it is incomplete and d
 complete coverage.
 Recovery guidance distinguishes transport-source records from semantic units, directs per-unit questions to pair
 ordered structural openings and closings, states that literal grep uses unescaped punctuation, warns that summaries
-and raw descendants overlap, and recommends bounded query synthesis followed by exact source-scoped verification.
+and raw descendants overlap, and recommends exact ordered `sourceRanges` query synthesis followed by bounded
+source-scoped verification. Range-scoped query retrieval cannot include bytes before the opening or after the closing,
+fairly samples all supplied ranges in chronological order, and reports whether in-scope text was clipped. Source grep
+pages expose a copy-ready final occurrence-page offset for last-event questions.
 It directs targeted reads instead of full-source sequential scans, requires callers to honor the returned completion
-and continuation fields, reports immediate and nearest non-receipt chronological source neighbors, and makes clear
-that source completion is not semantic-unit completion. Successful grep/read results report how many times the exact
+that source completion is not semantic-unit completion. An exclusive `lcm_read.endOffset` is cursor-bound and prevents
+exact inspection from crossing a verified closing boundary. Successful grep/read results report how many times the exact
 input already completed and explicitly direct the caller to reuse deterministic results instead of repeating them.
 The guidance tells the agent to stop recovery and answer once exact evidence resolves the question.
 When a semantic unit begins or ends inside a transport source, guidance directs `lcm_grep` to its half-open byte

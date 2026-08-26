@@ -11,16 +11,36 @@ import {
   LcmToolError,
   loadMemory,
   priorTurnSourceCutoff,
+  requireSource,
   requireSummary,
   type MemoryView,
 } from "./lcm-common"
+import { utf8SearchWindow } from "./lcm-grep"
+
+const MAX_QUERY_EXCERPTS = 8
+const MAX_SOURCE_RANGES = 32
+
+const SourceRange = Schema.Struct({
+  sourceID: Schema.String.annotate({ description: "Exact current-session src_ source handle." }),
+  startOffset: Schema.optional(Schema.Number).annotate({
+    description: "Inclusive UTF-8 byte offset; defaults to the source start.",
+  }),
+  endOffset: Schema.optional(Schema.Number).annotate({
+    description: "Exclusive UTF-8 byte offset; defaults to the source end.",
+  }),
+})
 
 const Parameters = Schema.Struct({
   query: Schema.String.annotate({
     description: "Question about earlier content in the current session (1-4096 characters).",
   }),
   summaryID: Schema.optional(Schema.String).annotate({
-    description: "Optional active sum_ handle whose descendants bound the search.",
+    description:
+      "Optional active sum_ handle whose descendants bound the search. Mutually exclusive with sourceRanges.",
+  }),
+  sourceRanges: Schema.optional(Schema.Array(SourceRange)).annotate({
+    description:
+      "Optional ordered semantic scope of 1-32 exact source byte ranges. Use the structural-anchor map: start after an opening marker, include chronological intermediate sources, and end before the matching closing marker. Mutually exclusive with summaryID.",
   }),
   maxAnswerTokens: Schema.optional(Schema.Number).annotate({
     description: "Maximum answer size in tokens (default 1000, maximum 2000).",
@@ -59,12 +79,23 @@ const STOP_WORDS = new Set([
 ])
 
 interface Candidate {
+  key: string
   id: string
   kind: "source" | "summary"
   ordinal: number
   lastOrdinal: number
   text: string
   score: number
+  sourceRange?: ResolvedSourceRange
+}
+
+export interface ResolvedSourceRange {
+  sourceID: string
+  ordinal: number
+  startOffset: number
+  endOffset: number
+  totalBytes: number
+  text: string
 }
 
 interface QueryAnswer {
@@ -73,7 +104,9 @@ interface QueryAnswer {
   coverage: "full" | "partial" | "none"
 }
 
-function scope(summaryID: string, view: MemoryView) {
+type QueryMemoryView = Pick<MemoryView, "sources" | "summaries" | "children" | "content">
+
+function scope(summaryID: string, view: Pick<MemoryView, "children">) {
   const ids = new Set([summaryID])
   const visit = (id: string) => {
     for (const child of view.children.get(id) ?? []) {
@@ -84,6 +117,54 @@ function scope(summaryID: string, view: MemoryView) {
   }
   visit(summaryID)
   return ids
+}
+
+export function resolveSourceRanges(
+  view: Pick<MemoryView, "sources" | "content">,
+  ranges: ReadonlyArray<{ sourceID: string; startOffset?: number; endOffset?: number }>,
+) {
+  if (ranges.length < 1 || ranges.length > MAX_SOURCE_RANGES)
+    throw new LcmToolError("lcm_unavailable", `Source range scope must contain 1 through ${MAX_SOURCE_RANGES} ranges.`)
+  const resolved: ResolvedSourceRange[] = []
+  for (const range of ranges) {
+    if (
+      (range.startOffset !== undefined && (!Number.isSafeInteger(range.startOffset) || range.startOffset < 0)) ||
+      (range.endOffset !== undefined && (!Number.isSafeInteger(range.endOffset) || range.endOffset < 0))
+    )
+      throw new LcmToolError("lcm_unavailable", "Source ranges require non-negative integer UTF-8 byte offsets.")
+    const { source, content } = requireSource(view, range.sourceID)
+    let window: ReturnType<typeof utf8SearchWindow>
+    try {
+      window = utf8SearchWindow(content.content, range.startOffset ?? 0, range.endOffset)
+    } catch {
+      throw new LcmToolError(
+        "lcm_unavailable",
+        "A source range is outside its source or is not aligned to UTF-8 byte boundaries.",
+      )
+    }
+    if (window.byteOffset >= window.endOffset)
+      throw new LcmToolError("lcm_unavailable", "Every source range must contain at least one UTF-8 byte.")
+    const previous = resolved.at(-1)
+    if (
+      previous &&
+      (source.ordinal < previous.ordinal ||
+        (source.ordinal === previous.ordinal &&
+          (source.id !== previous.sourceID || window.byteOffset < previous.endOffset)))
+    )
+      throw new LcmToolError(
+        "lcm_unavailable",
+        "Source ranges must be in chronological order and must not overlap within one source.",
+      )
+    resolved.push({
+      sourceID: source.id,
+      ordinal: source.ordinal,
+      startOffset: window.byteOffset,
+      endOffset: window.endOffset,
+      totalBytes: window.totalBytes,
+      text: window.text,
+    })
+  }
+  return resolved
 }
 
 export function queryParts(query: string) {
@@ -112,27 +193,30 @@ export function queryExcerpt(text: string, terms: string[], maxChars: number) {
   const limit = Math.max(1, Math.floor(maxChars))
   if (text.length <= limit) return text
   const lower = text.toLocaleLowerCase()
-  const positions = terms
-    .flatMap((term) => {
-      const first = lower.indexOf(term)
-      if (first < 0) return []
-      const last = lower.lastIndexOf(term)
-      return last === first
-        ? [{ start: first, end: first + term.length }]
-        : [
-            { start: first, end: first + term.length },
-            { start: last, end: last + term.length },
-          ]
-    })
-    .filter(
-      (position, index, all) =>
-        all.findIndex((other) => other.start === position.start && other.end === position.end) === index,
-    )
-    .toSorted((a, b) => a.start - b.start || a.end - b.end)
+  const positions: Array<{ start: number; end: number }> = []
+  const seen = new Set<string>()
+  for (const term of terms) {
+    let offset = 0
+    let termMatches = 0
+    while (termMatches < 4_096 && positions.length < 16_384) {
+      const start = lower.indexOf(term, offset)
+      if (start < 0) break
+      const end = start + term.length
+      const key = `${start}:${end}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        positions.push({ start, end })
+      }
+      termMatches++
+      offset = start + Math.max(1, term.length)
+    }
+    if (positions.length >= 16_384) break
+  }
+  positions.sort((a, b) => a.start - b.start || a.end - b.end)
   if (positions.length === 0) return bookends(text, limit)
 
   const separator = "\n[… omitted …]\n"
-  const maxWindows = Math.max(1, Math.min(8, Math.floor(limit / 200)))
+  const maxWindows = Math.max(1, Math.min(8, Math.floor(limit / 120)))
   const chosen =
     positions.length <= maxWindows
       ? positions
@@ -166,52 +250,69 @@ export function queryExcerpt(text: string, terms: string[], maxChars: number) {
 }
 
 export function selectQueryExcerpts(
-  view: MemoryView,
+  view: QueryMemoryView,
   query: string,
   summaryID: string | undefined,
   budgetTokens: number,
   maxOrdinal?: number,
+  sourceRanges?: readonly ResolvedSourceRange[],
 ) {
   const { handles, terms } = queryParts(query)
   const allowed = summaryID ? scope(summaryID, view) : undefined
-  const candidates: Candidate[] = [
-    ...[...view.sources.values()]
-      .filter((source) => maxOrdinal === undefined || source.ordinal <= maxOrdinal)
-      .map((source) => ({
-        id: source.id,
-        kind: "source" as const,
-        ordinal: source.ordinal,
-        lastOrdinal: source.ordinal,
-        text: view.content.get(source.id)?.content ?? "",
-        score: 0,
-      })),
-    ...[...view.summaries.values()]
-      .filter((summary) => maxOrdinal === undefined || summary.lastOrdinal <= maxOrdinal)
-      .map((summary) => ({
-        id: summary.id,
-        kind: "summary" as const,
-        ordinal: summary.firstOrdinal,
-        lastOrdinal: summary.lastOrdinal,
-        text: summary.text,
-        score: 0,
-      })),
-  ]
-    .filter((item) => !allowed || allowed.has(item.id))
-    .map((item) => {
-      const text = item.text.toLocaleLowerCase()
-      const explicit = handles.includes(item.id) ? 100 : 0
-      const lexical = terms.reduce((score, term) => score + (text.includes(term) ? 1 : 0), 0)
-      return { ...item, score: explicit + lexical }
-    })
-    .filter((item) => item.score > 0)
-    .toSorted(
-      (a, b) =>
-        b.score - a.score ||
-        (a.kind === b.kind ? 0 : a.kind === "source" ? -1 : 1) ||
-        b.ordinal - a.ordinal ||
-        a.id.localeCompare(b.id),
-    )
-    .slice(0, 8)
+  const rangeCandidates: Candidate[] = (sourceRanges ?? []).map((range, index) => ({
+    key: `${index}:${range.sourceID}:${range.startOffset}-${range.endOffset}`,
+    id: range.sourceID,
+    kind: "source",
+    ordinal: range.ordinal,
+    lastOrdinal: range.ordinal,
+    text: range.text,
+    score: 1,
+    sourceRange: range,
+  }))
+  const memoryCandidates: Candidate[] = sourceRanges
+    ? []
+    : [
+        ...[...view.sources.values()]
+          .filter((source) => maxOrdinal === undefined || source.ordinal <= maxOrdinal)
+          .map((source) => ({
+            key: source.id,
+            id: source.id,
+            kind: "source" as const,
+            ordinal: source.ordinal,
+            lastOrdinal: source.ordinal,
+            text: view.content.get(source.id)?.content ?? "",
+            score: 0,
+          })),
+        ...[...view.summaries.values()]
+          .filter((summary) => maxOrdinal === undefined || summary.lastOrdinal <= maxOrdinal)
+          .map((summary) => ({
+            key: summary.id,
+            id: summary.id,
+            kind: "summary" as const,
+            ordinal: summary.firstOrdinal,
+            lastOrdinal: summary.lastOrdinal,
+            text: summary.text,
+            score: 0,
+          })),
+      ]
+        .filter((item) => !allowed || allowed.has(item.id))
+        .map((item) => {
+          const text = item.text.toLocaleLowerCase()
+          const explicit = handles.includes(item.id) ? 100 : 0
+          const lexical = terms.reduce((score, term) => score + (text.includes(term) ? 1 : 0), 0)
+          return { ...item, score: explicit + lexical }
+        })
+        .filter((item) => item.score > 0)
+        .toSorted(
+          (a, b) =>
+            b.score - a.score ||
+            (a.kind === b.kind ? 0 : a.kind === "source" ? -1 : 1) ||
+            b.ordinal - a.ordinal ||
+            a.id.localeCompare(b.id),
+        )
+  const relevant = sourceRanges ? rangeCandidates : memoryCandidates
+  const candidates = sourceRanges ? relevant : relevant.slice(0, MAX_QUERY_EXCERPTS)
+  const candidateLimitReached = candidates.length < relevant.length
 
   let remaining = Math.max(1, budgetTokens) * 4
   const selected: Candidate[] = []
@@ -227,7 +328,14 @@ export function selectQueryExcerpts(
     selected,
     handles,
     terms,
-    truncated: selected.some((item) => item.text.length < candidates.find((c) => c.id === item.id)!.text.length),
+    relevant: relevant.length,
+    candidateLimitReached,
+    truncated:
+      candidateLimitReached ||
+      selected.length < candidates.length ||
+      selected.some(
+        (item) => item.text.length < candidates.find((candidate) => candidate.key === item.key)!.text.length,
+      ),
   }
 }
 
@@ -281,7 +389,7 @@ export function extractiveQueryFallback(
     if (!excerpt) continue
     const block = `${label}${excerpt}`
     blocks.push(block)
-    citations.push(item.id)
+    if (!citations.includes(item.id)) citations.push(item.id)
     remaining -= separator.length + block.length
   }
   return { answer: blocks.join("\n\n"), citations }
@@ -303,7 +411,7 @@ export const LcmExpandQueryTool = Tool.define(
     const sessions = yield* Session.Service
     return {
       description:
-        "Synthesize or aggregate one focused candidate answer about earlier current-session memory from fairly budgeted, match-centered excerpts with validated src_/sum_ citations. Prefer this to manually paging entire large sources. For exact, exhaustive, boundary, first/last, count, or complete-list work, verify only the cited candidates and necessary boundaries with lcm_grep and targeted lcm_read before claiming completeness.",
+        "Synthesize or aggregate one focused candidate answer about earlier current-session memory from fairly budgeted, match-centered excerpts with validated src_/sum_ citations. Prefer this to manually paging entire large sources. For a document, episode, section, or other semantic unit, pass ordered sourceRanges copied from the structural-anchor map so bytes before its opening and after its close cannot contaminate the answer. Include chronological intermediate sources. For exact, exhaustive, first/last, count, or complete-list work, verify only cited candidates and necessary boundaries with bounded lcm_grep or lcm_read before claiming completeness.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -312,22 +420,54 @@ export const LcmExpandQueryTool = Tool.define(
             throw new LcmToolError("lcm_unavailable", "The query must contain 1 through 4096 characters.")
           if (params.maxAnswerTokens !== undefined && !Number.isFinite(params.maxAnswerTokens))
             throw new LcmToolError("lcm_unavailable", "The answer token limit must be a finite number.")
+          if (params.summaryID && params.sourceRanges)
+            throw new LcmToolError("lcm_unavailable", "Use either summaryID or sourceRanges, not both.")
           const maxAnswerTokens = Math.min(2_000, Math.max(1, Math.floor(params.maxAnswerTokens ?? 1_000)))
           yield* ctx.ask({
             permission: "lcm_expand_query",
-            patterns: [params.summaryID ?? "*"],
+            patterns: params.sourceRanges?.map((range) => range.sourceID) ?? [params.summaryID ?? "*"],
             always: ["*"],
-            metadata: { summaryID: params.summaryID },
+            metadata: { summaryID: params.summaryID, sourceRanges: params.sourceRanges?.length },
           })
           const view = yield* loadMemory({ sessionID: ctx.sessionID, signal: ctx.abort, memory, database })
           if (params.summaryID) requireSummary(view, params.summaryID)
+          const sourceRanges = params.sourceRanges ? resolveSourceRanges(view, params.sourceRanges) : undefined
           const model = activeModel(ctx.extra?.model)
           if (!model) throw new LcmToolError("lcm_unavailable", "The active model is unavailable to the query tool.")
           const inputLimit = model.limit.input ?? model.limit.context
           const usable = inputLimit > 0 ? Math.max(0, inputLimit - model.limit.output) : 0
           const budgetTokens = usable > 0 ? Math.min(16_000, Math.max(1_000, Math.floor(usable * 0.2))) : 4_000
-          const historicalCutoff = params.summaryID ? undefined : priorTurnSourceCutoff(view, ctx.messages)
-          const retrieval = selectQueryExcerpts(view, query, params.summaryID, budgetTokens, historicalCutoff)
+          const historicalCutoff =
+            params.summaryID || sourceRanges ? undefined : priorTurnSourceCutoff(view, ctx.messages)
+          const retrieval = selectQueryExcerpts(
+            view,
+            query,
+            params.summaryID,
+            budgetTokens,
+            historicalCutoff,
+            sourceRanges,
+          )
+          const searched = sourceRanges
+            ? {
+                sources: new Set(sourceRanges.map((range) => range.sourceID)).size,
+                summaries: 0,
+                ranges: sourceRanges.length,
+                bytes: sourceRanges.reduce((total, range) => total + range.endOffset - range.startOffset, 0),
+              }
+            : { sources: view.sources.size, summaries: view.summaries.size }
+          const rangeScope = sourceRanges
+            ? {
+                kind: "ordered_source_ranges" as const,
+                semanticUnitGuaranteed: false,
+                ranges: sourceRanges.map(({ sourceID, ordinal, startOffset, endOffset, totalBytes }) => ({
+                  sourceID,
+                  ordinal,
+                  startOffset,
+                  endOffset,
+                  totalBytes,
+                })),
+              }
+            : undefined
           if (retrieval.selected.length === 0) {
             return {
               title: "Conversation Memory query",
@@ -335,26 +475,35 @@ export const LcmExpandQueryTool = Tool.define(
                 answer: "",
                 citations: [],
                 coverage: "none",
-                searched: { sources: view.sources.size, summaries: view.summaries.size },
-                relevant: 0,
+                ...(rangeScope ? { scope: rangeScope } : {}),
+                searched,
+                relevant: retrieval.relevant,
+                selected: 0,
                 truncated: false,
                 noAnswerReason: "no_relevant_memory",
               }),
               metadata: { citations: 0, truncated: false },
             }
           }
-          const excerpts = retrieval.selected
-            .map((item) =>
+          const excerpts = [
+            ...(sourceRanges
+              ? [
+                  "[Exact ordered source byte-range scope. Only the labeled half-open ranges belong to the requested semantic unit. Preserve range order; omission markers denote unseen in-scope text.]",
+                ]
+              : []),
+            ...retrieval.selected.map((item) =>
               [
-                `[${item.id} | ${item.kind} | ${
-                  item.ordinal === item.lastOrdinal
-                    ? `ordinal ${item.ordinal}`
-                    : `ordinals ${item.ordinal}-${item.lastOrdinal}`
-                }]`,
+                item.sourceRange
+                  ? `[${item.id} | source | ordinal ${item.ordinal} | bytes ${item.sourceRange.startOffset}-${item.sourceRange.endOffset}]`
+                  : `[${item.id} | ${item.kind} | ${
+                      item.ordinal === item.lastOrdinal
+                        ? `ordinal ${item.ordinal}`
+                        : `ordinals ${item.ordinal}-${item.lastOrdinal}`
+                    }]`,
                 item.text,
               ].join("\n"),
-            )
-            .join("\n\n")
+            ),
+          ].join("\n\n")
           const generated = yield* memory
             .query({
               sessionID: ctx.sessionID,
@@ -385,7 +534,7 @@ export const LcmExpandQueryTool = Tool.define(
           const answer = generated.ok
             ? completeQueryAnswer(generated.value.text, generated.value.finish, allowed)
             : undefined
-          const mayExtract = retrieval.handles.length > 0 || retrieval.terms.length >= 2
+          const mayExtract = Boolean(sourceRanges) || retrieval.handles.length > 0 || retrieval.terms.length >= 2
           const extracted = mayExtract
             ? extractiveQueryFallback(retrieval.selected, retrieval.terms, maxAnswerTokens * 4)
             : { answer: "", citations: [] }
@@ -403,8 +552,10 @@ export const LcmExpandQueryTool = Tool.define(
             title: "Conversation Memory query",
             output: inertOutput({
               ...result,
-              searched: { sources: view.sources.size, summaries: view.summaries.size },
-              relevant: retrieval.selected.length,
+              ...(rangeScope ? { scope: rangeScope } : {}),
+              searched,
+              relevant: retrieval.relevant,
+              selected: retrieval.selected.length,
               truncated: retrieval.truncated || answerTruncated,
               ...(!answer
                 ? mayExtract

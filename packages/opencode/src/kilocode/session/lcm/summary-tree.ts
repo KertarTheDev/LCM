@@ -23,6 +23,7 @@ const PROTOCOL_ONLY = /^(?:received|acknowledged|understood|ok(?:ay)?)[.!]?$/iu
 const PROTOCOL_LINE = /(?:^|\n)\s*(?:received|acknowledged|understood|ok(?:ay)?)[.!]?\s*(?=\n|$)/iu
 const TRANSFORMER_COMPLETION_LEAD =
   /^(?:i(?:'ve| have)|we(?:'ve| have))\s+(?:updated|implemented|completed|made|applied|finished|fixed|changed|created|added|removed)\b/iu
+const ANSWER_WRAPPER = /^(?:<[a-z0-9_-]*(?:final|answer)[a-z0-9_-]*>|(?:```(?:json)?\s*)?\{\s*"answer"\s*:)/iu
 const REFUSAL = /^(?:i(?:'m| am) sorry\b|i (?:cannot|can't|won't|am unable to)\b)/iu
 const GROUNDING_STOP_WORDS = new Set(
   `about after again against all also and any are because been before being between both but can conversation could
@@ -36,6 +37,7 @@ export interface SummaryCandidate {
   text: string
   mode: GenerationMode
   grounded?: boolean
+  fallbackText?: string
   attempt?: SummaryAttempt
 }
 
@@ -210,7 +212,8 @@ function candidateIssue(
   if (trimmed.length === 0) return "empty" as const
   if (candidate.attempt && candidate.attempt.finish !== "stop") return "incomplete" as const
   if (PROTOCOL_ONLY.test(trimmed) || REFUSAL.test(trimmed)) return "protocol_output" as const
-  if (PROTOCOL_LINE.test(trimmed) || TRANSFORMER_COMPLETION_LEAD.test(trimmed)) return "protocol_scaffolding" as const
+  if (PROTOCOL_LINE.test(trimmed) || TRANSFORMER_COMPLETION_LEAD.test(trimmed) || ANSWER_WRAPPER.test(trimmed))
+    return "protocol_scaffolding" as const
   if (candidate.grounded === false) return "ungrounded" as const
   if (candidateBytes >= sourceBytes || candidateTokens >= sourceTokens) return "not_reduced" as const
   if (candidateTokens > Math.ceil(target * 1.15)) return "too_long" as const
@@ -244,6 +247,7 @@ function attachRecoveryHandles(
     PROTOCOL_ONLY.test(trimmed) ||
     PROTOCOL_LINE.test(trimmed) ||
     TRANSFORMER_COMPLETION_LEAD.test(trimmed) ||
+    ANSWER_WRAPPER.test(trimmed) ||
     REFUSAL.test(trimmed) ||
     candidate.grounded === false ||
     substantiveCharacters(trimmed) < 16
@@ -325,6 +329,7 @@ export class SummaryTree {
     const target = targetTokens(sourceTokens, input.usableInputTokens)
     const allowed = await this.allowedHandles(input.sessionID, input.items)
     let candidate: SummaryCandidate | undefined
+    let extractiveFallback: string | undefined
     if (this.generator) {
       const values = input.items.map((item) => item.source ?? item.summary).filter(Boolean) as Array<
         FinalSource | SummaryNode
@@ -346,6 +351,7 @@ export class SummaryTree {
         }
       }
       candidate = await generate("normal")
+      extractiveFallback = candidate?.fallbackText
       if (candidate) candidate = attachRecoveryHandles(candidate, input.items, sourceTokens, sourceBytes, target)
       if (!candidate || !valid(candidate, sourceTokens, sourceBytes, target, allowed)) {
         const attempt = candidate && rejectedAttempt(candidate, sourceTokens, sourceBytes, target, allowed)
@@ -357,6 +363,7 @@ export class SummaryTree {
           })
         if (input.maintenanceMode === "soft") return
         candidate = await generate("aggressive")
+        extractiveFallback = candidate?.fallbackText ?? extractiveFallback
         if (candidate) candidate = attachRecoveryHandles(candidate, input.items, sourceTokens, sourceBytes, target)
       }
     }
@@ -368,7 +375,13 @@ export class SummaryTree {
           nodeKey: key,
           sessionID: input.sessionID,
         })
-      candidate = { text: deterministic(input.items, target, allowed), mode: "deterministic" }
+      const extractive = extractiveFallback
+        ? ({ text: extractiveFallback, mode: "deterministic" } satisfies SummaryCandidate)
+        : undefined
+      candidate =
+        extractive && valid(extractive, sourceTokens, sourceBytes, target, allowed)
+          ? extractive
+          : { text: deterministic(input.items, target, allowed), mode: "deterministic" }
     }
     if (!valid(candidate, sourceTokens, sourceBytes, target, allowed)) return
     const id = summaryID({ nodeKey: key, text: candidate.text })
