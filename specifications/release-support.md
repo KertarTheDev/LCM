@@ -6,7 +6,55 @@ The product branch remains a direct, narrow augmentation of upstream tag `v7.4.2
 (`40fa10e50a75c4887978d892520d1246515413bf`). Correct the product branch with ordinary reviewable commits; do not
 rewrite its published history or replay old LCM branches.
 
-The current public prerelease is `v7.4.23-lcm.4`. It was published on 2026-08-26 from candidate
+The current public prerelease is `v7.4.23-lcm.5`. It was published on 2026-08-26 from candidate
+`b84ce3b28383d9674395fcdea9c6b6406fba1155`, containing verified product
+`ce2455b4cb3ab4aecd7e12f13498e9e69d21be9c`. Exact-SHA workflow run
+[`32923865662`](https://github.com/KertarTheDev/LCM/actions/runs/32923865662) completed successfully, including exact
+27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
+typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
+runtime smoke. Release [`376851777`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.5) is a non-draft
+prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
+
+|Asset|Bytes|SHA-256|
+|---|---:|---|
+|`kilo-darwin-arm64.zip`|52,525,962|`572e77b99f91a54cb09c803c5a866876f5d7d3cde15b3fdced932b5829889415`|
+|`kilo-darwin-x64-baseline.zip`|54,784,353|`633688a4dc5e391126e0b5f4db4a5db542585a9981d324cd6cc801a19cb3c9de`|
+|`kilo-darwin-x64.zip`|54,784,353|`eb0bd41df346fdca381dd47c6173ea637d149b6934e149d5fefe6a1402b42eec`|
+|`kilo-linux-arm64-musl.tar.gz`|69,303,571|`d7ab3d7d174238ee72e0f8cf3a506d3825875cd403d96478596b64beb2f0df64`|
+|`kilo-linux-arm64.tar.gz`|67,181,461|`7ff6460274161f30f80d566edeb0183adafcd86eddce931f661df42e331e9625`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|69,797,378|`6c363fe7165645dae1c1ce803e8b77f936faf812e87c0276961204b46834ad96`|
+|`kilo-linux-x64-baseline.tar.gz`|67,439,709|`82b98bab970ba8a41f2ae0f0381f43474e3a54356f77b7a6ade11069c8f4c449`|
+|`kilo-linux-x64-musl.tar.gz`|69,797,073|`7cacf79681e56e5c576b121048f6bd3a43e35a6df0ed705d125d011064268d83`|
+|`kilo-linux-x64.tar.gz`|67,439,439|`7b57ed9f60a9802bac5de74383628a76035dea8e0e1b5d230ebad5f28594e4b6`|
+|`kilo-vscode-alpine-arm64.vsix`|110,110,030|`8a25c37125205c99715c29d9a8a24cca82e653545d70ea1737302013ab9ccada`|
+|`kilo-vscode-alpine-x64.vsix`|117,319,353|`abf212eaeaa129bb61d13f0e37b24861ebb918b95b2c53cb51e759400c06b538`|
+|`kilo-vscode-darwin-arm64.vsix`|92,841,542|`659ebf93832273d74a1053dc1b13356bbc9edcfee5f76f021e6e0e915f4eeab5`|
+|`kilo-vscode-darwin-x64.vsix`|100,914,586|`2ce129c99a556801ad3d8420851a0ccc0f22a127d182dc41ede0c97604f4ac8d`|
+|`kilo-vscode-linux-arm64.vsix`|107,945,768|`5514ca38ffba5d816a758356e118a4ff3e4c7a8ced808d46482112f0246436a7`|
+|`kilo-vscode-linux-x64.vsix`|114,886,969|`58f13f6b66a8c0fd5efa3616355b3e374fbbb98c00fb2757a81f73a685b666b9`|
+|`kilo-vscode-win32-arm64.vsix`|89,720,774|`37168fd74267e292d4f715400b72fee207c2722840e1e726454330febc45aca4`|
+|`kilo-vscode-win32-x64.vsix`|113,762,831|`546421549694b10140c8d4ef8182663eb050ab3024bc4fcc4ba4363d9f7e5230`|
+|`kilo-windows-arm64.zip`|65,114,278|`b3fcc5b21f39a28a9a80ea747636ef1e0f4e46ddd71bd1d5d505e43456ea3ba0`|
+|`kilo-windows-x64-baseline.zip`|66,788,267|`a1029c03024a57e9ddf76057bd98a5e9489d204b296974fa1200efea6810244c`|
+|`kilo-windows-x64.zip`|66,788,267|`ed0cf095eb3a0d5e2e307fafc8227a3688a43869806db219301466106a30d12a`|
+
+`.5` supersedes `.4` as the recommended build after the exact `.4` 175k trace exposed three general recovery defects.
+The packaged CLI omitted the isolated regex worker even though source tests passed; `.5` embeds the worker as a real
+build entrypoint, distinguishes startup, execution-timeout, and syntax failures, and tells the model not to repeat an
+unchanged failed call. Summary requests now isolate every historical child behind a request-specific inert-data
+boundary, repeat the active task after it, reject protocol-only output, and add deterministic exact provenance to an
+otherwise valid reduced summary that omitted handles. Structural anchors now include exact half-open UTF-8 byte
+intervals, and `lcm_grep` can constrain a source search to those intervals so evidence outside a semantic unit cannot
+answer a per-unit question. Schema-v8/tree-v5 rebuilds disposable earlier sidecars; Kilo SQLite remains the raw source
+of truth. The healthy `.4` and `.3` releases remain published as historical prerelease evidence.
+
+Audit run [`32923478082`](https://github.com/KertarTheDev/LCM/actions/runs/32923478082) failed safely before versioning,
+tag, or draft creation. Canonical OpenCode typecheck found two worker-response discriminant narrowings that were lost
+inside completion closures and a request-boundary ID prefix omitted from the internal sortable-ID union. Ordinary
+product commit `ce2455b4cb3ab4aecd7e12f13498e9e69d21be9c` fixes those types; the successful replacement run above proves the
+canonical package typechecks. The failed run's Actions audit history is retained.
+
+The previous retained public prerelease is `v7.4.23-lcm.4`. It was published on 2026-08-26 from candidate
 `08e446abf764525b42634da9fcaf60c2bff8e75c`, containing verified product
 `e68e034a87212c5c80781cd4416af661337e6edd`. Exact-SHA workflow run
 [`32917997402`](https://github.com/KertarTheDev/LCM/actions/runs/32917997402) completed successfully, including exact
