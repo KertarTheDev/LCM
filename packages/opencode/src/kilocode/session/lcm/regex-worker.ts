@@ -45,8 +45,10 @@ self.onmessage = (event: MessageEvent<Request>) => {
       }
       if (matches.length >= event.data.recordLimit) break
     }
-    self.postMessage({ matches })
+    self.postMessage({ type: "result", matches })
   } catch {
-    self.postMessage({ error: "lcm_invalid_regex" })
+    self.postMessage({ type: "error", error: "lcm_invalid_regex" })
   }
 }
+
+self.postMessage({ type: "ready" })

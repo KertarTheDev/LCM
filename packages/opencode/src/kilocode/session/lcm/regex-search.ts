@@ -5,12 +5,37 @@ interface Match {
   rangesComplete: boolean
 }
 
+declare global {
+  const KILO_LCM_REGEX_WORKER_PATH: string
+}
+
+type WorkerResponse = { type: "ready" } | { type: "result"; matches: Match[] } | { type: "error"; error: string }
+
+interface RegexWorker {
+  onerror: ((event: ErrorEvent) => unknown) | null
+  onmessage: ((event: MessageEvent<WorkerResponse>) => unknown) | null
+  postMessage(value: unknown): void
+  terminate(): void
+}
+
+interface RegexRuntime {
+  createWorker(target: string | URL): RegexWorker
+  startupTimeoutMs: number
+  executionTimeoutMs: number
+}
+
 export const REGEX_SEARCH_LIMITS = {
   patternCharacters: 512,
   recordCharacters: 1_000_000,
   scopeCharacters: 8_000_000,
+  startupTimeoutMs: 10_000,
   timeoutMs: 2_000,
 } as const
+
+export function regexWorkerTarget(): string | URL {
+  if (typeof KILO_LCM_REGEX_WORKER_PATH !== "undefined") return KILO_LCM_REGEX_WORKER_PATH
+  return new URL("./regex-worker.ts", import.meta.url)
+}
 
 export function regexSearchIssue(input: { pattern: string; values: Array<{ text: string }> }) {
   if (input.pattern.length > REGEX_SEARCH_LIMITS.patternCharacters) return "pattern_too_long" as const
@@ -20,32 +45,48 @@ export function regexSearchIssue(input: { pattern: string; values: Array<{ text:
     return "scope_too_large" as const
 }
 
-export async function regexSearch(input: {
-  pattern: string
-  caseSensitive: boolean
-  values: Array<{ id: string; text: string }>
-  recordLimit: number
-  rangeOffset?: number
-  rangeLimit: number
-  signal?: AbortSignal
-}) {
+export async function regexSearch(
+  input: {
+    pattern: string
+    caseSensitive: boolean
+    values: Array<{ id: string; text: string }>
+    recordLimit: number
+    rangeOffset?: number
+    rangeLimit: number
+    signal?: AbortSignal
+  },
+  runtime: Partial<RegexRuntime> = {},
+) {
   if (input.signal?.aborted) throw new Error("lcm_cancelled")
   const issue = regexSearchIssue(input)
   if (issue) throw new Error(`lcm_regex_${issue}`)
   return new Promise<Match[]>((resolve, reject) => {
-    const worker = new Worker(new URL("./regex-worker.ts", import.meta.url))
-    const timer = setTimeout(() => {
-      cleanup()
-      reject(new Error("lcm_invalid_regex"))
-    }, REGEX_SEARCH_LIMITS.timeoutMs)
+    let worker: RegexWorker
+    try {
+      worker = (runtime.createWorker ?? ((target) => new Worker(target)))(regexWorkerTarget())
+    } catch {
+      reject(new Error("lcm_regex_worker_unavailable"))
+      return
+    }
+    let executionTimer: ReturnType<typeof setTimeout> | undefined
+    const startupTimer = setTimeout(() => {
+      finish(() => reject(new Error("lcm_regex_worker_unavailable")))
+    }, runtime.startupTimeoutMs ?? REGEX_SEARCH_LIMITS.startupTimeoutMs)
+    let settled = false
     const cleanup = () => {
-      clearTimeout(timer)
+      clearTimeout(startupTimer)
+      if (executionTimer) clearTimeout(executionTimer)
       input.signal?.removeEventListener("abort", cancelled)
       worker.terminate()
     }
-    const cancelled = () => {
+    const finish = (complete: () => void) => {
+      if (settled) return
+      settled = true
       cleanup()
-      reject(new Error("lcm_cancelled"))
+      complete()
+    }
+    const cancelled = () => {
+      finish(() => reject(new Error("lcm_cancelled")))
     }
     input.signal?.addEventListener("abort", cancelled, { once: true })
     if (input.signal?.aborted) {
@@ -53,21 +94,33 @@ export async function regexSearch(input: {
       return
     }
     worker.onerror = () => {
-      cleanup()
-      reject(new Error("lcm_invalid_regex"))
+      finish(() => reject(new Error("lcm_regex_worker_unavailable")))
     }
-    worker.onmessage = (event: MessageEvent<{ matches?: Match[]; error?: string }>) => {
-      cleanup()
-      if (event.data.error) reject(new Error(event.data.error))
-      else resolve(event.data.matches ?? [])
+    worker.onmessage = (event) => {
+      if (event.data.type === "ready") {
+        clearTimeout(startupTimer)
+        executionTimer = setTimeout(() => {
+          finish(() => reject(new Error("lcm_regex_timeout")))
+        }, runtime.executionTimeoutMs ?? REGEX_SEARCH_LIMITS.timeoutMs)
+        try {
+          worker.postMessage({
+            pattern: input.pattern,
+            flags: input.caseSensitive ? "gu" : "giu",
+            values: input.values,
+            recordLimit: input.recordLimit,
+            rangeOffset: input.rangeOffset ?? 0,
+            rangeLimit: input.rangeLimit,
+          })
+        } catch {
+          finish(() => reject(new Error("lcm_regex_worker_unavailable")))
+        }
+        return
+      }
+      if (event.data.type === "error") {
+        finish(() => reject(new Error(event.data.error)))
+        return
+      }
+      finish(() => resolve(event.data.matches))
     }
-    worker.postMessage({
-      pattern: input.pattern,
-      flags: input.caseSensitive ? "gu" : "giu",
-      values: input.values,
-      recordLimit: input.recordLimit,
-      rangeOffset: input.rangeOffset ?? 0,
-      rangeLimit: input.rangeLimit,
-    })
   })
 }

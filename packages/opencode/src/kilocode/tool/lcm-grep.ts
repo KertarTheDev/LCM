@@ -38,6 +38,14 @@ const Parameters = Schema.Struct({
   sourceID: Schema.optional(Schema.String).annotate({
     description: "Optional src_ handle that restricts the search to one exact current-session source.",
   }),
+  startOffset: Schema.optional(Schema.Number).annotate({
+    description:
+      "Optional inclusive UTF-8 byte offset within sourceID. Use structural-anchor end offsets to search only after an opening boundary.",
+  }),
+  endOffset: Schema.optional(Schema.Number).annotate({
+    description:
+      "Optional exclusive UTF-8 byte offset within sourceID. Use structural-anchor start offsets to stop before a closing boundary.",
+  }),
   occurrenceOffset: Schema.optional(Schema.Number).annotate({
     description: "Zero-based match offset for paging a source-scoped search in groups of 20.",
   }),
@@ -86,6 +94,24 @@ export function utf8Ranges(text: string, ranges: Array<{ start: number; end: num
   })
 }
 
+export function utf8SearchWindow(text: string, startOffset = 0, endOffset?: number) {
+  const buffer = Buffer.from(text)
+  const end = endOffset ?? buffer.byteLength
+  const valid = (offset: number) =>
+    Number.isSafeInteger(offset) &&
+    offset >= 0 &&
+    offset <= buffer.byteLength &&
+    (offset === buffer.byteLength || (buffer[offset]! & 0xc0) !== 0x80)
+  if (!valid(startOffset) || !valid(end) || startOffset > end) throw new Error("lcm_invalid_search_range")
+  return {
+    text: buffer.subarray(startOffset, end).toString("utf8"),
+    characterOffset: buffer.subarray(0, startOffset).toString("utf8").length,
+    byteOffset: startOffset,
+    endOffset: end,
+    totalBytes: buffer.byteLength,
+  }
+}
+
 export function literalPatternAdvice(pattern: string, mode: "literal" | "regex") {
   if (mode !== "literal") return
   if (/(?:^|[^\\])\||\\[dDsSwWbB]|\.\*|\(\?:|\[[^\]]+\]/u.test(pattern))
@@ -119,6 +145,8 @@ export function grepCursorQuery(input: {
   caseSensitive: boolean
   summaryID?: string
   sourceID?: string
+  startOffset: number
+  endOffset?: number
   occurrenceOffset: number
 }) {
   return input
@@ -128,7 +156,7 @@ export function grepTotalsComplete(mode: "literal" | "regex", pageComplete: bool
   return mode === "literal" || pageComplete
 }
 
-function regexToolError(error: unknown) {
+export function regexToolError(error: unknown) {
   const message = error instanceof Error ? error.message : ""
   if (message === "lcm_cancelled")
     return new LcmToolError("lcm_cancelled", "The Conversation Memory search was cancelled.")
@@ -147,9 +175,19 @@ function regexToolError(error: unknown) {
       "lcm_invalid_regex",
       "The regex scope is too large. Narrow it with summaryID or sourceID, or use literal mode.",
     )
+  if (message === "lcm_regex_worker_unavailable")
+    return new LcmToolError(
+      "lcm_unavailable",
+      "The isolated regular-expression worker is unavailable in this runtime. Use literal mode instead; do not retry the unchanged regex call.",
+    )
+  if (message === "lcm_regex_timeout")
+    return new LcmToolError(
+      "lcm_invalid_regex",
+      `The regular expression exceeded the ${REGEX_SEARCH_LIMITS.timeoutMs} ms execution limit. Do not retry it unchanged; narrow the source byte interval, simplify the pattern, or use literal mode.`,
+    )
   return new LcmToolError(
     "lcm_invalid_regex",
-    `The regular expression is invalid or exceeded the ${REGEX_SEARCH_LIMITS.timeoutMs} ms safety limit. Simplify or narrow it.`,
+    "The regular-expression syntax is invalid. Correct the pattern or use literal mode; do not retry it unchanged.",
   )
 }
 
@@ -173,7 +211,7 @@ export const LcmGrepTool = Tool.define(
     const database = yield* Database.Service
     return {
       description:
-        "Discover earlier current-session evidence in exact finalized raw text and active summaries. Literal mode is the default; set mode to regex for alternatives such as foo|bar and keep regexes focused. Unscoped results include one preview plus exact counts and may contain overlapping summaries and raw descendants, so do not add both occurrence totals. For exact or exhaustive work, identify candidate src_ handles, repeat with sourceID, then seek with lcm_read.",
+        "Discover earlier current-session evidence in exact finalized raw text and active summaries. Literal mode is the default; set mode to regex for alternatives such as foo|bar and keep regexes focused. Unscoped results include one preview plus exact counts and may contain overlapping summaries and raw descendants, so do not add both occurrence totals. For exact or exhaustive work, identify candidate src_ handles, repeat with sourceID, and use startOffset/endOffset when structural boundaries share a source, then seek with lcm_read.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -192,6 +230,20 @@ export const LcmGrepTool = Tool.define(
             throw new LcmToolError("lcm_unavailable", "The occurrence offset must be a non-negative integer.")
           if (params.occurrenceOffset !== undefined && !params.sourceID)
             throw new LcmToolError("lcm_unavailable", "Occurrence paging requires a sourceID scope.")
+          if ((params.startOffset !== undefined || params.endOffset !== undefined) && !params.sourceID)
+            throw new LcmToolError("lcm_unavailable", "Source byte intervals require a sourceID scope.")
+          if (
+            (params.startOffset !== undefined &&
+              (!Number.isSafeInteger(params.startOffset) || params.startOffset < 0)) ||
+            (params.endOffset !== undefined && (!Number.isSafeInteger(params.endOffset) || params.endOffset < 0)) ||
+            (params.startOffset !== undefined &&
+              params.endOffset !== undefined &&
+              params.startOffset > params.endOffset)
+          )
+            throw new LcmToolError(
+              "lcm_unavailable",
+              "The source search interval must use non-negative UTF-8 byte offsets with startOffset no greater than endOffset.",
+            )
           const occurrenceOffset = params.occurrenceOffset ?? 0
           const rangeLimit = grepRangeLimit(params.sourceID !== undefined)
           const query = grepCursorQuery({
@@ -200,6 +252,8 @@ export const LcmGrepTool = Tool.define(
             caseSensitive: params.caseSensitive ?? false,
             summaryID: params.summaryID,
             sourceID: params.sourceID,
+            startOffset: params.startOffset ?? 0,
+            endOffset: params.endOffset,
             occurrenceOffset,
           })
           if (params.pattern.length === 0)
@@ -222,13 +276,26 @@ export const LcmGrepTool = Tool.define(
                 (source) => (!params.sourceID || source.id === params.sourceID) && (!allowed || allowed.has(source.id)),
               )
               .filter((source) => historicalCutoff === undefined || source.ordinal <= historicalCutoff)
-              .map((source) => ({
-                id: source.id,
-                kind: "source" as const,
-                sourceKind: source.kind,
-                ordinal: source.ordinal,
-                text: view.content.get(source.id)?.content ?? "",
-              })),
+              .map((source) => {
+                const fullText = view.content.get(source.id)?.content ?? ""
+                let window: ReturnType<typeof utf8SearchWindow>
+                try {
+                  window = utf8SearchWindow(fullText, params.sourceID ? (params.startOffset ?? 0) : 0, params.endOffset)
+                } catch {
+                  throw new LcmToolError(
+                    "lcm_unavailable",
+                    "The source search interval is outside the source or is not aligned to UTF-8 byte boundaries.",
+                  )
+                }
+                return {
+                  id: source.id,
+                  kind: "source" as const,
+                  sourceKind: source.kind,
+                  ordinal: source.ordinal,
+                  fullText,
+                  ...window,
+                }
+              }),
             ...[...view.summaries.values()]
               .filter(
                 (summary) =>
@@ -240,6 +307,11 @@ export const LcmGrepTool = Tool.define(
                 kind: "summary" as const,
                 ordinal: summary.firstOrdinal,
                 text: summary.text,
+                fullText: summary.text,
+                characterOffset: 0,
+                byteOffset: 0,
+                endOffset: Buffer.byteLength(summary.text),
+                totalBytes: Buffer.byteLength(summary.text),
               })),
           ].toSorted((a, b) => a.ordinal - b.ordinal || a.id.localeCompare(b.id))
           const found =
@@ -271,11 +343,21 @@ export const LcmGrepTool = Tool.define(
           const byID = new Map(values.map((value) => [value.id, value]))
           const matches = selected.map((item) => {
             const value = byID.get(item.id)!
-            const byteRanges = utf8Ranges(value.text, item.ranges)
-            const occurrences = item.ranges.map((range, index) => ({
+            const ranges = item.ranges.map((range) => ({
+              start: range.start + value.characterOffset,
+              end: range.end + value.characterOffset,
+            }))
+            const byteRanges = utf8Ranges(value.text, item.ranges).map((range) => ({
+              start: range.start + value.byteOffset,
+              end: range.end + value.byteOffset,
+            }))
+            const occurrences = ranges.map((range, index) => ({
               range,
               byteRange: byteRanges[index]!,
-              excerpt: value.text.slice(Math.max(0, range.start - 100), Math.min(value.text.length, range.end + 180)),
+              excerpt: value.fullText.slice(
+                Math.max(0, range.start - 100),
+                Math.min(value.fullText.length, range.end + 180),
+              ),
             }))
             return {
               id: value.id,
@@ -284,7 +366,7 @@ export const LcmGrepTool = Tool.define(
                 ? { sourceID: value.id, sourceKind: value.sourceKind }
                 : { summaryID: value.id }),
               ordinal: value.ordinal,
-              ranges: item.ranges,
+              ranges,
               byteRanges,
               matchCount: item.matchCount,
               rangesComplete: item.rangesComplete,
@@ -307,6 +389,9 @@ export const LcmGrepTool = Tool.define(
           const totalsComplete = grepTotalsComplete(params.mode ?? "literal", complete)
           const advice = [
             literalPatternAdvice(params.pattern, params.mode ?? "literal"),
+            params.sourceID && (params.startOffset !== undefined || params.endOffset !== undefined)
+              ? "Matches and totals are limited to the requested half-open source byte interval [startOffset, endOffset)."
+              : undefined,
             !params.sourceID && !params.summaryID && matches.some((match) => match.kind === "summary")
               ? "Summaries and raw descendants can overlap. For exact counts or lists, use summary matches only to find candidate source regions and verify raw src_ records."
               : undefined,
@@ -323,6 +408,14 @@ export const LcmGrepTool = Tool.define(
               sources: values.filter((value) => value.kind === "source").length,
               summaries: values.filter((value) => value.kind === "summary").length,
               complete,
+              ...(params.sourceID && (params.startOffset !== undefined || params.endOffset !== undefined)
+                ? {
+                    byteRange: {
+                      start: values[0]?.byteOffset ?? 0,
+                      end: values[0]?.endOffset ?? 0,
+                    },
+                  }
+                : {}),
             },
           }
           return {

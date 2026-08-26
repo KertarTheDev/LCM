@@ -298,6 +298,7 @@ for (const item of targets) {
   // kilocode_change start
   const sessionExportWorkerPath = "./src/kilocode/session-export/worker.ts"
   const indexingWorkerPath = "./src/kilocode/indexing-worker.ts"
+  const lcmRegexWorkerPath = "./src/kilocode/session/lcm/regex-worker.ts"
   // kilocode_change end
 
   const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
@@ -335,7 +336,14 @@ for (const item of targets) {
     },
     // kilocode_change start - packages/app was removed; no embedded web UI
     files: { [treeSitterWorkerPath]: treeSitterWorker },
-    entrypoints: ["./src/index.ts", workerPath, treeSitterWorkerPath, sessionExportWorkerPath, indexingWorkerPath],
+    entrypoints: [
+      "./src/index.ts",
+      workerPath,
+      treeSitterWorkerPath,
+      sessionExportWorkerPath,
+      indexingWorkerPath,
+      lcmRegexWorkerPath,
+    ],
     // kilocode_change end
     define: {
       FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
@@ -346,6 +354,7 @@ for (const item of targets) {
       // kilocode_change start
       KILO_SESSION_EXPORT_WORKER_PATH: sessionExportWorkerPath,
       KILO_INDEXING_WORKER_PATH: indexingWorkerPath,
+      KILO_LCM_REGEX_WORKER_PATH: lcmRegexWorkerPath,
       KILO_SANDBOX_MUTATION_WORKER_PATH: JSON.stringify(KiloSandboxWorker.filename),
       KILO_SANDBOX_NETWORK_RELAY_PATH: item.os === "linux" ? JSON.stringify(KiloSandboxNetwork.relay) : "undefined",
       KILO_SANDBOX_SECCOMP_PATH: item.os === "linux" ? JSON.stringify(KiloSandboxNetwork.seccomp) : "undefined",

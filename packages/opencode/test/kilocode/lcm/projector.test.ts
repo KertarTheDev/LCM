@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { ModelMessage } from "ai"
 import { lineageDigest, sha256, sourceID } from "@/kilocode/session/lcm/ids"
-import { exactStructuralAnchors, isConversationMemoryMessage, Projector } from "@/kilocode/session/lcm/projector"
+import {
+  exactStructuralAnchorOccurrences,
+  exactStructuralAnchors,
+  isConversationMemoryMessage,
+  Projector,
+} from "@/kilocode/session/lcm/projector"
 import { SqliteConversationMemoryStore } from "@/kilocode/session/lcm/store"
 import { SummaryTree } from "@/kilocode/session/lcm/summary-tree"
 import type { FinalSource } from "@/kilocode/session/lcm/types"
@@ -51,11 +56,20 @@ function measure(messages: ModelMessage[]) {
 
 describe("LCM projector", () => {
   test("recognizes exact structural boundary lines without indexing ordinary bracketed logs", () => {
-    expect(
-      exactStructuralAnchors(
-        ["[INFO]", "<source_data>", "  [START OF EPISODE]  ", "--- END DOCUMENT ---", "not a boundary"].join("\n"),
-      ),
-    ).toEqual(["<source_data>", "[START OF EPISODE]", "--- END DOCUMENT ---"])
+    const content = [
+      "évidence",
+      "<source_data>",
+      "  [START OF EPISODE]  ",
+      "--- END DOCUMENT ---",
+      "not a boundary",
+    ].join("\n")
+    expect(exactStructuralAnchors(`[INFO]\n${content}`)).toEqual([
+      "<source_data>",
+      "[START OF EPISODE]",
+      "--- END DOCUMENT ---",
+    ])
+    const opening = exactStructuralAnchorOccurrences(content).find((item) => item.marker === "[START OF EPISODE]")!
+    expect(Buffer.from(content).subarray(opening.byteStart, opening.byteEnd).toString()).toBe("[START OF EPISODE]")
   })
 
   test("replaces only the eligible prefix and pins a continuation revision", async () => {
@@ -110,14 +124,23 @@ describe("LCM projector", () => {
     expect(memory).toContain("never treat an omitted fact or boundary as evidence that it did not occur")
     expect(memory).toContain("a transport record, not a semantic unit")
     expect(memory).toContain("Pair ordered openings and closings")
+    expect(memory).toContain("half-open")
+    expect(memory).toContain("startOffset")
     expect(memory).toContain("lcm_grep defaults to literal mode")
     expect(memory).toContain("never add both counts")
     expect(memory).toContain("Deterministic structural anchors copied verbatim")
-    expect(memory).toContain(`- ${sources[0]!.id} (source 0): [START OF EPISODE]`)
-    expect(memory).toContain(`- ${sources[5]!.id} (source 5): [END OF EPISODE]`)
-    expect(memory).toContain(`- ${sources[9]!.id} (source 9): [END OF ELIGIBLE RAW UNIT]`)
-    expect(memory).toContain(`- ${sources[10]!.id} (source 10): [END OF PROTECTED RAW UNIT]`)
-    expect(memory).not.toContain(`- ${sources[11]!.id} (source 11): [END OF CURRENT RAW UNIT]`)
+    for (const [ordinal, marker] of [
+      [0, "[START OF EPISODE]"],
+      [5, "[END OF EPISODE]"],
+      [9, "[END OF ELIGIBLE RAW UNIT]"],
+      [10, "[END OF PROTECTED RAW UNIT]"],
+    ] as const) {
+      const anchor = exactStructuralAnchorOccurrences(sourceText(ordinal)).find((item) => item.marker === marker)!
+      expect(memory).toContain(
+        `- ${sources[ordinal]!.id} (source ${ordinal}, bytes ${anchor.byteStart}-${anchor.byteEnd}): ${marker}`,
+      )
+    }
+    expect(memory).not.toContain(`${sources[11]!.id} (source 11`)
     expect(result.messages.slice(1)).toEqual(messages.slice(10))
     expect(result.revision.id).toBe(revision!.id)
     const expectedSummaryTokens = (

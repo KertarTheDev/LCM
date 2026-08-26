@@ -43,9 +43,7 @@ const toolFiles = {
   lcm_expand: "lcm-expand.ts",
   lcm_read: "lcm-read.ts",
 } as const
-const lcmImports = [...lcmRegistry.matchAll(/import \{ (Lcm\w+Tool) \} from "\.\/lcm-/g)].map(
-  (match) => match[1],
-)
+const lcmImports = [...lcmRegistry.matchAll(/import \{ (Lcm\w+Tool) \} from "\.\/lcm-/g)].map((match) => match[1])
 if (lcmImports.length !== Object.keys(toolFiles).length) {
   fail(`LCM tool bundle has ${lcmImports.length} tool imports instead of exactly five`)
 }
@@ -78,4 +76,16 @@ for (const code of [
   if (!common.includes(`"${code}"`)) fail(`safe error ${code} is missing`)
 }
 
-console.log("LCM public contracts match routes, generated SDK, tools, events, and safe errors.")
+const build = await read("packages/opencode/script/build.ts")
+const regexSearch = await read("packages/opencode/src/kilocode/session/lcm/regex-search.ts")
+if (!build.includes('const lcmRegexWorkerPath = "./src/kilocode/session/lcm/regex-worker.ts"')) {
+  fail("the packaged build does not name the LCM regex worker entrypoint")
+}
+if (!build.includes("lcmRegexWorkerPath,") || !build.includes("KILO_LCM_REGEX_WORKER_PATH: lcmRegexWorkerPath")) {
+  fail("the packaged build does not embed and define the LCM regex worker path")
+}
+if (!regexSearch.includes('typeof KILO_LCM_REGEX_WORKER_PATH !== "undefined"')) {
+  fail("regex search does not select the embedded worker path in packaged runtimes")
+}
+
+console.log("LCM public contracts match routes, generated SDK, tools, events, safe errors, and packaged workers.")

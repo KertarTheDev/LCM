@@ -15,7 +15,7 @@ const Parameters = Schema.Struct({
   }),
   cursor: Schema.optional(Schema.String).annotate({
     description:
-      "Opaque nextCursor from the preceding read of this source; mutually exclusive with offset. maxBytes may change between pages.",
+      "Opaque nextCursor returned by the immediately preceding page of this source; never reuse the cursor just consumed. Mutually exclusive with offset; maxBytes may change between pages.",
   }),
 })
 
@@ -51,7 +51,7 @@ export const LcmReadTool = Tool.define(
     const database = yield* Database.Service
     return {
       description:
-        "Read bounded digest-verified exact text from one current-session src_ source. Seek directly with a lcm_grep byteRange start in offset, or pass nextCursor for the next page; a cursor remains valid if maxBytes changes. Recent ordinary context is already visible and does not need recovery reads.",
+        "Read bounded digest-verified exact text from one current-session src_ source. Seek directly with a structural or lcm_grep byteRange start in offset. To continue, pass the returned nextCursor, never the cursor just consumed; maxBytes may change. Recent ordinary context is already visible and does not need recovery reads.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {

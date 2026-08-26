@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
-import { regexSearch, regexSearchIssue } from "@/kilocode/session/lcm/regex-search"
+import { regexSearch, regexSearchIssue, regexWorkerTarget } from "@/kilocode/session/lcm/regex-search"
 import { priorTurnSourceCutoff } from "@/kilocode/tool/lcm-common"
 import {
   grepRangeLimit,
@@ -9,7 +9,9 @@ import {
   literalPatternAdvice,
   literalRanges,
   occurrenceTotals,
+  regexToolError,
   utf8Ranges,
+  utf8SearchWindow,
 } from "@/kilocode/tool/lcm-grep"
 import { expandCursorQuery } from "@/kilocode/tool/lcm-expand"
 import { readCursorQuery, textChunk, validUtf8Offset } from "@/kilocode/tool/lcm-read"
@@ -129,11 +131,13 @@ describe("LCM tool contracts", () => {
       pattern: "needle",
       mode: "literal",
       caseSensitive: false,
+      startOffset: 0,
       occurrenceOffset: 0,
     })
     const cursor = encodeCursor(query, 12)
     expect(decodeCursor(query, cursor)).toBe(12)
     expect(() => decodeCursor({ ...query, pattern: "other" }, cursor)).toThrow("lcm_invalid_cursor")
+    expect(() => decodeCursor({ ...query, startOffset: 10 }, cursor)).toThrow("lcm_invalid_cursor")
     expect(() => decodeCursor(query, `${cursor.slice(0, -1)}x`)).toThrow("lcm_invalid_cursor")
     expect(() => decodeCursor(query, `${cursor}.extra`)).toThrow("lcm_invalid_cursor")
     const expansion = expandCursorQuery("sum_a")
@@ -150,6 +154,7 @@ describe("LCM tool contracts", () => {
   })
 
   test("runs bounded regex search in a worker", async () => {
+    expect(String(regexWorkerTarget())).toEndWith("/regex-worker.ts")
     const matches = await regexSearch({
       pattern: "alpha|beta",
       caseSensitive: false,
@@ -180,6 +185,28 @@ describe("LCM tool contracts", () => {
         rangeLimit: 10,
       }),
     ).rejects.toThrow("lcm_invalid_regex")
+  })
+
+  test("distinguishes invalid, timed-out, and unavailable regex execution", async () => {
+    expect(regexToolError(new Error("lcm_invalid_regex")).message).toContain("syntax is invalid")
+    expect(regexToolError(new Error("lcm_regex_timeout")).message).toContain("Do not retry it unchanged")
+    expect(regexToolError(new Error("lcm_regex_worker_unavailable")).code).toBe("lcm_unavailable")
+    await expect(
+      regexSearch(
+        {
+          pattern: "alpha",
+          caseSensitive: false,
+          values: [{ id: "src_a", text: "alpha" }],
+          recordLimit: 1,
+          rangeLimit: 1,
+        },
+        {
+          createWorker: () => {
+            throw new Error("worker missing")
+          },
+        },
+      ),
+    ).rejects.toThrow("lcm_regex_worker_unavailable")
   })
 
   test("limits matching records independently from ranges within each record", async () => {
@@ -310,5 +337,17 @@ describe("LCM tool contracts", () => {
     expect(textChunk("aé🙂z", 3, 4).content).toBe("🙂")
     expect(validUtf8Offset("aé🙂z", 3)).toBe(true)
     expect(validUtf8Offset("aé🙂z", 2)).toBe(false)
+  })
+
+  test("searches an exact half-open UTF-8 source interval", () => {
+    const text = "é before\n[START]\ninside needle\n[END]\nafter needle"
+    const start = Buffer.byteLength("é before\n[START]\n")
+    const end = Buffer.byteLength("é before\n[START]\ninside needle\n")
+    const window = utf8SearchWindow(text, start, end)
+    expect(window.text).toBe("inside needle\n")
+    expect(window.byteOffset).toBe(start)
+    expect(window.endOffset).toBe(end)
+    expect(literalRanges(window.text, "needle", true, 0, 20).matchCount).toBe(1)
+    expect(() => utf8SearchWindow(text, 1, end)).toThrow("lcm_invalid_search_range")
   })
 })

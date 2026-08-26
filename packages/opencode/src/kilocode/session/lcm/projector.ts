@@ -23,6 +23,8 @@ interface StructuralAnchor {
   sourceID: string
   ordinal: number
   marker: string
+  byteStart: number
+  byteEnd: number
 }
 
 interface StructuralAnchorIndex {
@@ -31,14 +33,28 @@ interface StructuralAnchorIndex {
 }
 
 export function exactStructuralAnchors(content: string) {
-  return content
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter(
-      (line) =>
-        XML_ANCHOR.test(line) ||
-        (BOUNDARY_WORD.test(line) && (BRACKETED_ANCHOR.test(line) || FENCED_ANCHOR.test(line))),
-    )
+  return exactStructuralAnchorOccurrences(content).map((anchor) => anchor.marker)
+}
+
+export function exactStructuralAnchorOccurrences(content: string) {
+  const result: Array<{ marker: string; byteStart: number; byteEnd: number }> = []
+  let byteOffset = 0
+  for (const rawLine of content.match(/[^\r\n]*(?:\r\n|\r|\n|$)/gu) ?? []) {
+    if (rawLine.length === 0) continue
+    const line = rawLine.replace(/(?:\r\n|\r|\n)$/u, "")
+    const marker = line.trim()
+    if (
+      marker.length > 0 &&
+      (XML_ANCHOR.test(marker) ||
+        (BOUNDARY_WORD.test(marker) && (BRACKETED_ANCHOR.test(marker) || FENCED_ANCHOR.test(marker))))
+    ) {
+      const characterStart = line.indexOf(marker)
+      const byteStart = byteOffset + Buffer.byteLength(line.slice(0, characterStart))
+      result.push({ marker, byteStart, byteEnd: byteStart + Buffer.byteLength(marker) })
+    }
+    byteOffset += Buffer.byteLength(rawLine)
+  }
+  return result
 }
 
 function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
@@ -50,7 +66,8 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
     )
     .join("\n\n")
   const anchors = structural.anchors.map(
-    (anchor) => `- ${anchor.sourceID} (source ${anchor.ordinal}): ${anchor.marker}`,
+    (anchor) =>
+      `- ${anchor.sourceID} (source ${anchor.ordinal}, bytes ${anchor.byteStart}-${anchor.byteEnd}): ${anchor.marker}`,
   )
   const structuralMap =
     structural.total === 0
@@ -61,7 +78,10 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
           "Occurrences are in transcript-source order. A src_ handle is a transport record, not a semantic unit; one",
           "marked document, episode, section, or other unit may span several sources. Transport/data wrappers are",
           "anchors too, not semantic units. Pair ordered openings and closings before answering per-unit first/last",
-          "questions, then verify candidates inside each ordinal interval.",
+          "questions. Byte intervals are half-open. When boundaries share a source, constrain sourceID-scoped lcm_grep",
+          "with startOffset at the opening marker's byte end and endOffset at the closing marker's byte start. For units",
+          "spanning sources, apply the opening offset to the first source, the closing offset to the last, and search",
+          "intermediate sources in full. Do not use evidence before the opening or after the closing.",
           ...anchors,
           ...(structural.anchors.length < structural.total
             ? [
@@ -123,10 +143,12 @@ export class Projector {
     let total = 0
     for (const source of sources) {
       if (input.signal?.aborted) return
-      for (const marker of exactStructuralAnchors(input.sourceContent.get(source.id)!)) {
+      for (const occurrence of exactStructuralAnchorOccurrences(input.sourceContent.get(source.id)!)) {
         total++
-        const anchor = { sourceID: source.id, ordinal: source.ordinal, marker }
-        const nextBytes = Buffer.byteLength(`${anchor.sourceID} ${anchor.ordinal} ${anchor.marker}\n`)
+        const anchor = { sourceID: source.id, ordinal: source.ordinal, ...occurrence }
+        const nextBytes = Buffer.byteLength(
+          `${anchor.sourceID} ${anchor.ordinal} ${anchor.byteStart} ${anchor.byteEnd} ${anchor.marker}\n`,
+        )
         if (anchors.length >= MAX_STRUCTURAL_ANCHORS || bytes + nextBytes > MAX_STRUCTURAL_ANCHOR_BYTES) continue
         anchors.push(anchor)
         bytes += nextBytes

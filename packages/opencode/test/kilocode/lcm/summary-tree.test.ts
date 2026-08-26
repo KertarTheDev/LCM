@@ -133,6 +133,7 @@ describe("LCM summary tree", () => {
           cacheReadTokens: 0,
           cacheWriteTokens: 0,
           cost: 0.001,
+          finish: "stop",
           durationMs: 1,
           createdAt: 1,
         },
@@ -149,7 +150,10 @@ describe("LCM summary tree", () => {
     const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
     expect(summary?.generationMode).toBe("deterministic")
     expect(summary?.text).not.toContain("src_aaaaaaaaaaaaaaaaaaaaaaaa")
-    expect((await store.metrics("ses_tree")).work.attempts).toBe(2)
+    expect((await store.listAttempts("ses_tree")).map((attempt) => attempt.errorCode)).toEqual([
+      "lcm_summary_unknown_handle",
+      "lcm_summary_unknown_handle",
+    ])
     store.close()
   })
 
@@ -177,6 +181,7 @@ describe("LCM summary tree", () => {
             cacheReadTokens: 0,
             cacheWriteTokens: 0,
             cost: 0.001,
+            finish: "stop",
             durationMs: 1,
             createdAt: 1,
           },
@@ -281,11 +286,49 @@ describe("LCM summary tree", () => {
     store.close()
   })
 
-  test("rejects summaries without a lineage citation or substantive text", async () => {
-    for (const candidate of [
-      "The binding implementation decision and supporting detail are preserved here.",
-      undefined,
-    ]) {
+  test("attaches deterministic exact recovery lineage when a substantive summary omits citations", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = [makeSource(0)]
+    const digest = lineageDigest(sources)
+    const lineage = { sessionID: "ses_tree", digest, sourceCount: 1, lastSourceID: sources[0]?.id }
+    await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
+    const revision = await new SummaryTree(store, {
+      generate: async (request) => ({
+        text: "The binding implementation decision and supporting detail are preserved here.",
+        mode: request.mode,
+        attempt: {
+          id: "attempt_missing_citation",
+          nodeKey: "",
+          sessionID: request.sessionID,
+          mode: request.mode,
+          inputTokens: 100,
+          outputTokens: 20,
+          reasoningTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cost: 0,
+          finish: "stop",
+          durationMs: 1,
+          createdAt: 1,
+        },
+      }),
+    }).build({
+      sessionID: "ses_tree",
+      lineage,
+      usableInputTokens: 8_000,
+      protectedSources: 0,
+      reason: "hard_built",
+    })
+
+    const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
+    expect(summary?.generationMode).toBe("normal")
+    expect(summary?.text).toEndWith(`Recovery handles: ${sources[0]!.id}`)
+    expect((await store.listAttempts("ses_tree")).map((attempt) => attempt.errorCode)).toEqual([undefined])
+    store.close()
+  })
+
+  test("rejects protocol-only and content-free model output", async () => {
+    for (const candidate of ["RECEIVED", undefined]) {
       const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
       const sources = [makeSource(0)]
       const digest = lineageDigest(sources)
@@ -295,6 +338,21 @@ describe("LCM summary tree", () => {
         generate: async (request) => ({
           text: candidate ?? `${sources[0]!.id} noted`,
           mode: request.mode,
+          attempt: {
+            id: `attempt_${request.mode}`,
+            nodeKey: "",
+            sessionID: request.sessionID,
+            mode: request.mode,
+            inputTokens: 100,
+            outputTokens: 4,
+            reasoningTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            cost: 0,
+            finish: "stop",
+            durationMs: 1,
+            createdAt: 1,
+          },
         }),
       }).build({
         sessionID: "ses_tree",
@@ -307,6 +365,11 @@ describe("LCM summary tree", () => {
       const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
       expect(summary?.generationMode).toBe("deterministic")
       expect(summary?.text).toStartWith("Conversation memory index:")
+      expect((await store.listAttempts("ses_tree")).map((attempt) => attempt.errorCode)).toEqual(
+        candidate
+          ? ["lcm_summary_protocol_output", "lcm_summary_protocol_output"]
+          : ["lcm_summary_content_free", "lcm_summary_content_free"],
+      )
       store.close()
     }
   })

@@ -17,6 +17,9 @@ const MAX_LEAF_TOKENS = 20_000
 const MAX_ROOTS = 8
 const CONDENSE_COUNT = 4
 const RECOVERY_HANDLE = /\b(?:src|sum)_[a-f0-9]{24}\b/g
+const RECOVERY_FOOTER = /\n\nRecovery handles: (?:\b(?:src|sum)_[a-f0-9]{24}\b(?:, )?)+\s*$/u
+const PROTOCOL_ONLY = /^(?:received|acknowledged|understood|ok(?:ay)?)[.!]?$/iu
+const REFUSAL = /^(?:i(?:'m| am) sorry\b|i (?:cannot|can't|won't|am unable to)\b)/iu
 
 export interface SummaryCandidate {
   text: string
@@ -153,6 +156,31 @@ function deterministic(children: TreeItem[], limit: number, allowed: Set<string>
     .replace(/\uFFFD+$/u, "")}${suffix}`
 }
 
+function substantiveCharacters(text: string) {
+  return text.replace(RECOVERY_FOOTER, "").replace(RECOVERY_HANDLE, "").replace(/\s/gu, "").length
+}
+
+function candidateIssue(
+  candidate: SummaryCandidate,
+  sourceTokens: number,
+  sourceBytes: number,
+  target: number,
+  allowed: Set<string>,
+) {
+  const trimmed = candidate.text.trim()
+  const candidateBytes = Buffer.byteLength(candidate.text)
+  const candidateTokens = Math.max(1, Math.ceil(candidateBytes / 4))
+  const handles = candidate.text.match(RECOVERY_HANDLE) ?? []
+  if (trimmed.length === 0) return "empty" as const
+  if (candidate.attempt && candidate.attempt.finish !== "stop") return "incomplete" as const
+  if (PROTOCOL_ONLY.test(trimmed) || REFUSAL.test(trimmed)) return "protocol_output" as const
+  if (candidateBytes >= sourceBytes || candidateTokens >= sourceTokens) return "not_reduced" as const
+  if (candidateTokens > Math.ceil(target * 1.15)) return "too_long" as const
+  if (handles.some((handle) => !allowed.has(handle))) return "unknown_handle" as const
+  if (handles.length === 0) return "missing_handle" as const
+  if (substantiveCharacters(candidate.text) < 16) return "content_free" as const
+}
+
 function valid(
   candidate: SummaryCandidate,
   sourceTokens: number,
@@ -160,28 +188,46 @@ function valid(
   target: number,
   allowed: Set<string>,
 ) {
-  const candidateBytes = Buffer.byteLength(candidate.text)
-  const candidateTokens = Math.max(1, Math.ceil(candidateBytes / 4))
-  const handles = candidate.text.match(RECOVERY_HANDLE) ?? []
-  const contentCharacters = candidate.text.replace(RECOVERY_HANDLE, "").replace(/\s/gu, "").length
-  return (
-    candidate.text.trim().length > 0 &&
-    (!candidate.attempt || candidate.attempt.finish === "stop") &&
-    candidateBytes < sourceBytes &&
-    candidateTokens < sourceTokens &&
-    candidateTokens <= Math.ceil(target * 1.15) &&
-    handles.length > 0 &&
-    contentCharacters >= 16 &&
-    handles.every((handle) => allowed.has(handle))
-  )
+  return candidateIssue(candidate, sourceTokens, sourceBytes, target, allowed) === undefined
 }
 
-function rejectedAttempt(candidate: SummaryCandidate) {
+function attachRecoveryHandles(
+  candidate: SummaryCandidate,
+  items: TreeItem[],
+  sourceTokens: number,
+  sourceBytes: number,
+  target: number,
+) {
+  if ((candidate.text.match(RECOVERY_HANDLE) ?? []).length > 0) return candidate
+  const trimmed = candidate.text.trim()
+  if (
+    trimmed.length === 0 ||
+    (candidate.attempt && candidate.attempt.finish !== "stop") ||
+    PROTOCOL_ONLY.test(trimmed) ||
+    REFUSAL.test(trimmed) ||
+    substantiveCharacters(trimmed) < 16
+  )
+    return candidate
+  const text = `${trimmed}\n\nRecovery handles: ${items.map((item) => item.id).join(", ")}`
+  const bytes = Buffer.byteLength(text)
+  const tokens = Math.max(1, Math.ceil(bytes / 4))
+  if (bytes >= sourceBytes || tokens >= sourceTokens || tokens > Math.ceil(target * 1.15)) return candidate
+  return { ...candidate, text }
+}
+
+function rejectedAttempt(
+  candidate: SummaryCandidate,
+  sourceTokens: number,
+  sourceBytes: number,
+  target: number,
+  allowed: Set<string>,
+) {
   const attempt = candidate.attempt
   if (!attempt) return
+  const issue = candidateIssue(candidate, sourceTokens, sourceBytes, target, allowed) ?? "rejected"
   return {
     ...attempt,
-    errorCode: attempt.errorCode ?? (attempt.finish === "stop" ? "lcm_summary_rejected" : "lcm_summary_incomplete"),
+    errorCode: attempt.errorCode ?? `lcm_summary_${issue}`,
   }
 }
 
@@ -258,8 +304,9 @@ export class SummaryTree {
         }
       }
       candidate = await generate("normal")
+      if (candidate) candidate = attachRecoveryHandles(candidate, input.items, sourceTokens, sourceBytes, target)
       if (!candidate || !valid(candidate, sourceTokens, sourceBytes, target, allowed)) {
-        const attempt = candidate && rejectedAttempt(candidate)
+        const attempt = candidate && rejectedAttempt(candidate, sourceTokens, sourceBytes, target, allowed)
         if (attempt)
           await this.store.recordAttempt({
             ...attempt,
@@ -268,10 +315,11 @@ export class SummaryTree {
           })
         if (input.maintenanceMode === "soft") return
         candidate = await generate("aggressive")
+        if (candidate) candidate = attachRecoveryHandles(candidate, input.items, sourceTokens, sourceBytes, target)
       }
     }
     if (!candidate || !valid(candidate, sourceTokens, sourceBytes, target, allowed)) {
-      const attempt = candidate && rejectedAttempt(candidate)
+      const attempt = candidate && rejectedAttempt(candidate, sourceTokens, sourceBytes, target, allowed)
       if (attempt)
         await this.store.recordAttempt({
           ...attempt,
