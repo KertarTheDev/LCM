@@ -405,7 +405,7 @@ suffix remains protected. It also records the required activity evidence for cha
 hard-pressure preparation. The raw Kilo transcript was never affected. Deletion removed `.1`'s release assets and tag;
 its Actions audit history is retained.
 
-The separate historical v7.4.1 line still has two published prereleases. `v7.4.1-lcm.1` release ID `350208679` was
+The separate historical v7.4.1 line had two published prereleases. `v7.4.1-lcm.1` release ID `350208679` was
 published from candidate `ce4d4c059f49295f4b9220d11680d87f71ae1c58`, containing product `e3fa8dccf3`. Its
 same-upstream replacement `v7.4.1-lcm.2` release ID `351918329` was published from candidate
 `eb88d06a35f7a71adddab905322ef7299507dd79`, containing corrective product commit
@@ -416,8 +416,9 @@ replacement's transactional rollback when request-header, snapshot-item, termina
 failed. Those defects could submit stale or inconsistent active context and leave partially persisted provider state;
 `.2` binds caches to the complete authority snapshot, rejects drift, and makes those persistence transitions atomic.
 Under the one-best-per-upstream policy, exact `.1` release ID `350208679`, tag `v7.4.1-lcm.1`, and candidate
-`ce4d4c059f49295f4b9220d11680d87f71ae1c58` are authorized for removal only while the independently verified `.2`
-identity above remains published.
+`ce4d4c059f49295f4b9220d11680d87f71ae1c58` were removed on 2026-08-26 only after those identities were re-resolved
+and `.2` was reverified. A post-deletion audit found no release or tag for `.1` and reconfirmed `.2` with all 20 assets.
+The removed assets and tag are not recoverable from GitHub; Actions audit history remains.
 
 An exact retained-release audit on 2026-08-25 found the same retry-lineage implementation in every still-published
 LCM prerelease from v7.4.16 through v7.4.22. Under hard context pressure, replacing a retried suffix can erase the
