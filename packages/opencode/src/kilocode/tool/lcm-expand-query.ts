@@ -263,6 +263,30 @@ export function completeQueryAnswer(text: string, finish: string | undefined, al
   return parseQueryAnswer(text, allowed)
 }
 
+export function extractiveQueryFallback(
+  selected: Array<{ id: string; text: string }>,
+  terms: string[],
+  maxChars: number,
+) {
+  const blocks: string[] = []
+  const citations: string[] = []
+  let remaining = Math.max(0, Math.floor(maxChars))
+  for (const [index, item] of selected.entries()) {
+    const separator = blocks.length > 0 ? "\n\n" : ""
+    const available = remaining - separator.length
+    const share = Math.floor(available / (selected.length - index))
+    const label = `[${item.id}] `
+    if (share <= label.length) continue
+    const excerpt = queryExcerpt(item.text, terms, share - label.length)
+    if (!excerpt) continue
+    const block = `${label}${excerpt}`
+    blocks.push(block)
+    citations.push(item.id)
+    remaining -= separator.length + block.length
+  }
+  return { answer: blocks.join("\n\n"), citations }
+}
+
 function activeModel(value: unknown) {
   if (!value || typeof value !== "object") return
   const model = value as Partial<Provider.Model>
@@ -362,16 +386,13 @@ export const LcmExpandQueryTool = Tool.define(
             ? completeQueryAnswer(generated.value.text, generated.value.finish, allowed)
             : undefined
           const mayExtract = retrieval.handles.length > 0 || retrieval.terms.length >= 2
-          const fallback = mayExtract
-            ? {
-                answer: retrieval.selected
-                  .map((item) => `[${item.id}] ${item.text.slice(0, 800)}`)
-                  .join("\n\n")
-                  .slice(0, maxAnswerTokens * 4),
-                citations: retrieval.selected.map((item) => item.id),
-                coverage: "partial" as const,
-              }
-            : { answer: "", citations: [], coverage: "none" as const }
+          const extracted = mayExtract
+            ? extractiveQueryFallback(retrieval.selected, retrieval.terms, maxAnswerTokens * 4)
+            : { answer: "", citations: [] }
+          const fallback = {
+            ...extracted,
+            coverage: extracted.answer ? ("partial" as const) : ("none" as const),
+          }
           const unbounded = answer ?? fallback
           const answerTruncated = unbounded.answer.length > maxAnswerTokens * 4
           const result = {

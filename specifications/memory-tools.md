@@ -19,8 +19,9 @@ limit is 20; maximum is 50. Literal mode treats regex syntax such as `|` as ordi
 mode. A summary scope
 searches its cycle-safe descendant closure; a source scope searches one exact current-lineage source, and both scopes
 may be combined. Each returned record reports an exact `matchCount`, bounded character
-`ranges`, matching UTF-8 `byteRanges`, local `occurrences` (one compact preview per global record or all 20 retained ranges for
-a source-scoped search), an exact occurrence-page offset/total/next offset, `rangesComplete`, `occurrencesComplete`,
+`ranges`, matching UTF-8 `byteRanges`, and local `occurrences` (one compact preview per global record or all 20 retained
+ranges for a source-scoped search) without duplicating that preview at the record level. Results also include an exact
+occurrence-page offset/total/next offset, `rangesComplete`, `occurrencesComplete`,
 and source records identify their `sourceKind`, so a range cap or assistant/tool record is never mistaken for
 exhaustive user-source evidence. The caller can pass a
 `byteRange.start` to `lcm_read.offset` to inspect exact source text around any retained match. If a source has more than
@@ -58,7 +59,9 @@ Answer one focused question from current-lineage memory. Inputs are `query`, opt
 at most eight excerpts, and uses at most 20% of known usable input capped at 16,000 tokens; unknown capacity uses a
 4,000-token retrieval budget. The budget is divided fairly across selected records. Long records contribute bounded
 windows around the first and last useful term occurrences rather than an unrelated prefix, with bounded bookends when
-only an explicit handle is available. A summary scope is limited to that summary and its cycle-safe descendants.
+only an explicit handle is available. The bounded extractive fallback applies the same fair, match-centered allocation
+across candidate records instead of allowing the first candidates to consume the answer budget. A summary scope is
+limited to that summary and its cycle-safe descendants.
 
 The tool preempts same-session soft work, shares the LCM model-call queue, and makes at most one call through the active
 Kilo provider/model runtime with no tools. It does not create a child session, second provider protocol, or transcript

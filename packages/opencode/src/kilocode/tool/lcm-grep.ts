@@ -267,9 +267,6 @@ export const LcmGrepTool = Tool.define(
           const byID = new Map(values.map((value) => [value.id, value]))
           const matches = selected.map((item) => {
             const value = byID.get(item.id)!
-            const first = item.ranges[0]!
-            const start = Math.max(0, first.start - 100)
-            const end = Math.min(value.text.length, first.end + 180)
             const byteRanges = utf8Ranges(value.text, item.ranges)
             const occurrences = item.ranges.map((range, index) => ({
               range,
@@ -283,7 +280,6 @@ export const LcmGrepTool = Tool.define(
                 ? { sourceID: value.id, sourceKind: value.sourceKind }
                 : { summaryID: value.id }),
               ordinal: value.ordinal,
-              excerpt: value.text.slice(start, end),
               ranges: item.ranges,
               byteRanges,
               matchCount: item.matchCount,

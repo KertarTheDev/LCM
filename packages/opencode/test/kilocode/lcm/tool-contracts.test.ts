@@ -12,7 +12,13 @@ import {
 } from "@/kilocode/tool/lcm-grep"
 import { expandCursorQuery } from "@/kilocode/tool/lcm-expand"
 import { readCursorQuery, textChunk, validUtf8Offset } from "@/kilocode/tool/lcm-read"
-import { completeQueryAnswer, parseQueryAnswer, queryExcerpt, queryParts } from "@/kilocode/tool/lcm-expand-query"
+import {
+  completeQueryAnswer,
+  extractiveQueryFallback,
+  parseQueryAnswer,
+  queryExcerpt,
+  queryParts,
+} from "@/kilocode/tool/lcm-expand-query"
 
 describe("LCM tool contracts", () => {
   test("keeps global grep as discovery and reserves wider occurrence pages for exact source scopes", () => {
@@ -95,6 +101,23 @@ describe("LCM tool contracts", () => {
     expect(excerpt).toContain("late needle")
     expect(excerpt).toContain("omitted")
     expect(excerpt.length).toBeLessThanOrEqual(500)
+  })
+
+  test("keeps extractive query fallback fair across candidate records", () => {
+    const fallback = extractiveQueryFallback(
+      [
+        { id: "src_first", text: `early needle ${"first ".repeat(300)}late needle` },
+        { id: "src_second", text: `early needle ${"second ".repeat(300)}late needle` },
+        { id: "src_third", text: `early needle ${"third ".repeat(300)}late needle` },
+      ],
+      ["needle"],
+      900,
+    )
+    expect(fallback.citations).toEqual(["src_first", "src_second", "src_third"])
+    expect(fallback.answer).toContain("[src_first]")
+    expect(fallback.answer).toContain("[src_second]")
+    expect(fallback.answer).toContain("[src_third]")
+    expect(fallback.answer.length).toBeLessThanOrEqual(900)
   })
 
   test("binds opaque cursors to semantic queries while allowing page-size changes", () => {
