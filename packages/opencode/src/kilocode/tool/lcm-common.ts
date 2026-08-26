@@ -199,6 +199,23 @@ export function recoveryCallGuidance(input: {
   }
 }
 
+export function repeatedRecoveryResult(input: {
+  tool: "lcm_grep" | "lcm_read"
+  previousIdenticalCalls: number
+  sourceScoped: boolean
+}) {
+  if (input.previousIdenticalCalls < 1) return
+  return {
+    callGuidance: recoveryCallGuidance(input),
+    repeatedCall: {
+      suppressed: true,
+      noNewEvidence: true,
+      instruction:
+        "The full deterministic payload is intentionally not replayed because this exact completed call added no new evidence. Reuse the prior result if it is still visible; otherwise change the pattern, scope, page, or offset before recovering again, or answer now.",
+    },
+  }
+}
+
 function sourceReference(source: FinalSource | undefined) {
   if (!source) return null
   return { sourceID: source.id, ordinal: source.ordinal, kind: source.kind }

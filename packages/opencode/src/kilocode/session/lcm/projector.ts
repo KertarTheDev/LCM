@@ -12,6 +12,8 @@ const MEMORY_OPEN = "<conversation-memory>"
 const MEMORY_CLOSE = "</conversation-memory>"
 const MAX_STRUCTURAL_ANCHORS = 64
 const MAX_STRUCTURAL_ANCHOR_BYTES = 8_192
+const MAX_STRUCTURAL_UNIT_BYTES = 8_192
+const MAX_STRUCTURAL_UNIT_RANGES = 32
 const BOUNDARY_WORD = /(?:^|[^\p{L}])(begin|start|end|stop|open|close)(?:[^\p{L}]|$)/iu
 const BRACKETED_ANCHOR = /^\[[^\]\r\n]{1,120}\]$/u
 const XML_ANCHOR = /^<\/?[A-Za-z][^<>\r\n]{0,120}\/?>$/u
@@ -30,6 +32,19 @@ interface StructuralAnchor {
 interface StructuralAnchorIndex {
   anchors: StructuralAnchor[]
   total: number
+  sources: Array<{ sourceID: string; ordinal: number }>
+}
+
+interface StructuralUnitRange {
+  sourceID: string
+  startOffset?: number
+  endOffset?: number
+}
+
+interface StructuralUnit {
+  opening: StructuralAnchor
+  closing: StructuralAnchor
+  sourceRanges: StructuralUnitRange[]
 }
 
 export function exactStructuralAnchors(content: string) {
@@ -57,6 +72,62 @@ export function exactStructuralAnchorOccurrences(content: string) {
   return result
 }
 
+function boundaryIdentity(marker: string) {
+  if (XML_ANCHOR.test(marker)) return
+  const core = BRACKETED_ANCHOR.test(marker)
+    ? marker.slice(1, -1)
+    : marker.replace(/^(?:-{3,}|={3,})\s*|\s*(?:-{3,}|={3,})$/gu, "")
+  const match = /\b(begin|start|end|stop|open|close)\b/iu.exec(core)
+  if (!match) return
+  const direction = /^(?:begin|start|open)$/iu.test(match[1]!) ? ("opening" as const) : ("closing" as const)
+  const key = `${core.slice(0, match.index)} ${core.slice(match.index + match[0].length)}`
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+  return { direction, key: key || "unlabelled-unit" }
+}
+
+export function pairedStructuralUnits(structural: StructuralAnchorIndex) {
+  const openings = new Map<string, StructuralAnchor[]>()
+  const units: StructuralUnit[] = []
+  let total = 0
+  for (const anchor of structural.anchors) {
+    const boundary = boundaryIdentity(anchor.marker)
+    if (!boundary) continue
+    if (boundary.direction === "opening") {
+      const stack = openings.get(boundary.key) ?? []
+      stack.push(anchor)
+      openings.set(boundary.key, stack)
+      continue
+    }
+    const opening = openings.get(boundary.key)?.pop()
+    if (!opening) continue
+    total++
+    const sources = structural.sources.filter(
+      (source) => source.ordinal >= opening.ordinal && source.ordinal <= anchor.ordinal,
+    )
+    if (
+      sources.length === 0 ||
+      sources.length > MAX_STRUCTURAL_UNIT_RANGES ||
+      sources[0]?.sourceID !== opening.sourceID ||
+      sources.at(-1)?.sourceID !== anchor.sourceID ||
+      (opening.sourceID === anchor.sourceID && opening.byteEnd > anchor.byteStart)
+    )
+      continue
+    units.push({
+      opening,
+      closing: anchor,
+      sourceRanges: sources.map((source) => ({
+        sourceID: source.sourceID,
+        ...(source.sourceID === opening.sourceID ? { startOffset: opening.byteEnd } : {}),
+        ...(source.sourceID === anchor.sourceID ? { endOffset: anchor.byteStart } : {}),
+      })),
+    })
+  }
+  return { units, total }
+}
+
 function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
   const body = items
     .map((item) =>
@@ -69,6 +140,16 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
     (anchor) =>
       `- ${anchor.sourceID} (source ${anchor.ordinal}, bytes ${anchor.byteStart}-${anchor.byteEnd}): ${anchor.marker}`,
   )
+  const paired = pairedStructuralUnits(structural)
+  const pairedLines: string[] = []
+  let pairedBytes = 0
+  for (const unit of paired.units) {
+    const line = `- ${unit.opening.marker} → ${unit.closing.marker}: sourceRanges=${JSON.stringify(unit.sourceRanges)}`
+    const bytes = Buffer.byteLength(`${line}\n`)
+    if (pairedBytes + bytes > MAX_STRUCTURAL_UNIT_BYTES) continue
+    pairedLines.push(line)
+    pairedBytes += bytes
+  }
   const structuralMap =
     structural.total === 0
       ? []
@@ -91,6 +172,20 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
           ...(structural.anchors.length < structural.total
             ? [
                 `[Structural anchor map truncated: showing ${structural.anchors.length} of ${structural.total}; use lcm_grep to recover the rest.]`,
+              ]
+            : []),
+          ...(pairedLines.length > 0
+            ? [
+                "",
+                "Copy-ready paired semantic units (exact half-open ranges):",
+                "For a question scoped to one listed unit, copy its sourceRanges array directly into one",
+                "lcm_expand_query call instead of reconstructing or paging those ranges manually.",
+                ...pairedLines,
+                ...(pairedLines.length < paired.total
+                  ? [
+                      `[Paired semantic-unit map incomplete: showing ${pairedLines.length} of ${paired.total}; use the exact anchor map and bounded recovery for omitted or over-32-source units.]`,
+                    ]
+                  : []),
               ]
             : []),
         ]
@@ -166,7 +261,11 @@ export class Projector {
         bytes += nextBytes
       }
     }
-    const index = { anchors, total }
+    const index = {
+      anchors,
+      total,
+      sources: sources.map((source) => ({ sourceID: source.id, ordinal: source.ordinal })),
+    }
     this.structuralIndexes.set(input.sessionID, { revisionID, maxConsumedOrdinal: input.maxConsumedOrdinal, index })
     return index
   }

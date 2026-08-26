@@ -5,6 +5,7 @@ import {
   completedToolCallCount,
   priorTurnSourceCutoff,
   recoveryCallGuidance,
+  repeatedRecoveryResult,
   sourceChronology,
 } from "@/kilocode/tool/lcm-common"
 import {
@@ -114,6 +115,13 @@ describe("LCM tool contracts", () => {
     expect(
       recoveryCallGuidance({ tool: "lcm_grep", previousIdenticalCalls: 3, sourceScoped: true }).instruction,
     ).toContain("do not submit the identical input again")
+    expect(repeatedRecoveryResult({ tool: "lcm_grep", previousIdenticalCalls: 0, sourceScoped: true })).toBeUndefined()
+    expect(
+      repeatedRecoveryResult({ tool: "lcm_grep", previousIdenticalCalls: 1, sourceScoped: true }),
+    ).toMatchObject({
+      callGuidance: { previousIdenticalCalls: 1 },
+      repeatedCall: { suppressed: true, noNewEvidence: true },
+    })
   })
 
   test("reports chronological transport neighbors while skipping pure receipt records", () => {

@@ -43,6 +43,9 @@ specific error. Their guidance says not to repeat an unchanged failed call and e
 pattern, narrow the source byte interval, or switch to literal mode. A literal pattern containing common regex
 operators returns actionable advice to select regex mode rather than silently implying that alternatives were absent.
 Success, worker failure, cancellation, and timeout all terminate the worker and detach the request's abort listener.
+Completed `lcm_grep` and `lcm_read` calls are deterministic for their reported current-session scope. The first exact
+repeat returns only compact repeat guidance and deliberately suppresses the duplicate evidence payload (including
+media attachments); callers must reuse the prior result, change the scope/pattern/page/offset, or answer.
 Every result reports separate source/summary record and occurrence totals for the returned page, plus complete-scope
 totals when known. Literal search scans the whole bounded scope and therefore reports complete-scope totals on its
 first page; regex reports them only after its bounded scan proves completion. Summaries can overlap their raw

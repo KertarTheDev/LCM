@@ -5,6 +5,7 @@ import {
   exactStructuralAnchorOccurrences,
   exactStructuralAnchors,
   isConversationMemoryMessage,
+  pairedStructuralUnits,
   Projector,
 } from "@/kilocode/session/lcm/projector"
 import { SqliteConversationMemoryStore } from "@/kilocode/session/lcm/store"
@@ -72,6 +73,45 @@ describe("LCM projector", () => {
     expect(Buffer.from(content).subarray(opening.byteStart, opening.byteEnd).toString()).toBe("[START OF EPISODE]")
   })
 
+  test("pairs explicit semantic boundaries into copy-ready chronological source ranges", () => {
+    expect(
+      pairedStructuralUnits({
+        anchors: [
+          { sourceID: "src_first", ordinal: 1, marker: "[START OF EPISODE]", byteStart: 10, byteEnd: 28 },
+          { sourceID: "src_last", ordinal: 3, marker: "[END OF EPISODE]", byteStart: 90, byteEnd: 106 },
+        ],
+        total: 2,
+        sources: [
+          { sourceID: "src_first", ordinal: 1 },
+          { sourceID: "src_middle", ordinal: 2 },
+          { sourceID: "src_last", ordinal: 3 },
+        ],
+      }).units,
+    ).toEqual([
+      {
+        opening: {
+          sourceID: "src_first",
+          ordinal: 1,
+          marker: "[START OF EPISODE]",
+          byteStart: 10,
+          byteEnd: 28,
+        },
+        closing: {
+          sourceID: "src_last",
+          ordinal: 3,
+          marker: "[END OF EPISODE]",
+          byteStart: 90,
+          byteEnd: 106,
+        },
+        sourceRanges: [
+          { sourceID: "src_first", startOffset: 28 },
+          { sourceID: "src_middle" },
+          { sourceID: "src_last", endOffset: 90 },
+        ],
+      },
+    ])
+  })
+
   test("replaces only the eligible prefix and pins a continuation revision", async () => {
     const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
     const sources = Array.from({ length: 12 }, (_, ordinal) => makeSource(ordinal))
@@ -133,6 +173,8 @@ describe("LCM projector", () => {
     expect(memory).toContain("Never calculate byte offsets")
     expect(memory).toContain("never add both counts")
     expect(memory).toContain("Deterministic structural anchors copied verbatim")
+    expect(memory).toContain("Copy-ready paired semantic units")
+    expect(memory).toContain("sourceRanges=")
     for (const [ordinal, marker] of [
       [0, "[START OF EPISODE]"],
       [5, "[END OF EPISODE]"],

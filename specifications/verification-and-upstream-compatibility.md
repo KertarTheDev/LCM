@@ -14,7 +14,7 @@ Acceptance must prove:
 - disabled prompt, idle, deletion, API, CLI, and tool paths neither create nor mutate a sidecar, while re-enable
   reuses or rebuilds retained state;
 - newest-first stream normalization and stable chronology for new, legacy, imported, and 100+ source sessions;
-- schema-v12/tree-v9 discard-and-rebuild of earlier derived caches without raw-body duplication or semantic migration;
+- schema-v13/tree-v10 discard-and-rebuild of earlier derived caches without raw-body duplication or semantic migration;
 - durable per-provider-step successful-request consumption, proof-based recovery after an unconsumed retry-suffix
   replacement, and protection after cancel/failure/overflow;
 - sequential and parallel LCM recovery-tool results entering source lineage, becoming eligible after a later
@@ -52,8 +52,8 @@ Acceptance must prove:
   warning for exhaustive questions, a deterministic ordered boundary map with half-open UTF-8 byte ranges from every
   consumed exact source including
   the protected recent tail but excluding the current unconsumed turn,
-  compact unscoped grep discovery with exact source-scoped paging, and deterministic reduction over recovery-tool output
-  containing cross-references;
+  compact unscoped grep discovery with exact source-scoped paging, compact suppression of exact repeated grep/read
+  payloads, and deterministic reduction over recovery-tool output containing cross-references;
 - coherent enabled status lane/phase/frame fields including the protected recent-consumed/unconsumed split, disabled
   typed 409 responses, conditional UI/tool/TUI surfaces,
   reopened-session actions, frontier-only timeline events, export redaction/hashes plus sanitized summary-attempt

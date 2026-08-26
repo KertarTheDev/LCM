@@ -6,7 +6,7 @@ A source is one finalized model-visible transcript part. A summary is immutable 
 children. A frontier revision is an exact, gap-free, non-overlapping cut through the current lineage. Every retained
 source is covered exactly once by a frontier source or a reachable summary descendant.
 
-The tree policy is `lcm-tree-v9`. This policy and derived schema intentionally invalidate earlier prerelease caches;
+The tree policy is `lcm-tree-v10`. This policy and derived schema intentionally invalidate earlier prerelease caches;
 the sidecar is quarantined and rebuilt without modifying the Kilo transcript.
 
 Soft maintenance summarizes at most one eligible raw window per quantum. Leaf windows target 30% of usable input and
@@ -97,13 +97,18 @@ complete coverage.
 Recovery guidance distinguishes transport-source records from semantic units, directs per-unit questions to pair
 ordered structural openings and closings, states that literal grep uses unescaped punctuation, warns that summaries
 and raw descendants overlap, and recommends exact ordered `sourceRanges` query synthesis followed by bounded
-source-scoped verification. Range-scoped query retrieval cannot include bytes before the opening or after the closing,
+source-scoped verification. Explicit non-XML opening/closing markers with the same normalized label are also paired
+into copy-ready chronological `sourceRanges` arrays when the complete unit spans at most 32 transport sources;
+unpaired, truncated, or larger units remain recoverable from the exact anchor map without being presented as complete.
+Range-scoped query retrieval cannot include bytes before the opening or after the closing,
 fairly samples all supplied ranges in chronological order, and reports whether in-scope text was clipped. Source grep
 pages expose a copy-ready final occurrence-page offset for last-event questions.
 It directs targeted reads instead of full-source sequential scans, requires callers to honor the returned completion
 that source completion is not semantic-unit completion. An exclusive `lcm_read.endOffset` is cursor-bound and prevents
 exact inspection from crossing a verified closing boundary. Successful grep/read results report how many times the exact
 input already completed and explicitly direct the caller to reuse deterministic results instead of repeating them.
+An exact repeated `lcm_grep` or `lcm_read` call returns compact guidance without replaying the duplicate evidence
+payload or media attachment, preventing a looping model from multiplying identical recent-tail content.
 The guidance tells the agent to stop recovery and answer once exact evidence resolves the question.
 When a semantic unit begins or ends inside a transport source, guidance directs `lcm_grep` to its half-open byte
 interval so evidence before the opening or after the closing cannot be mistaken for part of the unit.

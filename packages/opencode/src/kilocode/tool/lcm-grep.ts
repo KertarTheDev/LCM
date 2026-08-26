@@ -11,6 +11,7 @@ import {
   loadMemory,
   priorTurnSourceCutoff,
   recoveryCallGuidance,
+  repeatedRecoveryResult,
   requireSource,
   requireSummary,
   sourceChronology,
@@ -343,6 +344,26 @@ export const LcmGrepTool = Tool.define(
                 totalBytes: Buffer.byteLength(summary.text),
               })),
           ].toSorted((a, b) => a.ordinal - b.ordinal || a.id.localeCompare(b.id))
+          const repeated = repeatedRecoveryResult({
+            tool: "lcm_grep",
+            previousIdenticalCalls,
+            sourceScoped: Boolean(params.sourceID),
+          })
+          if (repeated)
+            return {
+              title: `Repeated Conversation Memory search suppressed: ${params.pattern}`,
+              output: inertOutput({
+                ...repeated,
+                ...(chronology ? { chronology } : {}),
+                ...(params.sourceID ? { sourceID: params.sourceID } : {}),
+              }),
+              metadata: {
+                matches: 0,
+                repeatedInput: true,
+                duplicatePayloadSuppressed: true,
+                truncated: false,
+              },
+            }
           const found =
             (params.mode ?? "literal") === "regex"
               ? yield* Effect.tryPromise(() =>

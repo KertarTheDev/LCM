@@ -514,6 +514,55 @@ describe("LCM summary tree", () => {
     store.close()
   })
 
+  test("rejects summary-task commentary that would displace durable historical evidence", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    const sources = [makeSource(0)]
+    const digest = lineageDigest(sources)
+    const lineage = { sessionID: "ses_tree", digest, sourceCount: 1, lastSourceID: sources[0]?.id }
+    await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
+    const fallbackText = `Extractive evidence retains the durable source result.\n\nRecovery handles: ${sources[0]!.id}`
+    const revision = await new SummaryTree(store, {
+      generate: async (request) => ({
+        text:
+          request.mode === "normal"
+            ? `The active instruction is to summarize the lcm-historical-data block. ${sources[0]!.id}`
+            : `I'll summarize the historical conversation according to the system task. ${sources[0]!.id}`,
+        fallbackText,
+        mode: request.mode,
+        attempt: {
+          id: `attempt_${request.mode}`,
+          nodeKey: "",
+          sessionID: request.sessionID,
+          mode: request.mode,
+          inputTokens: 100,
+          outputTokens: 20,
+          reasoningTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cost: 0,
+          finish: "stop",
+          durationMs: 1,
+          createdAt: 1,
+        },
+      }),
+    }).build({
+      sessionID: "ses_tree",
+      lineage,
+      usableInputTokens: 8_000,
+      protectedSources: 0,
+      reason: "hard_built",
+    })
+
+    const summary = await store.getSummary("ses_tree", revision!.items[0]!.id)
+    expect(summary?.generationMode).toBe("deterministic")
+    expect(summary?.text).toBe(fallbackText)
+    expect((await store.listAttempts("ses_tree")).map((attempt) => attempt.errorCode)).toEqual([
+      "lcm_summary_protocol_scaffolding",
+      "lcm_summary_protocol_scaffolding",
+    ])
+    store.close()
+  })
+
   test("rejects model output that the product generator could not ground in its supplied children", async () => {
     const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
     const sources = [makeSource(0)]

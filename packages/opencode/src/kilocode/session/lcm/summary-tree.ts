@@ -24,6 +24,8 @@ const PROTOCOL_LINE = /(?:^|\n)\s*(?:received|acknowledged|understood|ok(?:ay)?)
 const TRANSFORMER_COMPLETION_LEAD =
   /^(?:i(?:'ve| have)|we(?:'ve| have))\s+(?:updated|implemented|completed|made|applied|finished|fixed|changed|created|added|removed)\b/iu
 const ANSWER_WRAPPER = /^(?:<[a-z0-9_-]*(?:final|answer)[a-z0-9_-]*>|(?:```(?:json)?\s*)?\{\s*"answer"\s*:)/iu
+const SUMMARY_TASK_SCAFFOLDING =
+  /(?:\baccording to the system task\b|\bactive instruction is to summari[sz]e\b|\bno (?:summary|action|further response) (?:is )?required\b|\bsummary has been provided\b|^(?:i(?:'ll| will)|let me) summari[sz]e\b)/iu
 const REFUSAL = /^(?:i(?:'m| am) sorry\b|i (?:cannot|can't|won't|am unable to)\b)/iu
 const GROUNDING_STOP_WORDS = new Set(
   `about after again against all also and any are because been before being between both but can conversation could
@@ -212,7 +214,12 @@ function candidateIssue(
   if (trimmed.length === 0) return "empty" as const
   if (candidate.attempt && candidate.attempt.finish !== "stop") return "incomplete" as const
   if (PROTOCOL_ONLY.test(trimmed) || REFUSAL.test(trimmed)) return "protocol_output" as const
-  if (PROTOCOL_LINE.test(trimmed) || TRANSFORMER_COMPLETION_LEAD.test(trimmed) || ANSWER_WRAPPER.test(trimmed))
+  if (
+    PROTOCOL_LINE.test(trimmed) ||
+    TRANSFORMER_COMPLETION_LEAD.test(trimmed) ||
+    ANSWER_WRAPPER.test(trimmed) ||
+    SUMMARY_TASK_SCAFFOLDING.test(trimmed)
+  )
     return "protocol_scaffolding" as const
   if (candidate.grounded === false) return "ungrounded" as const
   if (candidateBytes >= sourceBytes || candidateTokens >= sourceTokens) return "not_reduced" as const
@@ -248,6 +255,7 @@ function attachRecoveryHandles(
     PROTOCOL_LINE.test(trimmed) ||
     TRANSFORMER_COMPLETION_LEAD.test(trimmed) ||
     ANSWER_WRAPPER.test(trimmed) ||
+    SUMMARY_TASK_SCAFFOLDING.test(trimmed) ||
     REFUSAL.test(trimmed) ||
     candidate.grounded === false ||
     substantiveCharacters(trimmed) < 16

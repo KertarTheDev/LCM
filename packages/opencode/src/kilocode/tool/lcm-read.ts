@@ -9,6 +9,7 @@ import {
   LcmToolError,
   loadMemory,
   recoveryCallGuidance,
+  repeatedRecoveryResult,
   requireSource,
   sourceChronology,
 } from "./lcm-common"
@@ -137,9 +138,20 @@ export const LcmReadTool = Tool.define(
               throw new LcmToolError("lcm_invalid_cursor", "The cursor does not belong to this source read.")
             }
           }
+          const repeated = repeatedRecoveryResult({
+            tool: "lcm_read",
+            previousIdenticalCalls,
+            sourceScoped: true,
+          })
           if (content.immutableMedia) {
             if (offset !== 0 || params.endOffset !== undefined)
               throw new LcmToolError("lcm_invalid_cursor", "Media sources do not use byte bounds or cursors.")
+            if (repeated)
+              return {
+                title: `Repeated Conversation Memory read suppressed: ${source.id}`,
+                output: inertOutput({ ...repeated, chronology, sourceID: source.id }),
+                metadata: { bytes: 0, repeatedInput: true, duplicatePayloadSuppressed: true, truncated: false },
+              }
             const media = content.immutableMedia
             const result = {
               callGuidance,
@@ -188,6 +200,12 @@ export const LcmReadTool = Tool.define(
               "lcm_invalid_cursor",
               "The source byte offset is not a UTF-8 boundary. Copy nextOffset/nextCursor from lcm_read or a byteRange start from lcm_grep; do not probe nearby offsets.",
             )
+          if (repeated)
+            return {
+              title: `Repeated Conversation Memory read suppressed: ${source.id}`,
+              output: inertOutput({ ...repeated, chronology, sourceID: source.id }),
+              metadata: { bytes: 0, repeatedInput: true, duplicatePayloadSuppressed: true, truncated: false },
+            }
           const chunk = textChunk(content.content, offset, maxBytes, params.endOffset)
           const continuation = readContinuation(chunk.end, chunk.total, chunk.rangeEnd)
           const result = {

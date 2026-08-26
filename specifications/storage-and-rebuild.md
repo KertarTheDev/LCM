@@ -6,13 +6,13 @@ Kilo SQLite is the sole raw conversation source of truth. Conversation Memory us
 sidecar and never stores full raw source bodies. Exact reads resolve the retained Kilo message/part and verify its
 digest.
 
-Schema version 12 contains session lineage and durable `consumed_through`, bounded source metadata/excerpts, immutable
+Schema version 13 contains session lineage and durable `consumed_through`, bounded source metadata/excerpts, immutable
 summary nodes/edges/attempts, frontier revisions, activity, normalized context frames/blobs, and leases. Tree policy
-`lcm-tree-v9` is part of summary structural identity. Version 12 deliberately rebuilds version-11 sidecars so retained
-summaries use quoted historical payload isolation, keep in-progress hypotheses provisional, reject embedded answer
-wrappers, and can fall back to fair full-body extractive indexes instead of prefix-only metadata. It also exposes exact
-ordered semantic query ranges, cursor-bound read end offsets, and copy-ready final occurrence pages. The disposable
-sidecar rebuild does not modify Kilo SQLite.
+`lcm-tree-v10` is part of summary structural identity. Version 13 deliberately rebuilds version-12 sidecars so retained
+summaries reject summary-task/protocol commentary that would displace durable evidence, in addition to the existing
+quoted-payload, provisional-state, answer-wrapper, and fair full-body fallback protections. Projection also derives
+copy-ready paired semantic-unit ranges from exact structural anchors. The disposable sidecar rebuild does not modify
+Kilo SQLite.
 
 Consumption advances only for the exact lineage and only after a successful terminal provider response. It is clamped
 to indexed history. On first cache creation or recovery, retained successful non-summary assistant responses
