@@ -2,6 +2,131 @@
   <a href="../README.md">English</a> | <a href="README.zh.md">简体中文</a> | <a href="README.zht.md">繁體中文</a> | <a href="README.ko.md">한국어</a> | <a href="README.de.md">Deutsch</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.it.md">Italiano</a> | <a href="README.da.md">Dansk</a> | <a href="README.ja.md">日本語</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.bs.md">Bosanski</a> | <a href="README.ar.md">العربية</a> | <a href="README.no.md">Norsk</a> | <a href="README.br.md">Português (Brasil)</a> | <a href="README.th.md">ไทย</a> | <a href="README.tr.md">Türkçe</a> | <a href="README.uk.md">Українська</a> | <a href="README.bn.md">বাংলা</a> | <a href="README.gr.md">Ελληνικά</a> | Tiếng Việt
 </p>
 
+<!-- LCM_ONBOARDING_START -->
+<a id="install-lcm-prerelease"></a>
+## Dùng thử bản phát hành trước LCM
+
+Bản Kilo Code thử nghiệm này giúp bạn không mất mạch trong những cuộc trò chuyện dài: ngữ cảnh cũ đã dùng được gom thành cây tóm tắt có thể tìm kiếm. Nội dung gần đây vẫn được giữ nguyên, còn trợ lý có thể lấy lại các chi tiết trước đó khi cần.
+
+> [!IMPORTANT]
+> Bản có LCM chỉ được phát hành trong mục GitHub Releases của kho mã này. Marketplace, Open VSX, npm, Homebrew, AUR, dịch vụ đám mây và JetBrains sẽ cài bản Kilo Code chính thức, không có LCM.
+
+[Muốn hiểu ý tưởng? Hãy đọc bài báo LCM gốc của Clint Ehrlich và Theodore Blackman.](https://arxiv.org/abs/2605.04050)
+
+**Bản hiện tại:** [`v7.4.23-lcm.13`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.13)
+
+### Chọn file tải
+
+Chọn VSIX nếu dùng VS Code hoặc VSCodium. Chọn gói CLI nếu làm việc trong terminal. Bạn có thể cài cả hai.
+
+#### Xác định hệ thống
+
+Trên Windows xem Settings → System → About → System type; trên macOS xem Apple menu → About This Mac; trên Linux chạy uname -m. x86_64 hoặc amd64 là x64, còn arm64 hoặc aarch64 là ARM64.
+
+Phần lớn bản phân phối Linux cho máy tính để bàn dùng glibc; Alpine và các container nhỏ dùng musl. Chỉ chọn baseline cho bộ xử lý x64 cũ hoặc khi CLI thông thường dừng với lỗi illegal instruction. Không có VSIX baseline riêng.
+
+#### VS Code / VSCodium
+
+Cần VS Code hoặc VSCodium 1.105.1 trở lên. VSIX dùng cùng extension ID với Kilo Code thường nên sẽ thay thế bản Marketplace đã cài.
+
+|Hệ thống|File|
+|---|---|
+|Windows x64|`kilo-vscode-win32-x64.vsix`|
+|Windows ARM64|`kilo-vscode-win32-arm64.vsix`|
+|macOS x64 (Intel)|`kilo-vscode-darwin-x64.vsix`|
+|macOS ARM64 (Apple Silicon)|`kilo-vscode-darwin-arm64.vsix`|
+|Linux x64 (glibc)|`kilo-vscode-linux-x64.vsix`|
+|Linux ARM64 (glibc)|`kilo-vscode-linux-arm64.vsix`|
+|Alpine x64 (musl)|`kilo-vscode-alpine-x64.vsix`|
+|Alpine ARM64 (musl)|`kilo-vscode-alpine-arm64.vsix`|
+
+Tải đúng file, tắt tự động cập nhật Kilo Code rồi chọn Extensions → … → Install from VSIX. Reload cửa sổ sau khi cài. Bạn cũng có thể dùng lệnh bên dưới.
+
+```bash
+code --install-extension ./kilo-vscode-linux-x64.vsix --force
+codium --install-extension ./kilo-vscode-linux-x64.vsix --force
+```
+
+#### CLI
+
+Tải một gói trong bảng. Giải nén toàn bộ vào folder riêng và giữ mọi file hỗ trợ bên cạnh file chạy.
+
+|Hệ thống|File|
+|---|---|
+|Windows x64|`kilo-windows-x64.zip`|
+|Windows x64 baseline|`kilo-windows-x64-baseline.zip`|
+|Windows ARM64|`kilo-windows-arm64.zip`|
+|macOS x64 (Intel)|`kilo-darwin-x64.zip`|
+|macOS x64 baseline|`kilo-darwin-x64-baseline.zip`|
+|macOS ARM64 (Apple Silicon)|`kilo-darwin-arm64.zip`|
+|Linux x64 (glibc)|`kilo-linux-x64.tar.gz`|
+|Linux x64 baseline (glibc)|`kilo-linux-x64-baseline.tar.gz`|
+|Linux ARM64 (glibc)|`kilo-linux-arm64.tar.gz`|
+|Linux x64 (musl)|`kilo-linux-x64-musl.tar.gz`|
+|Linux x64 baseline (musl)|`kilo-linux-x64-baseline-musl.tar.gz`|
+|Linux ARM64 (musl)|`kilo-linux-arm64-musl.tar.gz`|
+
+Chạy binary đã giải nén một lần trước khi thêm folder vào PATH. Nếu sau đó một Kilo khác chạy, dùng lệnh kiểm tra đường dẫn bên dưới và đặt folder LCM sớm hơn trong PATH.
+
+```bash
+mkdir -p kilo-lcm
+tar -xzf kilo-linux-x64.tar.gz -C kilo-lcm
+./kilo-lcm/kilo --version
+
+unzip kilo-darwin-arm64.zip -d kilo-lcm
+./kilo-lcm/kilo --version
+
+which -a kilo
+```
+
+```powershell
+Expand-Archive .\kilo-windows-x64.zip .\kilo-lcm
+.\kilo-lcm\kilo.exe --version
+where.exe kilo
+```
+
+### Thiết lập Kilo và LCM
+
+Trước tiên, hãy kết nối nhà cung cấp bạn thường dùng và chọn một mô hình. Conversation Memory được bật mặc định. Kiểm tra trong Settings → Experimental, rồi mở Settings → Context; ngưỡng khởi động ban đầu là 40%. Mô hình tùy chỉnh cần giới hạn ngữ cảnh và đầu ra lớn hơn 0; giới hạn đầu vào là tùy chọn.
+
+```jsonc
+{
+  "experimental": {
+    "conversation_memory": true
+  },
+  "conversation_memory": {
+    "soft_threshold_percent": 40
+  }
+}
+```
+
+Khi LCM bật, compaction.auto chỉ điều khiển hệ thống nén cũ của Kilo; nó không tắt LCM.
+
+#### Ollama
+
+Với Ollama, dùng địa chỉ server thật—thường là localhost:11434 trên cùng máy hoặc địa chỉ LAN của máy tính từ thiết bị khác. Đảm bảo Ollama lắng nghe ở đó, firewall cho phép và num_ctx ít nhất bằng giới hạn context đã nhập trong Kilo.
+
+### Kiểm tra hoạt động
+
+Bắt đầu một cuộc trò chuyện, chọn nhà cung cấp và mô hình rồi chạy /lcm status. Trạng thái phải là enabled và dung lượng phải được nhận diện. Phần đầu tác vụ hoặc trang Context hiển thị mức sử dụng và hoạt động của LCM. /compact chạy một vòng LCM thủ công; cuộc trò chuyện mới và ngắn có thể chưa có gì để tóm tắt.
+
+### Mẹo hữu ích
+
+Việc tóm tắt cần gọi mô hình nên có thể tốn thêm một chút thời gian và chi phí. Hãy bắt đầu với 40%; giảm xuống để xử lý sớm hơn hoặc tăng lên để giảm số lần gọi. Bộ nhớ LCM chỉ thuộc cuộc trò chuyện hiện tại. Bản xuất ngữ cảnh có thể chứa câu lệnh và kết quả công cụ nhạy cảm.
+
+#### Cách sửa nhanh
+
+Nếu thấy lcm_capacity_unknown, điền giới hạn context và output của custom model đã chọn. Nếu extension đổi lại sau khi restart, tắt auto-update và cài lại VSIX. Nếu sai CLI, kiểm tra which -a kilo hoặc where.exe kilo. Trên Alpine dùng musl; CPU x64 cũ thử baseline.
+
+#### Cập nhật hoặc quay lại
+
+Để cập nhật, cài VSIX mới đè lên bản cũ hoặc thay thư mục CLI đã giải nén. Cuộc trò chuyện vẫn nằm trong SQLite của Kilo. Để quay lại nhanh, đặt experimental.conversation_memory thành false; bạn cũng có thể cài lại bản Kilo Code chính thức hoặc một bản phát hành trước cũ hơn.
+
+> [!NOTE]
+> Phần còn lại của trang mô tả bản Kilo Code chính thức. Các liên kết cài đặt thông thường bên dưới không cài bản có LCM này.
+
+<!-- LCM_ONBOARDING_END -->
+
 <p align="center">
   <a href="https://kilo.ai"><img width="250" alt="Kilo Code logo" src="https://github.com/user-attachments/assets/bdb0c174-b9fd-40ad-a47b-f3aab9b54e8d" /></a>
 </p>

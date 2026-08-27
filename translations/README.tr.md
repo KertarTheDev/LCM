@@ -2,6 +2,131 @@
   <a href="../README.md">English</a> | <a href="README.zh.md">简体中文</a> | <a href="README.zht.md">繁體中文</a> | <a href="README.ko.md">한국어</a> | <a href="README.de.md">Deutsch</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.it.md">Italiano</a> | <a href="README.da.md">Dansk</a> | <a href="README.ja.md">日本語</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.bs.md">Bosanski</a> | <a href="README.ar.md">العربية</a> | <a href="README.no.md">Norsk</a> | <a href="README.br.md">Português (Brasil)</a> | <a href="README.th.md">ไทย</a> | Türkçe | <a href="README.uk.md">Українська</a> | <a href="README.bn.md">বাংলা</a> | <a href="README.gr.md">Ελληνικά</a> | <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
+<!-- LCM_ONBOARDING_START -->
+<a id="install-lcm-prerelease"></a>
+## LCM ön sürümünü deneyin
+
+Bu deneysel Kilo Code derlemesi, kullanılmış eski bağlamı aranabilir bir özet ağacına dönüştürerek uzun sohbetleri kullanışlı tutar. Son çalışmalarınız aynen kalır; ajan gerektiğinde eski ayrıntıları geri getirebilir.
+
+> [!IMPORTANT]
+> LCM içeren derlemeler yalnızca bu deponun GitHub Releases bölümünden dağıtılır. Marketplace, Open VSX, npm, Homebrew, AUR, bulut hizmetleri ve JetBrains üzerinden yapılan kurulumlar LCM içermeyen resmî Kilo Code sürümünü yükler.
+
+[Fikrin kaynağını mı merak ediyorsunuz? Clint Ehrlich ve Theodore Blackman'ın özgün LCM makalesini okuyun.](https://arxiv.org/abs/2605.04050)
+
+**Güncel ön sürüm:** [`v7.4.23-lcm.13`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.13)
+
+### İndirmeyi seçin
+
+VS Code veya VSCodium için VSIX, terminal için CLI arşivi seçin. İkisini birden kurabilirsiniz.
+
+#### Sisteminizi bulun
+
+Windows'ta Settings → System → About → System type; macOS'ta Apple menu → About This Mac bölümüne bakın; Linux'ta uname -m çalıştırın. x86_64 veya amd64 x64, arm64 veya aarch64 ARM64 demektir.
+
+Çoğu masaüstü Linux dağıtımı glibc, Alpine ve küçük konteynerler ise musl kullanır. baseline seçeneğini yalnızca eski bir x64 işlemci için veya normal CLI illegal instruction hatasıyla kapanırsa kullanın. Ayrı bir baseline VSIX yoktur.
+
+#### VS Code / VSCodium
+
+VS Code veya VSCodium 1.105.1 ya da daha yenisi gerekir. VSIX normal Kilo Code uzantı kimliğini kullanır ve kurulu Marketplace sürümünün yerini alır.
+
+|Sistem|Dosya|
+|---|---|
+|Windows x64|`kilo-vscode-win32-x64.vsix`|
+|Windows ARM64|`kilo-vscode-win32-arm64.vsix`|
+|macOS x64 (Intel)|`kilo-vscode-darwin-x64.vsix`|
+|macOS ARM64 (Apple Silicon)|`kilo-vscode-darwin-arm64.vsix`|
+|Linux x64 (glibc)|`kilo-vscode-linux-x64.vsix`|
+|Linux ARM64 (glibc)|`kilo-vscode-linux-arm64.vsix`|
+|Alpine x64 (musl)|`kilo-vscode-alpine-x64.vsix`|
+|Alpine ARM64 (musl)|`kilo-vscode-alpine-arm64.vsix`|
+
+Doğru dosyayı indirin, Kilo Code otomatik güncellemesini kapatın ve Extensions → … → Install from VSIX seçeneğini kullanın. Ardından pencereyi yenileyin. Aşağıdaki komutlardan birini de kullanabilirsiniz.
+
+```bash
+code --install-extension ./kilo-vscode-linux-x64.vsix --force
+codium --install-extension ./kilo-vscode-linux-x64.vsix --force
+```
+
+#### CLI
+
+Tablodan bir arşiv indirin. Arşivin tamamını ayrı bir klasöre çıkarın ve bütün destek dosyalarını çalıştırılabilir dosyanın yanında tutun.
+
+|Sistem|Dosya|
+|---|---|
+|Windows x64|`kilo-windows-x64.zip`|
+|Windows x64 baseline|`kilo-windows-x64-baseline.zip`|
+|Windows ARM64|`kilo-windows-arm64.zip`|
+|macOS x64 (Intel)|`kilo-darwin-x64.zip`|
+|macOS x64 baseline|`kilo-darwin-x64-baseline.zip`|
+|macOS ARM64 (Apple Silicon)|`kilo-darwin-arm64.zip`|
+|Linux x64 (glibc)|`kilo-linux-x64.tar.gz`|
+|Linux x64 baseline (glibc)|`kilo-linux-x64-baseline.tar.gz`|
+|Linux ARM64 (glibc)|`kilo-linux-arm64.tar.gz`|
+|Linux x64 (musl)|`kilo-linux-x64-musl.tar.gz`|
+|Linux x64 baseline (musl)|`kilo-linux-x64-baseline-musl.tar.gz`|
+|Linux ARM64 (musl)|`kilo-linux-arm64-musl.tar.gz`|
+
+Klasörü PATH'e eklemeden önce çıkarılan programı bir kez çalıştırın. Sonra başka Kilo açılırsa aşağıdaki yol kontrollerini kullanın ve LCM klasörünü PATH'te öne alın.
+
+```bash
+mkdir -p kilo-lcm
+tar -xzf kilo-linux-x64.tar.gz -C kilo-lcm
+./kilo-lcm/kilo --version
+
+unzip kilo-darwin-arm64.zip -d kilo-lcm
+./kilo-lcm/kilo --version
+
+which -a kilo
+```
+
+```powershell
+Expand-Archive .\kilo-windows-x64.zip .\kilo-lcm
+.\kilo-lcm\kilo.exe --version
+where.exe kilo
+```
+
+### Kilo ve LCM kurulumu
+
+Önce her zamanki sağlayıcınızı bağlayın ve bir model seçin. Conversation Memory varsayılan olarak açıktır. Bunu Settings → Experimental bölümünde kontrol edin, ardından Settings → Context bölümünü açın; başlangıç eşiği %40'tır. Özel modellerde bağlam ve çıktı sınırları pozitif olmalıdır; giriş sınırı isteğe bağlıdır.
+
+```jsonc
+{
+  "experimental": {
+    "conversation_memory": true
+  },
+  "conversation_memory": {
+    "soft_threshold_percent": 40
+  }
+}
+```
+
+LCM açıkken compaction.auto yalnızca Kilo'nun eski sıkıştırma sistemini yönetir; LCM'i kapatmaz.
+
+#### Ollama
+
+Ollama için gerçek sunucu adresini kullanın—aynı makinede genellikle localhost:11434, başka cihazdan bilgisayarın LAN adresi. Ollama bu adreste dinlemeli, firewall izin vermeli ve num_ctx Kilo'ya girilen context limitinden küçük olmamalıdır.
+
+### Çalıştığını doğrulayın
+
+Bir sohbet başlatın, sağlayıcıyı ve modeli seçin, ardından /lcm status çalıştırın. Durum enabled, kapasite ise biliniyor olmalıdır. Görev başlığı veya Context sayfası kullanımı ve LCM etkinliğini gösterir. /compact bir manuel LCM döngüsü başlatır; kısa ve yeni bir sohbette henüz özetlenecek bir şey olmayabilir.
+
+### Faydalı ipuçları
+
+Özetleme model çağrıları kullanır; biraz gecikme ve maliyet ekleyebilir. %40 ile başlayın; daha erken bakım için azaltın, daha az çağrı için artırın. LCM belleği mevcut sohbete aittir. Context export hassas prompt ve araç çıktıları içerebilir.
+
+#### Hızlı çözümler
+
+lcm_capacity_unknown görürseniz seçili özel modelin context ve output limitlerini girin. Uzantı yeniden başlatınca değişirse auto-update'i kapatıp VSIX'i yeniden kurun. Yanlış CLI için which -a kilo veya where.exe kilo kullanın. Alpine'da musl, eski x64'te baseline deneyin.
+
+#### Güncelleme veya geri dönüş
+
+Güncellemek için yeni VSIX'i eskisinin üstüne kurun veya çıkarılmış CLI klasörünü değiştirin. Sohbetler Kilo SQLite veritabanında kalır. Hızlıca geri dönmek için experimental.conversation_memory değerini false yapın; resmî Kilo Code sürümünü veya daha eski bir ön sürümü de yeniden kurabilirsiniz.
+
+> [!NOTE]
+> Sayfanın geri kalanı resmî Kilo Code sürümünü anlatır. Aşağıdaki normal kurulum bağlantıları bu LCM sürümünü kurmaz.
+
+<!-- LCM_ONBOARDING_END -->
+
 <p align="center">
   <a href="https://kilo.ai"><img width="250" alt="Kilo Code logo" src="https://github.com/user-attachments/assets/bdb0c174-b9fd-40ad-a47b-f3aab9b54e8d" /></a>
 </p>

@@ -2,6 +2,131 @@
   <a href="../README.md">English</a> | <a href="README.zh.md">简体中文</a> | <a href="README.zht.md">繁體中文</a> | <a href="README.ko.md">한국어</a> | <a href="README.de.md">Deutsch</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.it.md">Italiano</a> | <a href="README.da.md">Dansk</a> | <a href="README.ja.md">日本語</a> | <a href="README.pl.md">Polski</a> | Русский | <a href="README.bs.md">Bosanski</a> | <a href="README.ar.md">العربية</a> | <a href="README.no.md">Norsk</a> | <a href="README.br.md">Português (Brasil)</a> | <a href="README.th.md">ไทย</a> | <a href="README.tr.md">Türkçe</a> | <a href="README.uk.md">Українська</a> | <a href="README.bn.md">বাংলা</a> | <a href="README.gr.md">Ελληνικά</a> | <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
+<!-- LCM_ONBOARDING_START -->
+<a id="install-lcm-prerelease"></a>
+## Попробуйте пререлиз LCM
+
+Эта экспериментальная сборка Kilo Code помогает не терять нить в длинных чатах: старый уже использованный контекст превращается в дерево доступных для поиска сводок. Последние сообщения остаются без изменений, а агент при необходимости может восстановить прежние подробности.
+
+> [!IMPORTANT]
+> Сборки с LCM распространяются только через GitHub Releases этого репозитория. Marketplace, Open VSX, npm, Homebrew, AUR, облачные сервисы и JetBrains устанавливают официальную версию Kilo Code без LCM.
+
+[Хотите понять идею? Прочитайте оригинальную статью LCM Клинта Эрлиха и Теодора Блэкмана.](https://arxiv.org/abs/2605.04050)
+
+**Текущий пререлиз:** [`v7.4.23-lcm.13`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.13)
+
+### Выберите загрузку
+
+Для VS Code или VSCodium выберите VSIX, для терминала — архив CLI. Можно установить оба варианта.
+
+#### Определите систему
+
+В Windows откройте Settings → System → About → System type, в macOS — Apple menu → About This Mac, в Linux выполните uname -m. x86_64 или amd64 означает x64, arm64 или aarch64 — ARM64.
+
+Большинство настольных дистрибутивов Linux использует glibc, а Alpine и небольшие контейнеры — musl. Вариант baseline нужен только для старого процессора x64 или если обычный CLI завершается с ошибкой illegal instruction. Отдельного VSIX в варианте baseline нет.
+
+#### VS Code / VSCodium
+
+Нужен VS Code или VSCodium 1.105.1 или новее. VSIX использует обычный ID расширения Kilo Code, поэтому заменяет установленную сборку Marketplace.
+
+|Система|Файл|
+|---|---|
+|Windows x64|`kilo-vscode-win32-x64.vsix`|
+|Windows ARM64|`kilo-vscode-win32-arm64.vsix`|
+|macOS x64 (Intel)|`kilo-vscode-darwin-x64.vsix`|
+|macOS ARM64 (Apple Silicon)|`kilo-vscode-darwin-arm64.vsix`|
+|Linux x64 (glibc)|`kilo-vscode-linux-x64.vsix`|
+|Linux ARM64 (glibc)|`kilo-vscode-linux-arm64.vsix`|
+|Alpine x64 (musl)|`kilo-vscode-alpine-x64.vsix`|
+|Alpine ARM64 (musl)|`kilo-vscode-alpine-arm64.vsix`|
+
+Скачайте подходящий файл, отключите автообновление Kilo Code и выберите Extensions → … → Install from VSIX. После установки перезагрузите окно. Можно использовать и команды ниже.
+
+```bash
+code --install-extension ./kilo-vscode-linux-x64.vsix --force
+codium --install-extension ./kilo-vscode-linux-x64.vsix --force
+```
+
+#### CLI
+
+Скачайте один архив из таблицы. Полностью распакуйте его в отдельную папку и оставьте все служебные файлы рядом с программой.
+
+|Система|Файл|
+|---|---|
+|Windows x64|`kilo-windows-x64.zip`|
+|Windows x64 baseline|`kilo-windows-x64-baseline.zip`|
+|Windows ARM64|`kilo-windows-arm64.zip`|
+|macOS x64 (Intel)|`kilo-darwin-x64.zip`|
+|macOS x64 baseline|`kilo-darwin-x64-baseline.zip`|
+|macOS ARM64 (Apple Silicon)|`kilo-darwin-arm64.zip`|
+|Linux x64 (glibc)|`kilo-linux-x64.tar.gz`|
+|Linux x64 baseline (glibc)|`kilo-linux-x64-baseline.tar.gz`|
+|Linux ARM64 (glibc)|`kilo-linux-arm64.tar.gz`|
+|Linux x64 (musl)|`kilo-linux-x64-musl.tar.gz`|
+|Linux x64 baseline (musl)|`kilo-linux-x64-baseline-musl.tar.gz`|
+|Linux ARM64 (musl)|`kilo-linux-arm64-musl.tar.gz`|
+
+Запустите распакованный файл до добавления папки в PATH. Если позже запускается другой Kilo, проверьте пути командами ниже и поставьте папку LCM раньше в PATH.
+
+```bash
+mkdir -p kilo-lcm
+tar -xzf kilo-linux-x64.tar.gz -C kilo-lcm
+./kilo-lcm/kilo --version
+
+unzip kilo-darwin-arm64.zip -d kilo-lcm
+./kilo-lcm/kilo --version
+
+which -a kilo
+```
+
+```powershell
+Expand-Archive .\kilo-windows-x64.zip .\kilo-lcm
+.\kilo-lcm\kilo.exe --version
+where.exe kilo
+```
+
+### Настройте Kilo и LCM
+
+Сначала подключите привычного провайдера и выберите модель. Conversation Memory включена по умолчанию. Проверьте это в Settings → Experimental, затем откройте Settings → Context; начальный порог составляет 40%. Для пользовательских моделей нужны положительные лимиты контекста и вывода, а лимит ввода можно не указывать.
+
+```jsonc
+{
+  "experimental": {
+    "conversation_memory": true
+  },
+  "conversation_memory": {
+    "soft_threshold_percent": 40
+  }
+}
+```
+
+При включённом LCM параметр compaction.auto управляет только старой системой сжатия Kilo и не отключает LCM.
+
+#### Ollama
+
+Для Ollama укажите настоящий адрес сервера: обычно localhost:11434 на том же компьютере или его LAN-адрес с другого устройства. Ollama должна слушать этот адрес, firewall — разрешать доступ, а num_ctx модели должен быть не меньше лимита контекста в Kilo.
+
+### Проверьте работу
+
+Начните чат, выберите провайдера и модель и выполните /lcm status. Статус должен быть enabled, а ёмкость — определена. Заголовок задачи или страница Context покажет использование контекста и работу LCM. /compact запускает один ручной цикл; в коротком новом чате пока может быть нечего сводить.
+
+### Полезные советы
+
+Для создания сводок вызывается модель, поэтому могут немного вырасти задержка и стоимость. Начните с 40%; уменьшите значение для более ранней обработки или увеличьте, чтобы сократить число вызовов. Память LCM относится только к текущему чату. Экспорт контекста может содержать конфиденциальные промпты и вывод инструментов.
+
+#### Быстрые решения
+
+Если появился lcm_capacity_unknown, заполните лимиты контекста и вывода выбранной пользовательской модели. Если после перезапуска расширение переключается на другую версию, отключите автообновление и снова установите VSIX. Если запускается не тот CLI, проверьте which -a kilo или where.exe kilo. Для Alpine берите musl, для старого x64 — baseline.
+
+#### Обновление или откат
+
+Для обновления установите новый VSIX поверх старого или замените распакованную папку CLI. Чаты останутся в SQLite Kilo. Для быстрого отката задайте experimental.conversation_memory значение false; также можно вернуть официальную версию Kilo Code или предыдущий пререлиз.
+
+> [!NOTE]
+> Остальная страница описывает официальную версию Kilo Code. Обычные ссылки установки ниже не устанавливают эту версию с LCM.
+
+<!-- LCM_ONBOARDING_END -->
+
 <p align="center">
   <a href="https://kilo.ai"><img width="250" alt="Kilo Code logo" src="https://github.com/user-attachments/assets/bdb0c174-b9fd-40ad-a47b-f3aab9b54e8d" /></a>
 </p>
