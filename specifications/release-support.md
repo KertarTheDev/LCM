@@ -12,7 +12,64 @@ replacement first, then remove each exact superseded release ID and matching tag
 history. Never select a deletion target from `latest` or tag ordering; capture and re-resolve its tag, release ID, and
 candidate SHA immediately before deletion.
 
-The current public prerelease is `v7.4.23-lcm.12`. It was published on 2026-08-27 from candidate
+The current public prerelease is `v7.4.23-lcm.13`. It was published on 2026-08-27 from candidate
+`6f3c08417b89b8195c33130658e013912f25e1ca`, containing verified product
+`e63a527f31f6f819628f2a733fb7e565a9e1c266`. Exact-SHA workflow run
+[`33101947543`](https://github.com/KertarTheDev/LCM/actions/runs/33101947543) completed successfully. Its LCM job
+proved exact 27-path overlay ancestry, focused v7.4.23 adaptation tests, all affected-package typechecks, stable
+second contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory runtime
+smoke; unrelated upstream version, build, validation, and publish jobs were skipped. Release
+[`378031971`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.13) is a non-draft prerelease whose tag
+resolves to the candidate SHA. Its published body contains the reviewed
+`What changed since v7.4.23-lcm.12` delta, honest 175k limitations, storage and upgrade guidance, and the exact tag
+and candidate. Its exact GitHub-reported asset manifest is:
+
+|Asset|Bytes|SHA-256|
+|---|---:|---|
+|`kilo-darwin-arm64.zip`|52,558,350|`56a628d9335f1ff5a3e90ced187b2b3555e36906da3a4219a1e8592e98d995af`|
+|`kilo-darwin-x64-baseline.zip`|54,810,868|`c38a307818d7636e5e03c1183b3bb4ca2809a4bc5ddafd3c78b60e6742dd34ea`|
+|`kilo-darwin-x64.zip`|54,810,868|`7bec0ee7aa74d704d65f5c6da77235d7388586cfc266987b6b9be11682210227`|
+|`kilo-linux-arm64-musl.tar.gz`|69,333,451|`9e4ea473b0a6429f582cecbebe78d4b21cd98edbff2d32b53b2f0708e01bb7e2`|
+|`kilo-linux-arm64.tar.gz`|67,211,531|`91d85e65a844c00be17adc448b5c0070622ee35ca8909c049342185fb3c8bf34`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|69,819,599|`7a42a3fda504f3d3eaa1b2bef8cddd8aab77df1ec6db92a1e41f0efd493a6480`|
+|`kilo-linux-x64-baseline.tar.gz`|67,469,042|`723e6f92cffe05aabfb69b36005e5a9ba838a8a808e2c06905f42be83c64dd42`|
+|`kilo-linux-x64-musl.tar.gz`|69,820,472|`509487dc5f07831cd9e52049b5f10e1a938cf78267c61040ba75badf2c2a2ec6`|
+|`kilo-linux-x64.tar.gz`|67,469,040|`72ec1f71e8e8b3934c59cca84a4826d681bfcbc016ea51acb3247011ae5a96eb`|
+|`kilo-vscode-alpine-arm64.vsix`|110,141,739|`0004ad2d78d717b71f88d80d337c3229c54cba1a115fcc9ccf8cfd9279aa865d`|
+|`kilo-vscode-alpine-x64.vsix`|117,345,019|`ea532d36143197e453c744ba8e5311a6bd8ac12edcfe2fd61b2ec4627de000e4`|
+|`kilo-vscode-darwin-arm64.vsix`|92,873,656|`1fc44cdabd23fcfd914521ab117e0ab2524e2fd51a6c3341c51da577bbcfa66b`|
+|`kilo-vscode-darwin-x64.vsix`|100,943,334|`38add975380c7ed98306d49d59dd294b72c5fed2b70ce81c5286306cfc5b2d81`|
+|`kilo-vscode-linux-arm64.vsix`|107,973,591|`5fc66425b3683e0a1d07a0ebe716f254adfc1094458ee5c9a052f9eae2f4faba`|
+|`kilo-vscode-linux-x64.vsix`|114,918,416|`3de1f13ecc07abb2a966d2bf4b281ca64cb7bdb88f809cc0d155752d75b5d0c0`|
+|`kilo-vscode-win32-arm64.vsix`|89,750,822|`da1db7fc78b334678d6e243e501a4ede64d3838da9fc5654a70029383d13cb75`|
+|`kilo-vscode-win32-x64.vsix`|113,794,579|`d4eceaf004a69ed08b23c411170f790831a6ac3c45adedc5a9e56c7288f02198`|
+|`kilo-windows-arm64.zip`|65,146,176|`231bc5d4ef2b15f4164d1c89923e04bb77fe9844506da4ea46c946af259e0444`|
+|`kilo-windows-x64-baseline.zip`|66,819,280|`4ba8ce41b3d49108ac86274864d73254756fd2b18182e0551997a55d567c9867`|
+|`kilo-windows-x64.zip`|66,819,280|`3013c1e3d74c1f6add87185a924f7a18e6d83ecfc1a8a1ff8a5d356efe21649d`|
+
+`.13` lets an explicitly bounded `lcm_expand_query` use up to 50% of usable model input, capped at 64k tokens, while
+unscoped exploration retains its 20%/16k limit. Deterministic water-filling redistributes unused allocation from
+short records so longer selected ranges can preserve the complete bounded semantic unit. Blank generated answers
+claiming `coverage: none` are rejected, transient semantic-provider fallback directs one identical exact retry before
+bounded verification, and other failure causes continue to require a narrower query. Boundary-sensitive synthesis
+now constructs an ordered event ledger and distinguishes new events from mentions, rejected attempts, and continuing
+effects. These are model-neutral recovery improvements; the five-tool contract, raw Kilo SQLite storage, and
+rebuildable sidecar schema are unchanged.
+
+The published `.12` qwen3.8 175k LCM-only baseline scored 0, 0.25, and 0. An exact-scope candidate canary improved the
+cross-episode list to 0.5 with full non-truncated semantic inputs, but the final three-question candidate repeat had
+one malformed-tool task failure and two zero scores while recording zero product findings, healthy LCM state, no
+legacy summaries, and no context-integrity loss. Retained traces attribute the misses to provider/model tool-call
+variance, repeated manual search after decisive evidence, and a benchmark cast-definition ambiguity; `.13` therefore
+does not claim a deterministic score gain. Focused and integration verification passed locally. The clean exact-SHA
+local release typecheck stopped safely under the VPS resource guard and was not resumed; canonical workflow run
+`33101947543` subsequently passed the authoritative typechecks and every release gate.
+
+The healthy `v7.4.23-lcm.12` release remains published because prerelease publication authorization does not authorize
+release or tag deletion. No release, tag, asset, or Actions history was deleted. It is retained pending separate
+deletion authorization even though `.13` is the independently verified current recommendation.
+
+The previous healthy prerelease is `v7.4.23-lcm.12`. It was published on 2026-08-27 from candidate
 `043871bfdf8db1f930ba9c24e2baa421db50ff15`, containing verified product
 `18b87e3110a09edb9f3d71188db7f74b108dfbb4`. Exact-SHA workflow run
 [`33048213799`](https://github.com/KertarTheDev/LCM/actions/runs/33048213799) completed successfully, including exact
