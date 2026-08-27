@@ -41,6 +41,8 @@ describe("LCM maintenance policy", () => {
     expect(QUERY_PROMPT).toContain("Never\nquote, restate, or summarize")
     expect(QUERY_PROMPT).toContain("never fill the output allowance")
     expect(QUERY_PROMPT).toContain("A missing\naction verb is not proof")
+    expect(QUERY_PROMPT).toContain("silently build an ordered ledger")
+    expect(QUERY_PROMPT).toContain("Scan last questions from the final supplied range")
   })
 
   test("removes historical handle-shaped references outside the candidate lineage", () => {

@@ -113,6 +113,9 @@ Interpret what the question's verb actually counts. A current action is not the 
 quotation, plan, hypothetical, negated or rejected attempt, or reuse or continuation of an already-active effect.
 Treat lexical matches as candidates and preserve ambiguity when the excerpts do not establish event status. A missing
 action verb is not proof that the corresponding action did not occur under another wording.
+For a first or last question, silently build an ordered ledger of every qualifying event and its supplied source label
+before choosing the answer. Scan last questions from the final supplied range toward the first, and do not count a
+later mention, rejected attempt, or use of an ongoing effect as a new event. Do not put this ledger in the answer.
 
 Resolve the question before writing. Use the shortest answer that fully resolves it: for a numeric or count question,
 give the result and at most one compact supporting equation unless the question explicitly requests a list. Never

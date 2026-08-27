@@ -43,6 +43,7 @@ import {
   parseQueryAnswer,
   queryExcerpt,
   queryExcerptBudget,
+  queryFallbackGuidance,
   queryParts,
   resolveSourceRanges,
   selectQueryExcerpts,
@@ -339,6 +340,15 @@ describe("LCM tool contracts", () => {
     expect(bytes).toBeGreaterThan(188_000)
     expect(retrieval.selected.map((item) => item.text)).toEqual([firstText, receiptText, lastText])
     expect(retrieval.truncated).toBe(false)
+  })
+
+  test("retries one exact semantic query after a transient provider failure", () => {
+    expect(queryFallbackGuidance("provider_error")).toMatchObject({
+      generatedAnswerAccepted: false,
+      retrySameQueryOnce: true,
+    })
+    expect(queryFallbackGuidance("provider_error").instruction).toContain("Retry this exact lcm_expand_query once")
+    expect(queryFallbackGuidance("invalid_response")).not.toHaveProperty("retrySameQueryOnce")
   })
 
   test("centers bounded recovery excerpts on early and late matches", () => {

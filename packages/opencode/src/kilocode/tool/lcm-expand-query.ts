@@ -422,6 +422,21 @@ export function honestQueryCoverage(answer: QueryAnswer | undefined, retrievalTr
   return { ...answer, coverage: "partial" as const }
 }
 
+export function queryFallbackGuidance(providerFailureReason: string | undefined) {
+  if (providerFailureReason === "provider_error")
+    return {
+      generatedAnswerAccepted: false,
+      retrySameQueryOnce: true,
+      instruction:
+        "The semantic provider remained unavailable after its ordinary retry. Retry this exact lcm_expand_query once before using grep or read; the question and exact scope do not need refinement. If that retry also fails, use the bounded evidence below or verify only a decisive candidate and boundary.",
+    }
+  return {
+    generatedAnswerAccepted: false,
+    instruction:
+      "The provider did not return a complete validated synthesis. The answer field contains bounded evidence excerpts, not a computed answer. Do not present it as the resolved answer or count omission markers as evidence. Use it to refine one genuinely different query or verify only the remaining candidates and boundaries.",
+  }
+}
+
 export function extractiveQueryFallback(
   selected: Array<{ id: string; text: string }>,
   terms: string[],
@@ -620,11 +635,7 @@ export const LcmExpandQueryTool = Tool.define(
               ...(!answer && mayExtract
                 ? {
                     answerKind: "extractive_fallback",
-                    callGuidance: {
-                      generatedAnswerAccepted: false,
-                      instruction:
-                        "The provider did not return a complete validated synthesis. The answer field contains bounded evidence excerpts, not a computed answer. Do not present it as the resolved answer or count omission markers as evidence. Use it to refine one genuinely different query or verify only the remaining candidates and boundaries.",
-                    },
+                    callGuidance: queryFallbackGuidance(providerFailureReason),
                   }
                 : {
                     answerKind: "generated",

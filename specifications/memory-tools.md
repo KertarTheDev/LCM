@@ -118,7 +118,9 @@ provider failure. It does not create a child session, second provider protocol, 
 validated as `answer`, selected `citations`, and `coverage` (`full`, `partial`, or `none`), and its cost is added to the
 calling assistant message. A valid `none` response is reported as `no_answer` and is not accepted as a blank generated
 answer; eligible bounded evidence uses the extractive fallback instead. Provider failure after the retry or invalid
-output is explicit. A bounded extractive
+output is explicit. When the provider remains unavailable after its ordinary retry, guidance permits one retry of the
+same exact semantic query before manual recovery; other incomplete responses require a genuinely refined query. A
+bounded extractive
 fallback is allowed for an exact `sourceRanges` scope, an explicit handle, or at least two useful query terms. Only a
 normal provider `stop` can
 produce a generated answer; a length-limited, filtered, errored, tool-call, unknown, or absent finish is reported as an
@@ -128,7 +130,9 @@ require partial coverage unless exact or exhaustive completeness is actually sup
 `full` answer to `partial` whenever retrieval omitted or clipped in-scope evidence. They make the output allowance
 a ceiling rather than a target, preserve event modality instead of treating every mention as an occurrence, state that
 missing wording is not proof that an action is absent, require concise numeric/count results, and prohibit copying
-excerpts into a generated answer. A fallback is labeled `extractive_fallback` before its evidence and explicitly says
+excerpts into a generated answer. First/last queries build an internal ordered event ledger and scan from the relevant
+scope boundary before choosing an answer. A fallback is labeled `extractive_fallback` before its evidence and explicitly
+says
 it is not a computed answer.
 Unscoped retrieval uses the same prior-turn boundary as `lcm_grep`; an explicit summary scope may address a trusted
 current-lineage summary beyond that boundary.
