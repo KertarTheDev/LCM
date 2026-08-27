@@ -135,6 +135,31 @@ function evenlySpaced<T>(items: readonly T[], limit: number) {
   return Array.from({ length: limit }, (_, index) => items[Math.round((index * (items.length - 1)) / (limit - 1))]!)
 }
 
+function fairExcerptLimits(candidates: readonly Candidate[], maxChars: number) {
+  const limits = Array.from({ length: candidates.length }, () => 0)
+  let remaining = Math.max(0, Math.floor(maxChars))
+  let unresolved = candidates.map((_, index) => index)
+  while (unresolved.length > 0 && remaining > 0) {
+    const share = Math.floor(remaining / unresolved.length)
+    const fitting = unresolved.filter((index) => candidates[index]!.text.length <= share)
+    if (fitting.length === 0) {
+      for (const [position, index] of unresolved.entries()) {
+        const limit = Math.floor(remaining / (unresolved.length - position))
+        limits[index] = limit
+        remaining -= limit
+      }
+      break
+    }
+    const fittingSet = new Set(fitting)
+    for (const index of fitting) {
+      limits[index] = candidates[index]!.text.length
+      remaining -= limits[index]!
+    }
+    unresolved = unresolved.filter((index) => !fittingSet.has(index))
+  }
+  return limits
+}
+
 export function queryExcerpt(text: string, terms: string[], maxChars: number) {
   const limit = Math.max(1, Math.floor(maxChars))
   if (text.length <= limit) return text
@@ -322,15 +347,13 @@ export function selectQueryExcerpts(
   const candidates = sourceRanges ? relevant : memoryCandidates
   const candidateLimitReached = candidates.length < relevant.length
 
-  let remaining = Math.max(1, budgetTokens) * 4
+  const limits = fairExcerptLimits(candidates, Math.max(1, budgetTokens) * 4)
   const selected: Candidate[] = []
   for (const [index, candidate] of candidates.entries()) {
-    if (remaining <= 0) break
-    const fair = Math.max(1, Math.floor(remaining / (candidates.length - index)))
-    const text = queryExcerpt(candidate.text, terms, fair)
+    if (limits[index]! <= 0) continue
+    const text = queryExcerpt(candidate.text, terms, limits[index]!)
     if (!text) continue
     selected.push({ ...candidate, text })
-    remaining -= text.length
   }
   return {
     selected,

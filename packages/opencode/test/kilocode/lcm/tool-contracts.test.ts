@@ -294,8 +294,10 @@ describe("LCM tool contracts", () => {
     expect(queryExcerptBudget(1_000_000, true)).toBe(64_000)
     expect(queryExcerptBudget(0, true)).toBe(4_000)
 
-    const text = "episode evidence ".repeat(11_500)
-    const bytes = Buffer.byteLength(text)
+    const firstText = "early episode evidence ".repeat(5_000)
+    const receiptText = "RECEIVED"
+    const lastText = "late episode evidence ".repeat(4_000)
+    const bytes = Buffer.byteLength(firstText) + Buffer.byteLength(receiptText) + Buffer.byteLength(lastText)
     const retrieval = selectQueryExcerpts(
       {
         sources: new Map(),
@@ -312,14 +314,30 @@ describe("LCM tool contracts", () => {
           sourceID: "src_0123456789abcdef01234567",
           ordinal: 4,
           startOffset: 0,
-          endOffset: bytes,
-          totalBytes: bytes,
-          text,
+          endOffset: Buffer.byteLength(firstText),
+          totalBytes: Buffer.byteLength(firstText),
+          text: firstText,
+        },
+        {
+          sourceID: "src_0123456789abcdef01234568",
+          ordinal: 5,
+          startOffset: 0,
+          endOffset: Buffer.byteLength(receiptText),
+          totalBytes: Buffer.byteLength(receiptText),
+          text: receiptText,
+        },
+        {
+          sourceID: "src_0123456789abcdef01234569",
+          ordinal: 6,
+          startOffset: 0,
+          endOffset: Buffer.byteLength(lastText),
+          totalBytes: Buffer.byteLength(lastText),
+          text: lastText,
         },
       ],
     )
     expect(bytes).toBeGreaterThan(188_000)
-    expect(retrieval.selected[0]?.text).toBe(text)
+    expect(retrieval.selected.map((item) => item.text)).toEqual([firstText, receiptText, lastText])
     expect(retrieval.truncated).toBe(false)
   })
 

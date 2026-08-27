@@ -101,7 +101,9 @@ semantic recovery does not require literal overlap. It uses at most 20% of known
 Exact range retrieval fairly represents every supplied range and uses up to 50% of known usable input capped at 64,000
 tokens. The larger bounded budget preserves the complete caller-identified semantic unit when feasible while retaining
 at least half of known usable input for the query envelope, output, and estimation margin. Unknown capacity uses a
-4,000-token retrieval budget. Long records contribute a fixed-budget
+4,000-token retrieval budget. Fair allocation redistributes space unused by short records before clipping longer
+records, so small receipt or metadata records cannot cause an otherwise fitting exact scope to report truncation. Long
+records contribute a fixed-budget
 mixture of chronological samples and windows ranked by local query-term co-occurrence and rarity. Per-term candidate
 caps prevent frequent words from crowding rarer query evidence out. When no term occurs, uniform chronological sampling
 exposes some paraphrased evidence beyond simple bookends.
