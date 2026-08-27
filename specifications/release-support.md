@@ -12,14 +12,76 @@ replacement first, then remove each exact superseded release ID and matching tag
 history. Never select a deletion target from `latest` or tag ordering; capture and re-resolve its tag, release ID, and
 candidate SHA immediately before deletion.
 
-The current public prerelease is `v7.4.23-lcm.11`. It was published on 2026-08-27 from candidate
+The current public prerelease is `v7.4.23-lcm.12`. It was published on 2026-08-27 from candidate
+`043871bfdf8db1f930ba9c24e2baa421db50ff15`, containing verified product
+`18b87e3110a09edb9f3d71188db7f74b108dfbb4`. Exact-SHA workflow run
+[`33048213799`](https://github.com/KertarTheDev/LCM/actions/runs/33048213799) completed successfully, including exact
+27-path overlay verification, focused v7.4.23 adaptation tests, canonical affected-package typechecks, stable contract
+generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory runtime smoke. Release
+[`377625464`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.12) is a non-draft prerelease whose tag
+resolves to the candidate SHA. Its published body includes a concrete `What changed since v7.4.23-lcm.11` section,
+verification and 175k limitations, storage/migration impact, and upgrade guidance. Its exact GitHub-reported asset
+manifest is:
+
+|Asset|Bytes|SHA-256|
+|---|---:|---|
+|`kilo-darwin-arm64.zip`|52,562,193|`ef54a9ac27c390a9bd41034945b4fd5d7049f9250ae28799efbd11149c77588d`|
+|`kilo-darwin-x64-baseline.zip`|54,813,498|`fb0e9abd21c16caccb6fb166b9c2e15f885d818c65b821f77f530430e02c0fbb`|
+|`kilo-darwin-x64.zip`|54,813,498|`e06b08580498c8d7da4f95d7ab4e0add829bf85dc84dbf39c3cd9a241bdca3d1`|
+|`kilo-linux-arm64-musl.tar.gz`|69,333,640|`6ba50f7cb8f92a9feccf812d5c67fcc75185047ff3fcf2cce4099f6472be6a49`|
+|`kilo-linux-arm64.tar.gz`|67,214,436|`7511767367bc133e84708f9c01708f8a457c140a5992e282a8386b7e42291189`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|69,824,884|`b99ff2365d245ad258099526376868447fb3d64d52ac5c5a762dc25c6695af57`|
+|`kilo-linux-x64-baseline.tar.gz`|67,461,886|`4ab62a9607b99b7bdd2426bfebe42869a559b00d8215cf1e7440c96f5ecd460d`|
+|`kilo-linux-x64-musl.tar.gz`|69,824,883|`6182414caacbae73c5074a4331768eb490cbcec10d227960e03b3d04c41d7c21`|
+|`kilo-linux-x64.tar.gz`|67,461,874|`19bd144440807419f82342c629f6f90f0fbb3d502bd84a993cab11f905119883`|
+|`kilo-vscode-alpine-arm64.vsix`|110,140,294|`d778e17211561ea47de279ad7fcd56cfb507b4b5827907a909161967fdcc04a1`|
+|`kilo-vscode-alpine-x64.vsix`|117,343,795|`43014f94378269214c857307325ef8fd575cf62b74e2ad94c3fd324d8e5b178b`|
+|`kilo-vscode-darwin-arm64.vsix`|92,872,099|`09dc798ab5394abcdfa15d039a642ea4edbdd30d0665d1b3cd161375b3228431`|
+|`kilo-vscode-darwin-x64.vsix`|100,943,582|`4e0d0d0448b72ca5c32651ab5f1d1d9b2f388f95f603b5efdf579736ac16e7f7`|
+|`kilo-vscode-linux-arm64.vsix`|107,972,204|`74728c68b7250d2a49fc46720d28bf09b97750c582cec1c43e95f36702fd77c5`|
+|`kilo-vscode-linux-x64.vsix`|114,916,522|`168330d8497be21f086117f1bdedd4cfe50328c9b8740f19c511697226357ed1`|
+|`kilo-vscode-win32-arm64.vsix`|89,748,673|`8efa201adee9a8f3fe1337c10225909460d54df88ec8be1bbfb96b098b91cd29`|
+|`kilo-vscode-win32-x64.vsix`|113,792,658|`572ccee8b7eff03c0542bae5918ebebeb9b2f162552f93d5317090de69dd9e62`|
+|`kilo-windows-arm64.zip`|65,142,600|`c43110bb5d9f4c24d9f734b303cd1ac2060f0b31fb7329aea77d83ad71f7d2a3`|
+|`kilo-windows-x64-baseline.zip`|66,823,218|`ff0427dcc733ded7979a629df09a45a447f3ecbab29f3735f3cc4493cb64e630`|
+|`kilo-windows-x64.zip`|66,823,218|`645d56ac937ba54b28c6764ee14fd638119fad258b48e2b4dc0409bdcfd772c8`|
+
+`.12` adds one exact ordered-range search contract shared by `lcm_grep` and `lcm_expand_query`, so a model can search
+or count across a complete structurally bounded unit without one call per transport source. Grep preserves range
+order and effective bounds, deduplicates source-record totals, and keeps complete literal occurrence totals even when
+returned excerpts are bounded. Semantic query recovery now permits one ordinary transient-provider retry, and any
+generated `full` claim is downgraded to `partial` when retrieval clipped or omitted in-scope evidence. These are
+model-neutral recovery-interface corrections; raw Kilo SQLite storage and the rebuildable sidecar schema are unchanged.
+
+The published Linux x64 archive is 67,461,874 bytes with SHA-256
+`19bd144440807419f82342c629f6f90f0fbb3d502bd84a993cab11f905119883`; its extracted `kilo` runtime has SHA-256
+`475d4946acc02fb74ad7262bdfb1b34638c294851b0b7db4c81e1cbb5c7e50fe`. The fixed-binary 175k LCM-only diagnostic
+`laguna21-v49-v7423-lcm12-175k-lcm-only-20260827T071749Z` used driver
+`81e9f54f4bb1e6a4ce077c47eca2ab1421c2675edc3db0b9b05c1dfeb09fb2ec` and `poolside/laguna-s-2.1:free`. All 12
+ingestion turns and all three independent questions completed with zero task failures, zero product findings, zero LCM
+fallbacks, and zero legacy automatic summaries. Scores were 0, 0.25, and 0; the second question improved from `.11`'s
+provider-call-budget failure to a completed partial answer at the same 24-call boundary.
+
+The retained traces separate remaining model behavior from LCM defects. The first question received one complete
+five-range exact grep result, then abandoned it for repeated manual reads and omitted the required answer tags. In the
+second, 21 failed calls were the identical over-512-character regex repeated after `lcm_invalid_regex` explicitly said
+not to retry it unchanged; LCM rejected the malformed input consistently. The third used one seven-range semantic
+query plus scoped grep/read verification, saw the gold spell mention, but interpreted it as not an actual cast. Its
+incomplete semantic generation correctly reported `coverage: partial`, `truncated: true`, and
+`providerFailureReason: incomplete_response` before providing extractive fallback evidence. The run therefore reveals
+model concision, instruction-following, and semantic-judgment limitations without exposing another generally useful
+LCM correction. Across question attempts, minimum available host memory was 2,590,617,600 bytes, maximum runner RSS
+was 184,696,832 bytes, maximum Kilo-tree RSS was 1,387,679,744 bytes, peak full memory PSI avg10 was 0.06%, and new
+swap paging was zero.
+
+The previous public prerelease was `v7.4.23-lcm.11`. It was published on 2026-08-27 from candidate
 `830e62c281d76b71b2f6a989100e85dc1511f2b1`, containing verified product
 `20a5d1a704cdbde8a1cf33e5768923eaedced482`. Exact-SHA workflow run
 [`33042416377`](https://github.com/KertarTheDev/LCM/actions/runs/33042416377) completed successfully, including exact
 27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
 typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
-runtime smoke. Release [`377584687`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.11) is a non-draft
-prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
+runtime smoke. Former release ID `377584687` was a non-draft prerelease whose tag resolved to the candidate SHA before
+removal. Its exact GitHub-reported asset manifest was:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
@@ -50,16 +112,14 @@ samples the active frontier when literal overlap is absent, and advises against 
 grep/read calls without imposing a hard tool limit. Schema-v14/tree-v11 rebuilds the disposable sidecar; Kilo SQLite
 remains the raw source of truth.
 
-The exact published `.11` 175k LCM-only trace then exposed three general recovery-interface defects. `lcm_grep`
+The exact published `.11` 175k LCM-only trace exposed three general recovery-interface defects. `lcm_grep`
 silently ignored ordered `sourceRanges`, forcing one call per transport source and allowing exact searches to escape
 their intended semantic unit. `lcm_expand_query` made no retry after a transient provider failure, while summary
 generation already allowed one, and could preserve a generated `full` coverage claim even when retrieval reported
-clipped input. The pending product state gives grep the same ordered range contract as query recovery, deduplicates
-transport-source totals across multiple intervals, permits one ordinary query retry, and makes reported coverage
-honest after clipping. These corrections apply to any model and structurally bounded long-session task. `.11` is
-therefore known inferior to the pending fixed product state; exact release ID `377584687`, tag `v7.4.23-lcm.11`, and
-candidate `830e62c281d76b71b2f6a989100e85dc1511f2b1` are authorized for removal only after a differently tagged replacement
-is published and independently verified.
+clipped input. `.12` implements the general corrections described above. After `.12` release `377625464`, tag, exact
+candidate, published changelog, and 20 assets were independently verified, `.11` release ID `377584687` and matching
+tag were re-resolved to candidate `830e62c281d76b71b2f6a989100e85dc1511f2b1` and removed. A post-deletion exact-SHA
+lookup found zero releases; older historical prereleases for other upstream versions remain untouched.
 
 The first `.12` candidate `7cc3a29f4696b39b8d43c0ae162d85f397244464` stopped in exact-SHA workflow run
 [`33047780488`](https://github.com/KertarTheDev/LCM/actions/runs/33047780488) before versioning or draft creation. Hosted
