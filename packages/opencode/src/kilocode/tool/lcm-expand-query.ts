@@ -19,6 +19,11 @@ import { LcmSourceRange, resolveSourceRanges, type ResolvedSourceRange } from ".
 export { resolveSourceRanges } from "./lcm-source-range"
 
 const MAX_QUERY_EXCERPTS = 8
+const DEFAULT_QUERY_INPUT_BUDGET = 4_000
+const UNSCOPED_QUERY_INPUT_RATIO = 0.2
+const UNSCOPED_QUERY_INPUT_CAP = 16_000
+const EXACT_RANGE_QUERY_INPUT_RATIO = 0.5
+const EXACT_RANGE_QUERY_INPUT_CAP = 64_000
 const Parameters = Schema.Struct({
   query: Schema.String.annotate({
     description: "Question about earlier content in the current session (1-4096 characters).",
@@ -342,7 +347,14 @@ export function selectQueryExcerpts(
   }
 }
 
-export function parseQueryAnswer(text: string, allowed: Set<string>): QueryAnswer | undefined {
+export function queryExcerptBudget(usableInputTokens: number, exactRangeScope: boolean) {
+  if (usableInputTokens <= 0) return DEFAULT_QUERY_INPUT_BUDGET
+  const ratio = exactRangeScope ? EXACT_RANGE_QUERY_INPUT_RATIO : UNSCOPED_QUERY_INPUT_RATIO
+  const cap = exactRangeScope ? EXACT_RANGE_QUERY_INPUT_CAP : UNSCOPED_QUERY_INPUT_CAP
+  return Math.min(cap, Math.max(1_000, Math.floor(usableInputTokens * ratio)))
+}
+
+function parseQueryResponse(text: string, allowed: Set<string>): QueryAnswer | undefined {
   const stripped = text
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
@@ -361,12 +373,20 @@ export function parseQueryAnswer(text: string, allowed: Set<string>): QueryAnswe
       return
     const coverage = value.coverage as QueryAnswer["coverage"]
     const citations = [...new Set(value.citations as string[])]
-    if (coverage === "none") return { answer: "", citations: [], coverage }
+    if (coverage === "none") {
+      if (value.answer.trim() || citations.length > 0) return
+      return { answer: "", citations: [], coverage }
+    }
     if (!value.answer.trim() || citations.length === 0) return
     return { answer: value.answer.trim(), citations, coverage }
   } catch {
     return
   }
+}
+
+export function parseQueryAnswer(text: string, allowed: Set<string>): QueryAnswer | undefined {
+  const response = parseQueryResponse(text, allowed)
+  return response?.coverage === "none" ? undefined : response
 }
 
 export function completeQueryAnswer(text: string, finish: string | undefined, allowed: Set<string>) {
@@ -444,7 +464,7 @@ export const LcmExpandQueryTool = Tool.define(
           if (!model) throw new LcmToolError("lcm_unavailable", "The active model is unavailable to the query tool.")
           const inputLimit = model.limit.input ?? model.limit.context
           const usable = inputLimit > 0 ? Math.max(0, inputLimit - model.limit.output) : 0
-          const budgetTokens = usable > 0 ? Math.min(16_000, Math.max(1_000, Math.floor(usable * 0.2))) : 4_000
+          const budgetTokens = queryExcerptBudget(usable, Boolean(sourceRanges))
           const historicalCutoff =
             params.summaryID || sourceRanges ? undefined : priorTurnSourceCutoff(view, ctx.messages)
           const retrieval = selectQueryExcerpts(
@@ -539,8 +559,11 @@ export const LcmExpandQueryTool = Tool.define(
             )
           const allowed = new Set(retrieval.selected.map((item) => item.id))
           const completeResponse = generated.ok && generated.value.finish === "stop"
+          const parsedResponse =
+            generated.ok && completeResponse ? parseQueryResponse(generated.value.text, allowed) : undefined
+          const generatedNoAnswer = parsedResponse?.coverage === "none"
           const answer = honestQueryCoverage(
-            generated.ok ? completeQueryAnswer(generated.value.text, generated.value.finish, allowed) : undefined,
+            generatedNoAnswer ? undefined : parsedResponse,
             retrieval.truncated,
           )
           const mayExtract = Boolean(sourceRanges) || retrieval.handles.length > 0 || retrieval.terms.length >= 2
@@ -561,7 +584,9 @@ export const LcmExpandQueryTool = Tool.define(
             ? mayExtract
               ? generated.ok
                 ? completeResponse
-                  ? "invalid_response"
+                  ? generatedNoAnswer
+                    ? "no_answer"
+                    : "invalid_response"
                   : "incomplete_response"
                 : generated.reason
               : undefined

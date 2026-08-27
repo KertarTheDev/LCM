@@ -97,8 +97,11 @@ the result echoes the effective bounds and total scoped bytes.
 
 Unscoped or summary-scoped retrieval ranks explicit stable handles and lexical evidence and selects at most eight
 excerpts, filling unused slots with a fair chronological sample of the active frontier or requested summary scope so
-semantic recovery does not require literal overlap. Exact range retrieval fairly represents every supplied range. Both use at most 20% of known usable input
-capped at 16,000 tokens; unknown capacity uses a 4,000-token retrieval budget. Long records contribute a fixed-budget
+semantic recovery does not require literal overlap. It uses at most 20% of known usable input capped at 16,000 tokens.
+Exact range retrieval fairly represents every supplied range and uses up to 50% of known usable input capped at 64,000
+tokens. The larger bounded budget preserves the complete caller-identified semantic unit when feasible while retaining
+at least half of known usable input for the query envelope, output, and estimation margin. Unknown capacity uses a
+4,000-token retrieval budget. Long records contribute a fixed-budget
 mixture of chronological samples and windows ranked by local query-term co-occurrence and rarity. Per-term candidate
 caps prevent frequent words from crowding rarer query evidence out. When no term occurs, uniform chronological sampling
 exposes some paraphrased evidence beyond simple bookends.
@@ -111,7 +114,9 @@ The tool preempts same-session soft work, shares the LCM model-call queue, and m
 active Kilo provider/model runtime with no tools. The ordinary runtime may retry that inference once after a transient
 provider failure. It does not create a child session, second provider protocol, or transcript turn. The answer is
 validated as `answer`, selected `citations`, and `coverage` (`full`, `partial`, or `none`), and its cost is added to the
-calling assistant message. Provider failure after the retry or invalid output is explicit. A bounded extractive
+calling assistant message. A valid `none` response is reported as `no_answer` and is not accepted as a blank generated
+answer; eligible bounded evidence uses the extractive fallback instead. Provider failure after the retry or invalid
+output is explicit. A bounded extractive
 fallback is allowed for an exact `sourceRanges` scope, an explicit handle, or at least two useful query terms. Only a
 normal provider `stop` can
 produce a generated answer; a length-limited, filtered, errored, tool-call, unknown, or absent finish is reported as an

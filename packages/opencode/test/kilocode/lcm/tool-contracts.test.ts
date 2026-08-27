@@ -42,6 +42,7 @@ import {
   honestQueryCoverage,
   parseQueryAnswer,
   queryExcerpt,
+  queryExcerptBudget,
   queryParts,
   resolveSourceRanges,
   selectQueryExcerpts,
@@ -264,6 +265,10 @@ describe("LCM tool contracts", () => {
     expect(
       parseQueryAnswer('{"answer":"Invented","citations":["src_other"],"coverage":"full"}', allowed),
     ).toBeUndefined()
+    expect(parseQueryAnswer('{"answer":"","citations":[],"coverage":"none"}', allowed)).toBeUndefined()
+    expect(
+      parseQueryAnswer('{"answer":"Unsupported","citations":["src_alpha"],"coverage":"none"}', allowed),
+    ).toBeUndefined()
     expect(
       completeQueryAnswer(
         '{"answer":"Use the release branch.","citations":["src_alpha"],"coverage":"full"}',
@@ -281,6 +286,41 @@ describe("LCM tool contracts", () => {
       citations: ["src_alpha"],
       coverage: "full",
     })
+  })
+
+  test("uses spare model input to preserve an explicitly bounded semantic unit", () => {
+    expect(queryExcerptBudget(123_904, false)).toBe(16_000)
+    expect(queryExcerptBudget(123_904, true)).toBe(61_952)
+    expect(queryExcerptBudget(1_000_000, true)).toBe(64_000)
+    expect(queryExcerptBudget(0, true)).toBe(4_000)
+
+    const text = "episode evidence ".repeat(11_500)
+    const bytes = Buffer.byteLength(text)
+    const retrieval = selectQueryExcerpts(
+      {
+        sources: new Map(),
+        summaries: new Map(),
+        children: new Map(),
+        content: new Map(),
+      },
+      "count every event in the episode",
+      undefined,
+      queryExcerptBudget(123_904, true),
+      undefined,
+      [
+        {
+          sourceID: "src_0123456789abcdef01234567",
+          ordinal: 4,
+          startOffset: 0,
+          endOffset: bytes,
+          totalBytes: bytes,
+          text,
+        },
+      ],
+    )
+    expect(bytes).toBeGreaterThan(188_000)
+    expect(retrieval.selected[0]?.text).toBe(text)
+    expect(retrieval.truncated).toBe(false)
   })
 
   test("centers bounded recovery excerpts on early and late matches", () => {
