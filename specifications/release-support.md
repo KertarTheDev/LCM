@@ -12,62 +12,54 @@ replacement first, then remove each exact superseded release ID and matching tag
 history. Never select a deletion target from `latest` or tag ordering; capture and re-resolve its tag, release ID, and
 candidate SHA immediately before deletion.
 
-The current public prerelease is `v7.4.23-lcm.10`. It was published on 2026-08-26 from candidate
-`072e84c88b8d0a15c5668cee661e71b2ca15bce2`, containing verified product
-`f84e2c71e7d52d92ba05ab14e020254b34a73ac9`. Exact-SHA workflow run
-[`33001320509`](https://github.com/KertarTheDev/LCM/actions/runs/33001320509) completed successfully, including exact
+The current public prerelease is `v7.4.23-lcm.11`. It was published on 2026-08-27 from candidate
+`830e62c281d76b71b2f6a989100e85dc1511f2b1`, containing verified product
+`20a5d1a704cdbde8a1cf33e5768923eaedced482`. Exact-SHA workflow run
+[`33042416377`](https://github.com/KertarTheDev/LCM/actions/runs/33042416377) completed successfully, including exact
 27-path overlay verification, focused v7.4.23 adaptation tests, canonical OpenCode, SDK, Kilo i18n, TUI, and VS Code
 typechecks, stable contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory
-runtime smoke. Release [`377351189`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.10) is a non-draft
+runtime smoke. Release [`377584687`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.11) is a non-draft
 prerelease whose tag resolves to the candidate SHA. Its exact GitHub-reported asset manifest is:
 
 |Asset|Bytes|SHA-256|
 |---|---:|---|
-|`kilo-darwin-arm64.zip`|52,547,403|`e4dde70555b7d324d76966138675b987ec26faa9b90a38565cca5c8c292a23c9`|
-|`kilo-darwin-x64-baseline.zip`|54,805,752|`023c3ffa0916e60c8ca540ac1e47071f0abba551f478bc588b3d013d03f7b97b`|
-|`kilo-darwin-x64.zip`|54,805,752|`a94b3ce508471ee7a70423a26c9970ca0c784e1f0579fad1530e355b64ec014e`|
-|`kilo-linux-arm64-musl.tar.gz`|69,326,922|`5caaed62bfd0305db091486e059e2ebd06db74890876b2cb0b6972ba78fe8044`|
-|`kilo-linux-arm64.tar.gz`|67,206,527|`b57af2f3fc8a474b2c2e5fa61797f2cfbd048bd9815a7f2c77594c980766e41d`|
-|`kilo-linux-x64-baseline-musl.tar.gz`|69,814,203|`0eaef08054325a22c0f8db4f4a22b9293b68fdf5f84a110f3b6e16f25b3837dd`|
-|`kilo-linux-x64-baseline.tar.gz`|67,451,896|`57f994714cdbc9039c2870551273ce820bc8240f5fdeee8713d4f73bff02a85e`|
-|`kilo-linux-x64-musl.tar.gz`|69,814,247|`df005e3328173fedc9fa4e6bf4150ca9c50631bc644e02fcd2c456d10e07e63c`|
-|`kilo-linux-x64.tar.gz`|67,450,947|`52ae856e02858513a825da3055d61c8b156c215a42760f854689ac5282ea44c8`|
-|`kilo-vscode-alpine-arm64.vsix`|110,132,836|`7df1b225cf8c40aef5fa3f2b86bb4e60cc892f17a97c8bdbee7f23b84fdb2834`|
-|`kilo-vscode-alpine-x64.vsix`|117,331,999|`43004a0ee4065364b9f9a8cc15161805e0d726235950be51806517ca0d6a56c3`|
-|`kilo-vscode-darwin-arm64.vsix`|92,867,671|`778f45141153e4de16be18d48acfa03d99300360a04a5cebc391fdcf40637a1f`|
-|`kilo-vscode-darwin-x64.vsix`|100,938,109|`6b46887c335537ae7ba83344d4d9f938f7f4564c7d92f8b3f03d96601e65fb65`|
-|`kilo-vscode-linux-arm64.vsix`|107,962,956|`fedb42c30381aa81f25f35071fe990c9a51711a9e374064cd18211cab2f454ed`|
-|`kilo-vscode-linux-x64.vsix`|114,909,780|`22a9e9fa5dcf390722d5f54672a6eacf28ab37e093be8fd2a7de9f08c08f817f`|
-|`kilo-vscode-win32-arm64.vsix`|89,743,373|`1340bd29ce994d2f7362a63c5927c9672cdfcd7773942f1464a105ea5eec37f6`|
-|`kilo-vscode-win32-x64.vsix`|113,783,533|`3288bf7253ef6c2548367e251fcdd7c258f2f999ed2985e74ec25e6313cb1ae4`|
-|`kilo-windows-arm64.zip`|65,138,364|`c930143b1d853f7e0764be8056ede2704c1f53d1e27bce355922607ac8996698`|
-|`kilo-windows-x64-baseline.zip`|66,815,807|`ab62617aaa5632219eb4e72e38e9f6d4207ccaeede024e1cad741197f47413fc`|
-|`kilo-windows-x64.zip`|66,815,807|`c8accbaced7627e38ce0bb19ecdf7b47c19af97545545ca8033da4b9715b031e`|
+|`kilo-darwin-arm64.zip`|52,556,351|`f97f007f4778177aa99ecb10970a5edbed745ccb34e621f33364aa78fc879235`|
+|`kilo-darwin-x64-baseline.zip`|54,806,681|`e7bb8aa593241315f890d7ce1a3fcfa92dca074e2dd42009560a72952aa1222b`|
+|`kilo-darwin-x64.zip`|54,806,681|`c0f9396f3a613d59e196c46a96729917da59e5f64d99a867a2ffda909f4e3ca3`|
+|`kilo-linux-arm64-musl.tar.gz`|69,320,537|`0827dd60ef5ff07fc46db2e51fc6c0fdc5703b1d4f7887d85aab5386b840a498`|
+|`kilo-linux-arm64.tar.gz`|67,223,622|`b9f9cf276a367e831f80bcbf9c294b46409fe74b3804bcca5d00d3380b498b2a`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|69,818,739|`b6a5889c5ae6e1e9f236f27e8ba86597ee482bc41ed4dd0401682584c0a822ce`|
+|`kilo-linux-x64-baseline.tar.gz`|67,457,921|`4d8c4fa9e6095a9f242ff2aa8d41fb8009217fbe59805f2908e5b8b00e16fdf1`|
+|`kilo-linux-x64-musl.tar.gz`|69,820,223|`5dc75dae24496f036cfbb36b2af6923ccff0a326d37ba5afd877e386bd9735c3`|
+|`kilo-linux-x64.tar.gz`|67,457,143|`39b3df75612c587881802593137686520c41e88586282d094eec5c40c1e12645`|
+|`kilo-vscode-alpine-arm64.vsix`|110,138,571|`2d9b832d439bc828e7c7dc2b0e91b047c0c397e9ff18e1760183dabf6164af21`|
+|`kilo-vscode-alpine-x64.vsix`|117,341,372|`c7d2fa194ba9b5f0b4bf7c192091cec044692f3be122727f30c2b00ed3581147`|
+|`kilo-vscode-darwin-arm64.vsix`|92,869,548|`003d5f213e94139c5fec6909da90daced509dff96292a09e95711db52aa95337`|
+|`kilo-vscode-darwin-x64.vsix`|100,943,840|`fad4e839f7d944c54e5f9cf75b5ef0178692ab69819ad2683bc20710ddd424fb`|
+|`kilo-vscode-linux-arm64.vsix`|107,969,959|`cf61bd092b25a67bb1755985dcd1f9c7c29928e89adc7a99a786d6aee0e73780`|
+|`kilo-vscode-linux-x64.vsix`|114,915,527|`7c42519a81ecdf2f27e47d8bc7bcb93687e83b43f82d158aec9ac1b192171b3e`|
+|`kilo-vscode-win32-arm64.vsix`|89,747,873|`a51b4c7e971dc01b66ed1aa1775e470901e4619848dfba9a083a90d7c026321e`|
+|`kilo-vscode-win32-x64.vsix`|113,791,698|`6ffade8acfaf00c8946c1d339e73898292e52f0383015fd6379bae2c7d0ebe29`|
+|`kilo-windows-arm64.zip`|65,142,429|`e9690ed5f2f0272fdce3ca7437e7c2fee31285222a2fe5c26affcc94188decdb`|
+|`kilo-windows-x64-baseline.zip`|66,820,262|`0f34a901ff30dfdd5ce67980b8d610108a1878fae3cb85a9ed57ebbaacf3532b`|
+|`kilo-windows-x64.zip`|66,820,262|`5c10a123149363de60ebe890dd101b94537a149103c1b2ba8a4e8a9242db5d6c`|
 
-`.10` corrects the two remaining defects observed in the exact published `.9` 175k trace. Repeated identical
-`lcm_grep` and `lcm_read` calls now return compact prior-result facts instead of replaying full evidence payloads, and
-semantic duplicate detection treats omitted defaults and their explicit default values equivalently. Recovery
-guidance prioritizes answering the user's question, requests concise numeric/count results with the shortest
-sufficient proof, and distinguishes a generated `lcm_expand_query` answer from its extractive fallback. Summary
-validation rejects summary-task commentary while preserving paired structural unit maps, and the recovery tools expose
-an explicit stable metadata type at the host boundary. These changes passed focused LCM tool tests plus the canonical
-release typechecks and packaged-runtime gate. Schema-v13/tree-v10 rebuilds disposable `.9` sidecars so retained
-summaries use these rules; Kilo SQLite remains the raw source of truth. A fresh provider-backed 175k comparison remains
-pending after the OpenRouter quota reset; the prerelease remains experimental and does not claim that external result
-in advance.
-
-The exact published `.10` 175k trace subsequently exposed general semantic-recovery and summary-input defects. Exact
-grep/read chains could continue for dozens of distinct calls without escalating interpretation to `lcm_expand_query`;
-lexical hits and misses were easy to treat as semantic conclusions; match-only query excerpting could hide paraphrased
-evidence and allowed frequent terms to crowd rarer local co-occurrences out; and summary input could retain historical
-out-of-lineage handle references while losing the status of a mentioned event. Schema-v14/tree-v11 rebuilds the
-disposable sidecar for event-status-aware summaries with sanitized historical handles. The recovery contract now makes
-semantic query synthesis primary, mixes relevance-ranked and chronological evidence within the existing fixed budget,
+`.11` adds event-status-aware summaries, sanitizes historical handles that are outside the current lineage, makes
+semantic query synthesis primary, mixes relevance-ranked and chronological recovery evidence within a fixed budget,
 samples the active frontier when literal overlap is absent, and advises against open-ended exact recovery after five
-grep/read calls without imposing a hard tool limit. These are model- and workload-neutral corrections. `.10` is
-therefore known inferior to the pending fixed product state; exact release ID `377351189`, tag `v7.4.23-lcm.10`, and
-candidate `072e84c88b8d0a15c5668cee661e71b2ca15bce2` are authorized for removal only after a differently tagged
-replacement is published and independently verified.
+grep/read calls without imposing a hard tool limit. Schema-v14/tree-v11 rebuilds the disposable sidecar; Kilo SQLite
+remains the raw source of truth.
+
+The exact published `.11` 175k LCM-only trace then exposed three general recovery-interface defects. `lcm_grep`
+silently ignored ordered `sourceRanges`, forcing one call per transport source and allowing exact searches to escape
+their intended semantic unit. `lcm_expand_query` made no retry after a transient provider failure, while summary
+generation already allowed one, and could preserve a generated `full` coverage claim even when retrieval reported
+clipped input. The pending product state gives grep the same ordered range contract as query recovery, deduplicates
+transport-source totals across multiple intervals, permits one ordinary query retry, and makes reported coverage
+honest after clipping. These corrections apply to any model and structurally bounded long-session task. `.11` is
+therefore known inferior to the pending fixed product state; exact release ID `377584687`, tag `v7.4.23-lcm.11`, and
+candidate `830e62c281d76b71b2f6a989100e85dc1511f2b1` are authorized for removal only after a differently tagged replacement
+is published and independently verified.
 
 The GitHub Actions major outage on 2026-08-26 produced retained audit runs
 [`32985474928`](https://github.com/KertarTheDev/LCM/actions/runs/32985474928), which ended in `startup_failure` before a
@@ -127,7 +119,7 @@ tool calls still replayed full evidence payloads and that summary-task commentar
 is therefore known inferior to `.10`; exact release ID `376985526`, tag `v7.4.23-lcm.9`, and candidate
 `f9721629bda860f84b497bc9efe6f1fd73929dec` are authorized for removal only after `.10` remains independently verified.
 
-The following same-upstream releases were inferior to verified `.10` for the defects described in their retained
+The following same-upstream releases were inferior to verified `.11` for the defects described in their retained
 records below:
 
 |Tag|Release ID|Candidate|
@@ -139,13 +131,15 @@ records below:
 |`v7.4.23-lcm.7`|`376895230`|`9d296d785f21af51d9cd050c0b3d41aa5330a404`|
 |`v7.4.23-lcm.8`|`376933665`|`5ae5396a540f1698272bce345c30714d8172e393`|
 |`v7.4.23-lcm.9`|`376985526`|`f9721629bda860f84b497bc9efe6f1fd73929dec`|
+|`v7.4.23-lcm.10`|`377351189`|`072e84c88b8d0a15c5668cee661e71b2ca15bce2`|
 
 On 2026-08-26, the `.3` through `.9` exact release IDs and matching tags were removed under the one-best policy after
-their remote identities were re-resolved. A subsequent release/tag audit confirmed their absence, confirmed `.9`
-resolved to `f9721629bda860f84b497bc9efe6f1fd73929dec` with all 20 assets before its deletion, and confirmed that `.10`
-still resolves to `072e84c88b8d0a15c5668cee661e71b2ca15bce2` with all 20 assets afterward. Their release assets and tags are no
-longer recoverable from GitHub; Actions audit history remains. The sole prerelease for every other upstream version
-was untouched by the v7.4.23 cleanup.
+their remote identities were re-resolved. On 2026-08-27, `.10` release ID `377351189` and its matching tag were removed
+only after `.11` was independently verified. Audits confirmed every deletion target's exact candidate and 20-asset
+manifest first, then confirmed its release and tag absent while `.11` still resolved to
+`830e62c281d76b71b2f6a989100e85dc1511f2b1` with all 20 assets. Removed release assets and tags are no longer
+recoverable from GitHub; Actions audit history remains. The sole prerelease for every other upstream version was
+untouched by the v7.4.23 cleanup.
 
 The previous public prerelease was `v7.4.23-lcm.8`. It was published on 2026-08-26 from candidate
 `5ae5396a540f1698272bce345c30714d8172e393`, containing verified product

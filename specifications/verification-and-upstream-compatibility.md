@@ -40,10 +40,11 @@ Acceptance must prove:
   packaged regex-worker availability, distinct startup/timeout/syntax failures, exact source byte-interval search,
   copy-ready final occurrence pages, unbounded transport-source warnings, chronological non-receipt neighbors,
   prior-identical-call diagnostics, current-turn exact-recovery escalation guidance without a hard call cap,
-  page-size-independent continuation, cursor-bound read end offsets, and one-call cited `lcm_expand_query` recovery
-  with exact ordered source-range scopes, a fixed-budget mixture of chronological and relevance-ranked excerpts,
-  per-term match fairness, active-frontier sampling without lexical overlap, explicit relevant/selected/truncation
-  reporting, and fallback;
+  page-size-independent continuation, cursor-bound read end offsets, ordered multi-source-range exact grep with
+  deduplicated source totals, and one-logical-inference cited `lcm_expand_query` recovery with one transient-provider
+  retry, exact ordered source-range scopes, a fixed-budget mixture of chronological and relevance-ranked excerpts,
+  per-term match fairness, active-frontier sampling without lexical overlap, honest coverage after retrieval clipping,
+  explicit relevant/selected/truncation reporting, and fallback;
 - substantive, grounded exact-lineage summary citations, deterministic direct-child citation completion when otherwise
   useful output omits handles, receipt-body omission with preserved lineage, an authoritative handle allowlist, and
   rejection of invented, stale, protocol-only, protocol-contaminated, answer-wrapped, ungrounded, content-free, or

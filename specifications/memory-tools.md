@@ -15,23 +15,29 @@ applies: explicit global or per-agent denies remove a tool, and hidden system ut
 
 Search exact retained current-session raw source text and summary text. This is lexical discovery: a hit is a candidate,
 not proof of the event status or interpretation in the user's question, and a miss excludes only that spelling rather
-than paraphrases. Semantic interpretation and aggregation use `lcm_expand_query`. Inputs are `pattern`, optional mode (`literal`
-or `regex`), `caseSensitive`, `summaryID`, `sourceID`, `startOffset`, `endOffset`, `occurrenceOffset`, `limit`, and
-opaque `cursor`. Default record limit is 20; maximum is 50. A source scope accepts inclusive `startOffset` and exclusive
+than paraphrases. Semantic interpretation and aggregation use `lcm_expand_query`. Inputs are `pattern`, optional mode
+(`literal` or `regex`), `caseSensitive`, `summaryID`, `sourceID`, ordered `sourceRanges`, `startOffset`, `endOffset`,
+`occurrenceOffset`, `limit`, and opaque `cursor`. `summaryID`, `sourceID`, and `sourceRanges` are mutually exclusive.
+Default record limit is 20; maximum is 50. A source scope accepts inclusive `startOffset` and exclusive
 `endOffset` UTF-8 byte bounds. They let callers search only inside a structural unit that begins or ends within a
 transport source; intervals are cursor-bound and returned character/byte ranges remain relative to the complete
 source. An unbounded source scope explicitly reports that it covers one complete transport record, not a guaranteed
 semantic unit, and warns against per-unit first/last/count conclusions until structural bounds are applied. Literal
 mode treats regex syntax such as `|` as ordinary text; alternatives require regex mode. Literal
 punctuation is entered without regex escaping (`[START]`, not `\[START\]`); escaped punctuation returns actionable
-advice because the backslashes would otherwise be matched literally. A summary scope
-searches its cycle-safe descendant closure; a source scope searches one exact current-lineage source, and both scopes
-may be combined. Each returned record reports an exact `matchCount`, bounded character
+advice because the backslashes would otherwise be matched literally. A summary scope searches its cycle-safe descendant
+closure; a source scope searches one exact current-lineage source. An ordered range scope accepts 1–32 chronological,
+non-overlapping exact source intervals using the same UTF-8 byte contract as `lcm_expand_query`. It lets one exact
+search or count cover a complete structurally bounded document, episode, section, or other semantic unit without one
+tool call per transport record. Top-level source offsets and occurrence paging remain exclusive to a single `sourceID`.
+Each returned record reports an exact `matchCount`, bounded character
 `ranges`, matching UTF-8 `byteRanges`, and local `occurrences` (one compact preview per global record or all 20 retained
 ranges for a source-scoped search) without duplicating that preview at the record level. Results also include an exact
 occurrence-page offset/total/next offset, `rangesComplete`, `occurrencesComplete`,
 and source records identify their `sourceKind`, so a range cap or assistant/tool record is never mistaken for
-exhaustive user-source evidence. The caller can pass a
+exhaustive user-source evidence. A range result identifies its effective interval and index. Literal complete-scope
+totals include every supplied range even when occurrence excerpts are capped at 20 per range; matched-record totals
+deduplicate intervals belonging to the same transport source. The caller can pass a
 `byteRange.start` to `lcm_read.offset` to inspect exact source text around any retained match. If a source has more than
 20 matches, repeat the source-scoped search with its `occurrencePage.nextOffset`, or copy
 `occurrencePage.lastOffset` to jump directly to the final retained page for a last-occurrence question. Regex work runs in a
@@ -60,8 +66,8 @@ totals when known. Literal search scans the whole bounded scope and therefore re
 first page; regex reports them only after its bounded scan proves completion. Summaries can overlap their raw
 descendants and must not be added to raw totals as independent evidence; tool output and descriptions say so explicitly.
 Unscoped search excludes the current user turn and its later assistant/tool sources, which remain visible in protected
-ordinary context; this prevents a recovery query from matching its own search terms. An explicit `sourceID` or
-`summaryID` can still address any trusted current-lineage item.
+ordinary context; this prevents a recovery query from matching its own search terms. An explicit `sourceID`,
+`sourceRanges`, or `summaryID` can still address any trusted current-lineage item.
 Record cursors bind the pattern, mode, case setting, scope, and occurrence offset; `limit` may change between pages.
 Every successful search reports the number of prior completed calls with the same canonical input and states that the
 result is deterministic for its scope. A suppressed repeat reports the prior compact counts, searched scope, and
@@ -101,16 +107,18 @@ in-scope range was omitted or clipped. The bounded extractive fallback applies t
 allocation across candidate records instead of allowing the first candidates to consume the answer budget. A summary
 scope is limited to that summary and its cycle-safe descendants.
 
-The tool preempts same-session soft work, shares the LCM model-call queue, and makes at most one call through the active
-Kilo provider/model runtime with no tools. It does not create a child session, second provider protocol, or transcript
-turn. The answer is validated as `answer`, selected `citations`, and `coverage` (`full`, `partial`, or `none`), and its
-cost is added to the calling assistant message. Provider failure or invalid output is explicit. A bounded extractive
+The tool preempts same-session soft work, shares the LCM model-call queue, and makes one logical inference through the
+active Kilo provider/model runtime with no tools. The ordinary runtime may retry that inference once after a transient
+provider failure. It does not create a child session, second provider protocol, or transcript turn. The answer is
+validated as `answer`, selected `citations`, and `coverage` (`full`, `partial`, or `none`), and its cost is added to the
+calling assistant message. Provider failure after the retry or invalid output is explicit. A bounded extractive
 fallback is allowed for an exact `sourceRanges` scope, an explicit handle, or at least two useful query terms. Only a
 normal provider `stop` can
 produce a generated answer; a length-limited, filtered, errored, tool-call, unknown, or absent finish is reported as an
 incomplete response and uses the same bounded fallback. The query output limit is enforced through a constrained model
 copy rather than provider options. Query instructions prevent double-counting overlapping summary/raw evidence and
-require partial coverage unless exact or exhaustive completeness is actually supported. They make the output allowance
+require partial coverage unless exact or exhaustive completeness is actually supported. LCM also downgrades a claimed
+`full` answer to `partial` whenever retrieval omitted or clipped in-scope evidence. They make the output allowance
 a ceiling rather than a target, preserve event modality instead of treating every mention as an occurrence, state that
 missing wording is not proof that an action is absent, require concise numeric/count results, and prohibit copying
 excerpts into a generated answer. A fallback is labeled `extractive_fallback` before its evidence and explicitly says

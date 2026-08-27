@@ -17,7 +17,10 @@ import {
   requireSummary,
   sourceChronology,
 } from "./lcm-common"
+import { LcmSourceRange, resolveSourceRanges, utf8SearchWindow } from "./lcm-source-range"
 import type { SummaryChild } from "@/kilocode/session/lcm/types"
+
+export { utf8SearchWindow } from "./lcm-source-range"
 
 const MAX_RANGES_PER_RECORD = 20
 const MAX_UNSCOPED_RANGES_PER_RECORD = 1
@@ -41,7 +44,7 @@ export function lastOccurrencePageOffset(matchCount: number) {
   return Math.max(0, matchCount - MAX_RANGES_PER_RECORD)
 }
 
-const Parameters = Schema.Struct({
+export const LcmGrepParameters = Schema.Struct({
   pattern: Schema.String.annotate({
     description:
       "Exact unescaped text in literal mode, or a regular expression of at most 512 characters in regex mode; alternatives using | require regex mode.",
@@ -56,7 +59,12 @@ const Parameters = Schema.Struct({
     description: "Optional sum_ handle whose descendants bound the search.",
   }),
   sourceID: Schema.optional(Schema.String).annotate({
-    description: "Optional src_ handle that restricts the search to one exact current-session source.",
+    description:
+      "Optional src_ handle that restricts the search to one exact current-session source. Mutually exclusive with sourceRanges and summaryID.",
+  }),
+  sourceRanges: Schema.optional(Schema.Array(LcmSourceRange)).annotate({
+    description:
+      "Optional ordered semantic scope of 1-32 exact source byte ranges. Use one call across a document, section, episode, or other unit instead of fanning out one grep per transport source. Mutually exclusive with sourceID, summaryID, and top-level startOffset/endOffset.",
   }),
   startOffset: Schema.optional(Schema.Number).annotate({
     description:
@@ -122,24 +130,6 @@ export function utf8Ranges(text: string, ranges: Array<{ start: number; end: num
   })
 }
 
-export function utf8SearchWindow(text: string, startOffset = 0, endOffset?: number) {
-  const buffer = Buffer.from(text)
-  const end = endOffset ?? buffer.byteLength
-  const valid = (offset: number) =>
-    Number.isSafeInteger(offset) &&
-    offset >= 0 &&
-    offset <= buffer.byteLength &&
-    (offset === buffer.byteLength || (buffer[offset]! & 0xc0) !== 0x80)
-  if (!valid(startOffset) || !valid(end) || startOffset > end) throw new Error("lcm_invalid_search_range")
-  return {
-    text: buffer.subarray(startOffset, end).toString("utf8"),
-    characterOffset: buffer.subarray(0, startOffset).toString("utf8").length,
-    byteOffset: startOffset,
-    endOffset: end,
-    totalBytes: buffer.byteLength,
-  }
-}
-
 export function literalPatternAdvice(pattern: string, mode: "literal" | "regex") {
   if (mode !== "literal") return
   if (["[", "]", "(", ")", "{", "}", ".", "^", "$", "+", "*", "?", "|"].some((item) => pattern.includes(`\\${item}`)))
@@ -151,22 +141,29 @@ export function literalPatternAdvice(pattern: string, mode: "literal" | "regex")
 export function occurrenceTotals(
   matches: Array<{ id: string; matchCount: number }>,
   kinds: Map<string, "source" | "summary">,
+  publicIDs = new Map(matches.map((match) => [match.id, match.id])),
 ) {
-  return matches.reduce(
+  const records = { source: new Set<string>(), summary: new Set<string>() }
+  const occurrences = matches.reduce(
     (totals, match) => {
       const kind = kinds.get(match.id)
       if (kind === "source") {
-        totals.sourceRecords++
+        records.source.add(publicIDs.get(match.id) ?? match.id)
         totals.sourceOccurrences += match.matchCount
       }
       if (kind === "summary") {
-        totals.summaryRecords++
+        records.summary.add(publicIDs.get(match.id) ?? match.id)
         totals.summaryOccurrences += match.matchCount
       }
       return totals
     },
-    { sourceRecords: 0, summaryRecords: 0, sourceOccurrences: 0, summaryOccurrences: 0 },
+    { sourceOccurrences: 0, summaryOccurrences: 0 },
   )
+  return {
+    sourceRecords: records.source.size,
+    summaryRecords: records.summary.size,
+    ...occurrences,
+  }
 }
 
 export function grepCursorQuery(input: {
@@ -175,6 +172,7 @@ export function grepCursorQuery(input: {
   caseSensitive: boolean
   summaryID?: string
   sourceID?: string
+  sourceRanges?: ReadonlyArray<{ sourceID: string; startOffset?: number; endOffset?: number }>
   startOffset: number
   endOffset?: number
   occurrenceOffset: number
@@ -184,6 +182,13 @@ export function grepCursorQuery(input: {
 
 export function grepTotalsComplete(mode: "literal" | "regex", pageComplete: boolean) {
   return mode === "literal" || pageComplete
+}
+
+export function grepValueOrder(
+  a: { ordinal: number; sortIndex: number; id: string },
+  b: { ordinal: number; sortIndex: number; id: string },
+) {
+  return a.ordinal - b.ordinal || a.sortIndex - b.sortIndex || a.id.localeCompare(b.id)
 }
 
 export function regexErrorMessage(error: unknown) {
@@ -252,11 +257,11 @@ export const LcmGrepTool = Tool.define(
   Effect.gen(function* () {
     const memory = yield* ConversationMemory.Service
     const database = yield* Database.Service
-    const definition: Tool.DefWithoutID<typeof Parameters, LcmGrepMetadata> = {
+    const definition: Tool.DefWithoutID<typeof LcmGrepParameters, LcmGrepMetadata> = {
       description:
-        "Exact lexical discovery over earlier current-session finalized raw text and active summaries. A hit is a wording candidate, not proof of the event or interpretation a question asks about; a miss excludes only that spelling, not paraphrases. Use lcm_expand_query as the primary tool for semantic interpretation or aggregation. Literal mode is the default: enter punctuation exactly without regex backslashes; set mode to regex for alternatives such as foo|bar and keep every regex within 512 characters. A src_ handle is one transport record, never proof of a complete document, episode, section, or other semantic unit. Unscoped results include one preview plus exact counts and may contain overlapping summaries and raw descendants, so do not add both occurrence totals. For exact or exhaustive per-unit work, identify candidate src_ handles, apply structural startOffset/endOffset bounds, continue across chronological sources when needed, and seek with lcm_read.",
-      parameters: Parameters,
-      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
+        "Exact lexical discovery over earlier current-session finalized raw text and active summaries. A hit is a wording candidate, not proof of the event or interpretation a question asks about; a miss excludes only that spelling, not paraphrases. Use lcm_expand_query as the primary tool for semantic interpretation or aggregation. Literal mode is the default: enter punctuation exactly without regex backslashes; set mode to regex for alternatives such as foo|bar and keep every regex within 512 characters. A src_ handle is one transport record, never proof of a complete document, episode, section, or other semantic unit. For an exact search or count across one ordered semantic unit, pass all structurally bounded sourceRanges in one call instead of issuing one grep per transport source. Unscoped results include one preview plus exact counts and may contain overlapping summaries and raw descendants, so do not add both occurrence totals. Seek only necessary candidate context with lcm_read.",
+      parameters: LcmGrepParameters,
+      execute: (params: Schema.Schema.Type<typeof LcmGrepParameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
           yield* ctx.ask({
             permission: "lcm_grep",
@@ -269,6 +274,20 @@ export const LcmGrepTool = Tool.define(
           const completedRecoveryCalls = currentTurnRecoveryCallCount(ctx.messages) + 1
           const view = yield* loadMemory({ sessionID: ctx.sessionID, signal: ctx.abort, memory, database })
           const limit = Math.min(50, Math.max(1, Math.floor(params.limit ?? 20)))
+          if (
+            [params.summaryID !== undefined, params.sourceID !== undefined, params.sourceRanges !== undefined].filter(
+              Boolean,
+            ).length > 1
+          )
+            throw new LcmToolError(
+              "lcm_unavailable",
+              "Use only one grep scope: summaryID, sourceID, or ordered sourceRanges.",
+            )
+          if (params.sourceRanges && (params.startOffset !== undefined || params.endOffset !== undefined))
+            throw new LcmToolError(
+              "lcm_unavailable",
+              "Put byte bounds inside each sourceRanges entry; do not combine sourceRanges with top-level offsets.",
+            )
           if (
             params.occurrenceOffset !== undefined &&
             (!Number.isSafeInteger(params.occurrenceOffset) || params.occurrenceOffset < 0)
@@ -291,13 +310,16 @@ export const LcmGrepTool = Tool.define(
               "The source search interval must use non-negative UTF-8 byte offsets with startOffset no greater than endOffset.",
             )
           const occurrenceOffset = params.occurrenceOffset ?? 0
-          const rangeLimit = grepRangeLimit(params.sourceID !== undefined)
+          const sourceRanges = params.sourceRanges ? resolveSourceRanges(view, params.sourceRanges) : undefined
+          const sourceScoped = params.sourceID !== undefined || sourceRanges !== undefined
+          const rangeLimit = grepRangeLimit(sourceScoped)
           const query = grepCursorQuery({
             pattern: params.pattern,
             mode: params.mode ?? "literal",
             caseSensitive: params.caseSensitive ?? false,
             summaryID: params.summaryID,
             sourceID: params.sourceID,
+            sourceRanges: params.sourceRanges,
             startOffset: params.startOffset ?? 0,
             endOffset: params.endOffset,
             occurrenceOffset,
@@ -316,43 +338,74 @@ export const LcmGrepTool = Tool.define(
           if (params.sourceID) requireSource(view, params.sourceID)
           const chronology = params.sourceID ? sourceChronology(view, params.sourceID) : undefined
           const historicalCutoff =
-            params.sourceID || params.summaryID ? undefined : priorTurnSourceCutoff(view, ctx.messages)
+            params.sourceID || sourceRanges || params.summaryID ? undefined : priorTurnSourceCutoff(view, ctx.messages)
+          const rangedSources = sourceRanges?.map((range, index) => {
+            const source = view.sources.get(range.sourceID)!
+            const fullText = view.content.get(range.sourceID)?.content ?? ""
+            return {
+              id: `range:${index}:${range.sourceID}`,
+              publicID: range.sourceID,
+              rangeIndex: index,
+              kind: "source" as const,
+              sourceKind: source.kind,
+              ordinal: range.ordinal,
+              sortIndex: index,
+              fullText,
+              text: range.text,
+              characterOffset: Buffer.from(fullText).subarray(0, range.startOffset).toString("utf8").length,
+              byteOffset: range.startOffset,
+              endOffset: range.endOffset,
+              totalBytes: range.totalBytes,
+            }
+          })
           const values = [
-            ...[...view.sources.values()]
-              .filter(
-                (source) => (!params.sourceID || source.id === params.sourceID) && (!allowed || allowed.has(source.id)),
-              )
-              .filter((source) => historicalCutoff === undefined || source.ordinal <= historicalCutoff)
-              .map((source) => {
-                const fullText = view.content.get(source.id)?.content ?? ""
-                let window: ReturnType<typeof utf8SearchWindow>
-                try {
-                  window = utf8SearchWindow(fullText, params.sourceID ? (params.startOffset ?? 0) : 0, params.endOffset)
-                } catch {
-                  throw new LcmToolError(
-                    "lcm_unavailable",
-                    "The source search interval is outside the source or is not aligned to UTF-8 byte boundaries.",
-                  )
-                }
-                return {
-                  id: source.id,
-                  kind: "source" as const,
-                  sourceKind: source.kind,
-                  ordinal: source.ordinal,
-                  fullText,
-                  ...window,
-                }
-              }),
+            ...(rangedSources ??
+              [...view.sources.values()]
+                .filter(
+                  (source) =>
+                    (!params.sourceID || source.id === params.sourceID) && (!allowed || allowed.has(source.id)),
+                )
+                .filter((source) => historicalCutoff === undefined || source.ordinal <= historicalCutoff)
+                .map((source) => {
+                  const fullText = view.content.get(source.id)?.content ?? ""
+                  let window: ReturnType<typeof utf8SearchWindow>
+                  try {
+                    window = utf8SearchWindow(
+                      fullText,
+                      params.sourceID ? (params.startOffset ?? 0) : 0,
+                      params.endOffset,
+                    )
+                  } catch {
+                    throw new LcmToolError(
+                      "lcm_unavailable",
+                      "The source search interval is outside the source or is not aligned to UTF-8 byte boundaries.",
+                    )
+                  }
+                  return {
+                    id: source.id,
+                    publicID: source.id,
+                    kind: "source" as const,
+                    sourceKind: source.kind,
+                    ordinal: source.ordinal,
+                    sortIndex: 0,
+                    fullText,
+                    ...window,
+                  }
+                })),
             ...[...view.summaries.values()]
               .filter(
                 (summary) =>
-                  !params.sourceID && (!allowed || allowed.has(summary.id) || summary.id === params.summaryID),
+                  !params.sourceID &&
+                  !sourceRanges &&
+                  (!allowed || allowed.has(summary.id) || summary.id === params.summaryID),
               )
               .filter((summary) => historicalCutoff === undefined || summary.lastOrdinal <= historicalCutoff)
               .map((summary) => ({
                 id: summary.id,
+                publicID: summary.id,
                 kind: "summary" as const,
                 ordinal: summary.firstOrdinal,
+                sortIndex: 0,
                 text: summary.text,
                 fullText: summary.text,
                 characterOffset: 0,
@@ -360,11 +413,11 @@ export const LcmGrepTool = Tool.define(
                 endOffset: Buffer.byteLength(summary.text),
                 totalBytes: Buffer.byteLength(summary.text),
               })),
-          ].toSorted((a, b) => a.ordinal - b.ordinal || a.id.localeCompare(b.id))
+          ].toSorted(grepValueOrder)
           const repeated = repeatedRecoveryResult({
             tool: "lcm_grep",
             previousIdenticalCalls,
-            sourceScoped: Boolean(params.sourceID),
+            sourceScoped,
             completedRecoveryCalls,
             priorResult: history.priorResult,
           })
@@ -429,11 +482,24 @@ export const LcmGrepTool = Tool.define(
               ),
             }))
             return {
-              id: value.id,
+              id: value.publicID,
               kind: value.kind,
               ...(value.kind === "source"
-                ? { sourceID: value.id, sourceKind: value.sourceKind }
-                : { summaryID: value.id }),
+                ? {
+                    sourceID: value.publicID,
+                    sourceKind: value.sourceKind,
+                    ...(sourceRanges
+                      ? {
+                          sourceRange: {
+                            index: value.rangeIndex,
+                            startOffset: value.byteOffset,
+                            endOffset: value.endOffset,
+                            totalBytes: value.totalBytes,
+                          },
+                        }
+                      : {}),
+                  }
+                : { summaryID: value.publicID }),
               ordinal: value.ordinal,
               ranges,
               byteRanges,
@@ -457,12 +523,13 @@ export const LcmGrepTool = Tool.define(
           })
           const nextOffset = offset + selected.length
           const kinds = new Map(values.map((value) => [value.id, value.kind]))
+          const publicIDs = new Map(values.map((value) => [value.id, value.publicID]))
           const complete = nextOffset >= found.length
           const totalsComplete = grepTotalsComplete(params.mode ?? "literal", complete)
           const callGuidance = recoveryCallGuidance({
             tool: "lcm_grep",
             previousIdenticalCalls,
-            sourceScoped: Boolean(params.sourceID),
+            sourceScoped,
             completedRecoveryCalls,
           })
           const advice = [
@@ -472,6 +539,9 @@ export const LcmGrepTool = Tool.define(
               Boolean(params.sourceID),
               matches.map((match) => match.matchCount),
             ),
+            sourceRanges && matches.some((match) => !match.occurrencesComplete)
+              ? "Exact literal totals still include every match in every requested range, but occurrence excerpts are bounded per range. Narrow a candidate range or use a sourceID with occurrenceOffset only when more verbatim context is necessary."
+              : undefined,
             params.sourceID && (params.startOffset !== undefined || params.endOffset !== undefined)
               ? "Matches and totals are limited to the requested half-open source byte interval [startOffset, endOffset)."
               : undefined,
@@ -485,27 +555,47 @@ export const LcmGrepTool = Tool.define(
           const result = {
             callGuidance,
             ...(chronology ? { chronology } : {}),
-            ...(params.sourceID
+            ...(sourceRanges
               ? {
                   scope: {
-                    kind:
-                      params.startOffset !== undefined || params.endOffset !== undefined
-                        ? ("bounded_source_interval" as const)
-                        : ("entire_transport_source" as const),
+                    kind: "ordered_source_ranges" as const,
                     semanticUnitGuaranteed: false,
+                    ranges: sourceRanges.map(({ sourceID, ordinal, startOffset, endOffset, totalBytes }) => ({
+                      sourceID,
+                      ordinal,
+                      startOffset,
+                      endOffset,
+                      totalBytes,
+                    })),
                   },
                 }
-              : {}),
+              : params.sourceID
+                ? {
+                    scope: {
+                      kind:
+                        params.startOffset !== undefined || params.endOffset !== undefined
+                          ? ("bounded_source_interval" as const)
+                          : ("entire_transport_source" as const),
+                      semanticUnitGuaranteed: false,
+                    },
+                  }
+                : {}),
             ...(advice.length > 0 ? { advice } : {}),
             matches,
             ...(nextOffset < found.length ? { nextCursor: encodeCursor(query, nextOffset) } : {}),
             totals: {
-              returned: occurrenceTotals(selected, kinds),
-              ...(totalsComplete ? { complete: occurrenceTotals(found, kinds) } : {}),
+              returned: occurrenceTotals(selected, kinds, publicIDs),
+              ...(totalsComplete ? { complete: occurrenceTotals(found, kinds, publicIDs) } : {}),
             },
             searched: {
-              sources: values.filter((value) => value.kind === "source").length,
+              sources: new Set(values.filter((value) => value.kind === "source").map((value) => value.publicID)).size,
               summaries: values.filter((value) => value.kind === "summary").length,
+              ...(sourceRanges
+                ? {
+                    ranges: sourceRanges.length,
+                    bytes: sourceRanges.reduce((total, range) => total + range.endOffset - range.startOffset, 0),
+                  }
+                : {}),
               complete,
               ...(params.sourceID
                 ? {

@@ -1691,7 +1691,7 @@ export const layer: Layer.Layer<
                       ],
                       sessionID: `lcm-query:${input.sessionID}`,
                       system: [],
-                      retries: 0,
+                      retries: 1,
                     })
                     .pipe(
                       Stream.runCollect,

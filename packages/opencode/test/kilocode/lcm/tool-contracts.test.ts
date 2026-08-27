@@ -15,6 +15,8 @@ import {
   grepRangeLimit,
   grepCursorQuery,
   grepTotalsComplete,
+  grepValueOrder,
+  LcmGrepParameters,
   literalPatternAdvice,
   literalRanges,
   lastOccurrencePageOffset,
@@ -37,6 +39,7 @@ import {
 import {
   completeQueryAnswer,
   extractiveQueryFallback,
+  honestQueryCoverage,
   parseQueryAnswer,
   queryExcerpt,
   queryParts,
@@ -44,11 +47,23 @@ import {
   selectQueryExcerpts,
 } from "@/kilocode/tool/lcm-expand-query"
 import type { FinalSource } from "@/kilocode/session/lcm/types"
+import { Schema } from "effect"
 
 describe("LCM tool contracts", () => {
   test("keeps global grep as discovery and reserves wider occurrence pages for exact source scopes", () => {
     expect(grepRangeLimit(false)).toBe(1)
     expect(grepRangeLimit(true)).toBe(20)
+  })
+
+  test("preserves caller order for multiple ranges within one source ordinal", () => {
+    const values = Array.from({ length: 12 }, (_, sortIndex) => ({
+      id: `range:${sortIndex}:src_a`,
+      ordinal: 4,
+      sortIndex,
+    }))
+    expect(values.toSorted(grepValueOrder).map((value) => value.sortIndex)).toEqual(
+      Array.from({ length: 12 }, (_, index) => index),
+    )
   })
 
   test("makes regex intent and overlapping result totals explicit", () => {
@@ -256,6 +271,16 @@ describe("LCM tool contracts", () => {
         allowed,
       ),
     ).toBeUndefined()
+    expect(honestQueryCoverage({ answer: "Candidate", citations: ["src_alpha"], coverage: "full" }, true)).toEqual({
+      answer: "Candidate",
+      citations: ["src_alpha"],
+      coverage: "partial",
+    })
+    expect(honestQueryCoverage({ answer: "Complete", citations: ["src_alpha"], coverage: "full" }, false)).toEqual({
+      answer: "Complete",
+      citations: ["src_alpha"],
+      coverage: "full",
+    })
   })
 
   test("centers bounded recovery excerpts on early and late matches", () => {
@@ -378,6 +403,34 @@ describe("LCM tool contracts", () => {
     expect(() => resolveSourceRanges(view, [{ sourceID: second.id }, { sourceID: first.id }])).toThrow(
       "chronological order",
     )
+    expect(
+      Schema.decodeUnknownSync(LcmGrepParameters)({
+        pattern: "needle",
+        sourceRanges: [
+          { sourceID: first.id, startOffset },
+          { sourceID: second.id, endOffset },
+        ],
+      }).sourceRanges,
+    ).toEqual([
+      { sourceID: first.id, startOffset },
+      { sourceID: second.id, endOffset },
+    ])
+    expect(
+      occurrenceTotals(
+        [
+          { id: `range:0:${first.id}`, matchCount: 2 },
+          { id: `range:1:${first.id}`, matchCount: 3 },
+        ],
+        new Map([
+          [`range:0:${first.id}`, "source" as const],
+          [`range:1:${first.id}`, "source" as const],
+        ]),
+        new Map([
+          [`range:0:${first.id}`, first.id],
+          [`range:1:${first.id}`, first.id],
+        ]),
+      ),
+    ).toEqual({ sourceRecords: 1, summaryRecords: 0, sourceOccurrences: 5, summaryOccurrences: 0 })
   })
 
   test("keeps extractive query fallback fair across candidate records", () => {
@@ -409,6 +462,18 @@ describe("LCM tool contracts", () => {
     expect(decodeCursor(query, cursor)).toBe(12)
     expect(() => decodeCursor({ ...query, pattern: "other" }, cursor)).toThrow("lcm_invalid_cursor")
     expect(() => decodeCursor({ ...query, startOffset: 10 }, cursor)).toThrow("lcm_invalid_cursor")
+    const rangedQuery = grepCursorQuery({
+      ...query,
+      sourceRanges: [{ sourceID: "src_a", startOffset: 10, endOffset: 20 }],
+    })
+    const rangedCursor = encodeCursor(rangedQuery, 1)
+    expect(decodeCursor(rangedQuery, rangedCursor)).toBe(1)
+    expect(() =>
+      decodeCursor(
+        { ...rangedQuery, sourceRanges: [{ sourceID: "src_a", startOffset: 11, endOffset: 20 }] },
+        rangedCursor,
+      ),
+    ).toThrow("lcm_invalid_cursor")
     expect(() => decodeCursor(query, `${cursor.slice(0, -1)}x`)).toThrow("lcm_invalid_cursor")
     expect(() => decodeCursor(query, `${cursor}.extra`)).toThrow("lcm_invalid_cursor")
     const expansion = expandCursorQuery("sum_a")

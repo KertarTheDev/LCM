@@ -11,25 +11,14 @@ import {
   LcmToolError,
   loadMemory,
   priorTurnSourceCutoff,
-  requireSource,
   requireSummary,
   type MemoryView,
 } from "./lcm-common"
-import { utf8SearchWindow } from "./lcm-grep"
+import { LcmSourceRange, resolveSourceRanges, type ResolvedSourceRange } from "./lcm-source-range"
+
+export { resolveSourceRanges } from "./lcm-source-range"
 
 const MAX_QUERY_EXCERPTS = 8
-const MAX_SOURCE_RANGES = 32
-
-const SourceRange = Schema.Struct({
-  sourceID: Schema.String.annotate({ description: "Exact current-session src_ source handle." }),
-  startOffset: Schema.optional(Schema.Number).annotate({
-    description: "Inclusive UTF-8 byte offset; defaults to the source start.",
-  }),
-  endOffset: Schema.optional(Schema.Number).annotate({
-    description: "Exclusive UTF-8 byte offset; defaults to the source end.",
-  }),
-})
-
 const Parameters = Schema.Struct({
   query: Schema.String.annotate({
     description: "Question about earlier content in the current session (1-4096 characters).",
@@ -38,7 +27,7 @@ const Parameters = Schema.Struct({
     description:
       "Optional active sum_ handle whose descendants bound the search. Mutually exclusive with sourceRanges.",
   }),
-  sourceRanges: Schema.optional(Schema.Array(SourceRange)).annotate({
+  sourceRanges: Schema.optional(Schema.Array(LcmSourceRange)).annotate({
     description:
       "Optional ordered semantic scope of 1-32 exact source byte ranges. Use the structural-anchor map: start after an opening marker, include chronological intermediate sources, and end before the matching closing marker. Mutually exclusive with summaryID.",
   }),
@@ -89,15 +78,6 @@ interface Candidate {
   sourceRange?: ResolvedSourceRange
 }
 
-export interface ResolvedSourceRange {
-  sourceID: string
-  ordinal: number
-  startOffset: number
-  endOffset: number
-  totalBytes: number
-  text: string
-}
-
 interface QueryAnswer {
   answer: string
   citations: string[]
@@ -119,54 +99,6 @@ function scope(summaryID: string, view: Pick<MemoryView, "children">) {
   }
   visit(summaryID)
   return ids
-}
-
-export function resolveSourceRanges(
-  view: Pick<MemoryView, "sources" | "content">,
-  ranges: ReadonlyArray<{ sourceID: string; startOffset?: number; endOffset?: number }>,
-) {
-  if (ranges.length < 1 || ranges.length > MAX_SOURCE_RANGES)
-    throw new LcmToolError("lcm_unavailable", `Source range scope must contain 1 through ${MAX_SOURCE_RANGES} ranges.`)
-  const resolved: ResolvedSourceRange[] = []
-  for (const range of ranges) {
-    if (
-      (range.startOffset !== undefined && (!Number.isSafeInteger(range.startOffset) || range.startOffset < 0)) ||
-      (range.endOffset !== undefined && (!Number.isSafeInteger(range.endOffset) || range.endOffset < 0))
-    )
-      throw new LcmToolError("lcm_unavailable", "Source ranges require non-negative integer UTF-8 byte offsets.")
-    const { source, content } = requireSource(view, range.sourceID)
-    let window: ReturnType<typeof utf8SearchWindow>
-    try {
-      window = utf8SearchWindow(content.content, range.startOffset ?? 0, range.endOffset)
-    } catch {
-      throw new LcmToolError(
-        "lcm_unavailable",
-        "A source range is outside its source or is not aligned to UTF-8 byte boundaries.",
-      )
-    }
-    if (window.byteOffset >= window.endOffset)
-      throw new LcmToolError("lcm_unavailable", "Every source range must contain at least one UTF-8 byte.")
-    const previous = resolved.at(-1)
-    if (
-      previous &&
-      (source.ordinal < previous.ordinal ||
-        (source.ordinal === previous.ordinal &&
-          (source.id !== previous.sourceID || window.byteOffset < previous.endOffset)))
-    )
-      throw new LcmToolError(
-        "lcm_unavailable",
-        "Source ranges must be in chronological order and must not overlap within one source.",
-      )
-    resolved.push({
-      sourceID: source.id,
-      ordinal: source.ordinal,
-      startOffset: window.byteOffset,
-      endOffset: window.endOffset,
-      totalBytes: window.totalBytes,
-      text: window.text,
-    })
-  }
-  return resolved
 }
 
 export function queryParts(query: string) {
@@ -442,6 +374,11 @@ export function completeQueryAnswer(text: string, finish: string | undefined, al
   return parseQueryAnswer(text, allowed)
 }
 
+export function honestQueryCoverage(answer: QueryAnswer | undefined, retrievalTruncated: boolean) {
+  if (!answer || !retrievalTruncated || answer.coverage !== "full") return answer
+  return { ...answer, coverage: "partial" as const }
+}
+
 export function extractiveQueryFallback(
   selected: Array<{ id: string; text: string }>,
   terms: string[],
@@ -482,7 +419,7 @@ export const LcmExpandQueryTool = Tool.define(
     const sessions = yield* Session.Service
     return {
       description:
-        "Primary semantic recovery for earlier current-session memory: synthesize or aggregate one focused candidate answer from fairly budgeted, match-centered excerpts with validated src_/sum_ citations. Use this when meaning, event status, paraphrases, ordering, or evidence across sources matters; prefer it to manually paging large sources. For a document, section, or other semantic unit, pass ordered sourceRanges copied from the structural-anchor map so bytes before its opening and after its close cannot contaminate the answer. Include chronological intermediate sources. For exact, exhaustive, first/last, count, or complete-list work, verify only cited candidates and necessary boundaries with bounded lcm_grep or lcm_read before claiming completeness.",
+        "Primary semantic recovery for earlier current-session memory: synthesize or aggregate one focused candidate answer from fairly budgeted, match-centered excerpts with validated src_/sum_ citations. Use this when meaning, event status, paraphrases, ordering, or evidence across sources matters; prefer it to manually paging large sources. For a document, section, or other semantic unit, pass ordered sourceRanges copied from the structural-anchor map so bytes before its opening and after its close cannot contaminate the answer. Include chronological intermediate sources. When the question spans one ordered scope, query that complete scope once before decomposing unresolved parts. For exact, exhaustive, first/last, count, or complete-list work, verify only cited candidates and necessary boundaries with one bounded sourceRanges grep or targeted lcm_read before claiming completeness.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -602,9 +539,10 @@ export const LcmExpandQueryTool = Tool.define(
             )
           const allowed = new Set(retrieval.selected.map((item) => item.id))
           const completeResponse = generated.ok && generated.value.finish === "stop"
-          const answer = generated.ok
-            ? completeQueryAnswer(generated.value.text, generated.value.finish, allowed)
-            : undefined
+          const answer = honestQueryCoverage(
+            generated.ok ? completeQueryAnswer(generated.value.text, generated.value.finish, allowed) : undefined,
+            retrieval.truncated,
+          )
           const mayExtract = Boolean(sourceRanges) || retrieval.handles.length > 0 || retrieval.terms.length >= 2
           const extracted = mayExtract
             ? extractiveQueryFallback(retrieval.selected, retrieval.terms, maxAnswerTokens * 4)
@@ -640,7 +578,19 @@ export const LcmExpandQueryTool = Tool.define(
                         "The provider did not return a complete validated synthesis. The answer field contains bounded evidence excerpts, not a computed answer. Do not present it as the resolved answer or count omission markers as evidence. Use it to refine one genuinely different query or verify only the remaining candidates and boundaries.",
                     },
                   }
-                : { answerKind: "generated" }),
+                : {
+                    answerKind: "generated",
+                    ...(retrieval.truncated || answer?.coverage !== "full"
+                      ? {
+                          callGuidance: {
+                            generatedAnswerAccepted: true,
+                            completeCoverage: false,
+                            instruction:
+                              "This synthesis is a cited candidate from incomplete or partial evidence. Do not treat it as exhaustive or as proof of a first, last, count, or complete list. Verify only the decisive candidate and required boundary with one bounded sourceRanges grep or targeted read.",
+                          },
+                        }
+                      : {}),
+                  }),
               ...result,
               ...(rangeScope ? { scope: rangeScope } : {}),
               searched,

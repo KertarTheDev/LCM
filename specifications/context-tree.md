@@ -106,9 +106,12 @@ that literal grep uses unescaped punctuation, and that summaries and raw descend
 opening/closing markers with the same normalized label are also paired
 into copy-ready chronological `sourceRanges` arrays when the complete unit spans at most 32 transport sources;
 unpaired, truncated, or larger units remain recoverable from the exact anchor map without being presented as complete.
-Range-scoped query retrieval cannot include bytes before the opening or after the closing,
-fairly samples all supplied ranges in chronological order, and reports whether in-scope text was clipped. Source grep
-pages expose a copy-ready final occurrence-page offset for last-event questions.
+Range-scoped query retrieval cannot include bytes before the opening or after the closing, fairly samples all supplied
+ranges in chronological order, and reports whether in-scope text was clipped. It cannot report full coverage after
+clipping and may make one ordinary retry after a transient provider failure. `lcm_grep` accepts the same ordered range
+scope for one exact lexical search or count across the complete unit; literal totals cover all ranges even when returned
+occurrence excerpts are bounded. Single-source grep pages expose a copy-ready final occurrence-page offset for
+last-event questions.
 It directs targeted reads instead of full-source sequential scans, requires callers to honor the returned completion
 that source completion is not semantic-unit completion. An exclusive `lcm_read.endOffset` is cursor-bound and prevents
 exact inspection from crossing a verified closing boundary. Successful grep/read results report how many times the exact
