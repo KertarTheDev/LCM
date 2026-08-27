@@ -388,6 +388,7 @@ export const LcmGrepTool = Tool.define(
                     sourceKind: source.kind,
                     ordinal: source.ordinal,
                     sortIndex: 0,
+                    rangeIndex: undefined,
                     fullText,
                     ...window,
                   }
@@ -406,6 +407,7 @@ export const LcmGrepTool = Tool.define(
                 kind: "summary" as const,
                 ordinal: summary.firstOrdinal,
                 sortIndex: 0,
+                rangeIndex: undefined,
                 text: summary.text,
                 fullText: summary.text,
                 characterOffset: 0,

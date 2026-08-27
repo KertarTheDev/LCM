@@ -61,6 +61,12 @@ therefore known inferior to the pending fixed product state; exact release ID `3
 candidate `830e62c281d76b71b2f6a989100e85dc1511f2b1` are authorized for removal only after a differently tagged replacement
 is published and independently verified.
 
+The first `.12` candidate `7cc3a29f4696b39b8d43c0ae162d85f397244464` stopped in exact-SHA workflow run
+[`33047780488`](https://github.com/KertarTheDev/LCM/actions/runs/33047780488) before versioning or draft creation. Hosted
+OpenCode typecheck proved that the ordinary-source branch of the new grep result union did not expose an explicit
+optional `rangeIndex`, even though focused runtime tests passed. The product now makes that metadata boundary explicit;
+no draft, release, tag, or assets existed to delete, and the Actions audit run is retained.
+
 The GitHub Actions major outage on 2026-08-26 produced retained audit runs
 [`32985474928`](https://github.com/KertarTheDev/LCM/actions/runs/32985474928), which ended in `startup_failure` before a
 job or release existed, and [`32985701284`](https://github.com/KertarTheDev/LCM/actions/runs/32985701284), which remained
