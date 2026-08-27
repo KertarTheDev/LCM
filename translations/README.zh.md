@@ -2,6 +2,131 @@
   <a href="../README.md">English</a> | 简体中文 | <a href="README.zht.md">繁體中文</a> | <a href="README.ko.md">한국어</a> | <a href="README.de.md">Deutsch</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.it.md">Italiano</a> | <a href="README.da.md">Dansk</a> | <a href="README.ja.md">日本語</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.bs.md">Bosanski</a> | <a href="README.ar.md">العربية</a> | <a href="README.no.md">Norsk</a> | <a href="README.br.md">Português (Brasil)</a> | <a href="README.th.md">ไทย</a> | <a href="README.tr.md">Türkçe</a> | <a href="README.uk.md">Українська</a> | <a href="README.bn.md">বাংলা</a> | <a href="README.gr.md">Ελληνικά</a> | <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
+<!-- LCM_ONBOARDING_START -->
+<a id="install-lcm-prerelease"></a>
+## 试用 LCM 预发行版
+
+这个实验版 Kilo Code 会把已经使用过的旧上下文变成可搜索的摘要树，让长对话继续保持实用。最近的工作会原样保留，代理需要时也能找回早期细节。
+
+> [!IMPORTANT]
+> 带 LCM 的版本仅通过本仓库的 GitHub Releases 发布。从 Marketplace、Open VSX、npm、Homebrew、AUR、云服务或 JetBrains 安装的都是不含 LCM 的 Kilo Code 官方版。
+
+[想了解背后的思路？请阅读 Clint Ehrlich 和 Theodore Blackman 的 LCM 原始论文。](https://arxiv.org/abs/2605.04050)
+
+**当前预发行版:** [`v7.4.23-lcm.12`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.12)
+
+### 选择下载文件
+
+使用 VS Code 或 VSCodium 时选择 VSIX；在终端工作时选择 CLI 压缩包。两者可以同时安装。
+
+#### 确认系统
+
+Windows 请查看 Settings → System → About → System type；macOS 请查看 Apple menu → About This Mac；Linux 请运行 uname -m。x86_64 或 amd64 表示 x64，arm64 或 aarch64 表示 ARM64。
+
+大多数 Linux 桌面使用 glibc；Alpine 和一些小型容器使用 musl。仅当 x64 CPU 较旧，或普通 CLI 因 illegal instruction 退出时选择 baseline；没有单独的 baseline VSIX。
+
+#### VS Code / VSCodium
+
+需要 VS Code 或 VSCodium 1.105.1 或更高版本。VSIX 使用普通 Kilo Code 的扩展 ID，因此会替换已安装的 Marketplace 版本。
+
+|系统|文件|
+|---|---|
+|Windows x64|`kilo-vscode-win32-x64.vsix`|
+|Windows ARM64|`kilo-vscode-win32-arm64.vsix`|
+|macOS x64 (Intel)|`kilo-vscode-darwin-x64.vsix`|
+|macOS ARM64 (Apple Silicon)|`kilo-vscode-darwin-arm64.vsix`|
+|Linux x64 (glibc)|`kilo-vscode-linux-x64.vsix`|
+|Linux ARM64 (glibc)|`kilo-vscode-linux-arm64.vsix`|
+|Alpine x64 (musl)|`kilo-vscode-alpine-x64.vsix`|
+|Alpine ARM64 (musl)|`kilo-vscode-alpine-arm64.vsix`|
+
+下载匹配的文件，关闭 Kilo Code 自动更新，然后选择 Extensions → … → Install from VSIX。安装后重新加载窗口。也可以使用下面的命令。
+
+```bash
+code --install-extension ./kilo-vscode-linux-x64.vsix --force
+codium --install-extension ./kilo-vscode-linux-x64.vsix --force
+```
+
+#### CLI
+
+从表格中下载一个压缩包。把整个压缩包解压到独立文件夹，并让所有支持文件和可执行文件保持在一起。
+
+|系统|文件|
+|---|---|
+|Windows x64|`kilo-windows-x64.zip`|
+|Windows x64 baseline|`kilo-windows-x64-baseline.zip`|
+|Windows ARM64|`kilo-windows-arm64.zip`|
+|macOS x64 (Intel)|`kilo-darwin-x64.zip`|
+|macOS x64 baseline|`kilo-darwin-x64-baseline.zip`|
+|macOS ARM64 (Apple Silicon)|`kilo-darwin-arm64.zip`|
+|Linux x64 (glibc)|`kilo-linux-x64.tar.gz`|
+|Linux x64 baseline (glibc)|`kilo-linux-x64-baseline.tar.gz`|
+|Linux ARM64 (glibc)|`kilo-linux-arm64.tar.gz`|
+|Linux x64 (musl)|`kilo-linux-x64-musl.tar.gz`|
+|Linux x64 baseline (musl)|`kilo-linux-x64-baseline-musl.tar.gz`|
+|Linux ARM64 (musl)|`kilo-linux-arm64-musl.tar.gz`|
+
+将文件夹加入 PATH 前，先运行一次解压后的程序。如果之后启动了其他 Kilo，请用下面的命令检查路径，并把 LCM 文件夹放到 PATH 更靠前的位置。
+
+```bash
+mkdir -p kilo-lcm
+tar -xzf kilo-linux-x64.tar.gz -C kilo-lcm
+./kilo-lcm/kilo --version
+
+unzip kilo-darwin-arm64.zip -d kilo-lcm
+./kilo-lcm/kilo --version
+
+which -a kilo
+```
+
+```powershell
+Expand-Archive .\kilo-windows-x64.zip .\kilo-lcm
+.\kilo-lcm\kilo.exe --version
+where.exe kilo
+```
+
+### 设置 Kilo 和 LCM
+
+先连接你常用的服务商并选择模型。Conversation Memory 默认开启，可在 Settings → Experimental 中确认。然后打开 Settings → Context；默认从 40% 开始处理。自定义模型的上下文上限和输出令牌上限必须为正数，输入上限可以不填。
+
+```jsonc
+{
+  "experimental": {
+    "conversation_memory": true
+  },
+  "conversation_memory": {
+    "soft_threshold_percent": 40
+  }
+}
+```
+
+启用 LCM 时，compaction.auto 只控制 Kilo 旧的压缩系统，不会关闭 LCM。
+
+#### Ollama
+
+Ollama 请填写真实服务器地址：同一台机器通常是 localhost:11434，其他设备则使用电脑的 LAN 地址。确认 Ollama 在该地址监听、firewall 允许访问，而且 model 的 num_ctx 不小于 Kilo 中填写的 context limit。
+
+### 检查是否正常
+
+开始聊天，选择服务商和模型，然后运行 /lcm status。状态应为 enabled，并且容量已识别。任务标题或 Context 页面会显示上下文用量和 LCM 活动。/compact 会手动运行一次 LCM；较短的新聊天可能还没有内容可摘要。
+
+### 实用提示
+
+生成摘要需要调用模型，因此可能增加少量延迟和费用。建议先用 40%；想更早处理可调低，想减少调用可调高。LCM 记忆仅属于当前聊天。上下文导出可能包含敏感的提示词和工具输出，请像保护聊天内容一样妥善保管。
+
+#### 快速排查
+
+看到 lcm_capacity_unknown 时，请填写所选自定义 model 的 context 和 output limit。如果重启后扩展变回其他版本，请关闭 auto-update 并重新安装 VSIX。如果 CLI 版本不对，请检查 which -a kilo 或 where.exe kilo。Alpine 使用 musl；旧 x64 CPU 尝试 baseline。
+
+#### 更新或回退
+
+更新时，在旧版上安装新版 VSIX，或替换已解压的 CLI 文件夹。聊天仍保存在 Kilo 的 SQLite 中。要快速回退，把 experimental.conversation_memory 设为 false；也可以重新安装 Kilo Code 官方版或较早的预发行版。
+
+> [!NOTE]
+> 本页其余内容介绍 Kilo Code 官方版。下方的常规安装链接不会安装这个带 LCM 的版本。
+
+<!-- LCM_ONBOARDING_END -->
+
 <p align="center">
   <a href="https://kilo.ai"><img width="250" alt="Kilo Code logo" src="https://github.com/user-attachments/assets/bdb0c174-b9fd-40ad-a47b-f3aab9b54e8d" /></a>
 </p>

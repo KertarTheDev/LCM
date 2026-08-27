@@ -2,6 +2,131 @@
   <a href="../README.md">English</a> | <a href="README.zh.md">简体中文</a> | <a href="README.zht.md">繁體中文</a> | <a href="README.ko.md">한국어</a> | <a href="README.de.md">Deutsch</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.it.md">Italiano</a> | <a href="README.da.md">Dansk</a> | 日本語 | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.bs.md">Bosanski</a> | <a href="README.ar.md">العربية</a> | <a href="README.no.md">Norsk</a> | <a href="README.br.md">Português (Brasil)</a> | <a href="README.th.md">ไทย</a> | <a href="README.tr.md">Türkçe</a> | <a href="README.uk.md">Українська</a> | <a href="README.bn.md">বাংলা</a> | <a href="README.gr.md">Ελληνικά</a> | <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
+<!-- LCM_ONBOARDING_START -->
+<a id="install-lcm-prerelease"></a>
+## LCM プレリリースを試す
+
+この実験版 Kilo Code は、すでに使った古いコンテキストを検索できる要約ツリーにまとめ、長いチャットでも流れを保ちやすくします。最近の作業はそのまま残り、必要になればエージェントが以前の詳しい内容を取り出せます。
+
+> [!IMPORTANT]
+> LCM 入りのビルドは、このリポジトリの GitHub Releases でのみ配布しています。Marketplace、Open VSX、npm、Homebrew、AUR、クラウド、JetBrains からインストールされるのは公式版 Kilo Code で、LCM は含まれません。
+
+[仕組みの元になった考え方は、Clint Ehrlich と Theodore Blackman による原著 LCM 論文をご覧ください。](https://arxiv.org/abs/2605.04050)
+
+**現在のプレリリース:** [`v7.4.23-lcm.12`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.12)
+
+### ダウンロードを選ぶ
+
+VS Code または VSCodium なら VSIX、ターミナルなら CLI アーカイブを選びます。両方入れても問題ありません。
+
+#### システムを確認
+
+Windows は Settings → System → About → System type、macOS は Apple menu → About This Mac を確認し、Linux は uname -m を実行します。x86_64 または amd64 は x64、arm64 または aarch64 は ARM64 です。
+
+多くの Linux デスクトップは glibc、Alpine や小さなコンテナは musl を使います。baseline は古い x64 CPU、または通常版 CLI が illegal instruction で終了するときだけ選んでください。baseline 専用 VSIX はありません。
+
+#### VS Code / VSCodium
+
+VS Code または VSCodium 1.105.1 以降が必要です。VSIX は通常版 Kilo Code と同じ拡張機能 ID を使うため、インストール済みの Marketplace 版を置き換えます。
+
+|システム|ファイル|
+|---|---|
+|Windows x64|`kilo-vscode-win32-x64.vsix`|
+|Windows ARM64|`kilo-vscode-win32-arm64.vsix`|
+|macOS x64 (Intel)|`kilo-vscode-darwin-x64.vsix`|
+|macOS ARM64 (Apple Silicon)|`kilo-vscode-darwin-arm64.vsix`|
+|Linux x64 (glibc)|`kilo-vscode-linux-x64.vsix`|
+|Linux ARM64 (glibc)|`kilo-vscode-linux-arm64.vsix`|
+|Alpine x64 (musl)|`kilo-vscode-alpine-x64.vsix`|
+|Alpine ARM64 (musl)|`kilo-vscode-alpine-arm64.vsix`|
+
+対応ファイルをダウンロードし、Kilo Code の自動更新をオフにして、Extensions → … → Install from VSIX を選びます。インストール後にウィンドウを再読み込みしてください。下のコマンドでもできます。
+
+```bash
+code --install-extension ./kilo-vscode-linux-x64.vsix --force
+codium --install-extension ./kilo-vscode-linux-x64.vsix --force
+```
+
+#### CLI
+
+表からアーカイブを1つダウンロードします。専用フォルダーへ全部展開し、サポートファイルを実行ファイルと同じ場所に置いたままにしてください。
+
+|システム|ファイル|
+|---|---|
+|Windows x64|`kilo-windows-x64.zip`|
+|Windows x64 baseline|`kilo-windows-x64-baseline.zip`|
+|Windows ARM64|`kilo-windows-arm64.zip`|
+|macOS x64 (Intel)|`kilo-darwin-x64.zip`|
+|macOS x64 baseline|`kilo-darwin-x64-baseline.zip`|
+|macOS ARM64 (Apple Silicon)|`kilo-darwin-arm64.zip`|
+|Linux x64 (glibc)|`kilo-linux-x64.tar.gz`|
+|Linux x64 baseline (glibc)|`kilo-linux-x64-baseline.tar.gz`|
+|Linux ARM64 (glibc)|`kilo-linux-arm64.tar.gz`|
+|Linux x64 (musl)|`kilo-linux-x64-musl.tar.gz`|
+|Linux x64 baseline (musl)|`kilo-linux-x64-baseline-musl.tar.gz`|
+|Linux ARM64 (musl)|`kilo-linux-arm64-musl.tar.gz`|
+
+フォルダーを PATH に追加する前に、展開したバイナリを一度実行します。後で別の Kilo が起動する場合は、下のパス確認を使い、LCM フォルダーを PATH の先に置きます。
+
+```bash
+mkdir -p kilo-lcm
+tar -xzf kilo-linux-x64.tar.gz -C kilo-lcm
+./kilo-lcm/kilo --version
+
+unzip kilo-darwin-arm64.zip -d kilo-lcm
+./kilo-lcm/kilo --version
+
+which -a kilo
+```
+
+```powershell
+Expand-Archive .\kilo-windows-x64.zip .\kilo-lcm
+.\kilo-lcm\kilo.exe --version
+where.exe kilo
+```
+
+### Kilo と LCM の設定
+
+まず普段使っているプロバイダーを接続し、モデルを選びます。Conversation Memory は初期状態で有効です。拡張機能の Settings → Experimental で確認し、Settings → Context を開いてください。処理を始める基準値は 40% です。カスタムモデルでは、コンテキスト上限と出力トークン上限に正の値が必要です。入力上限は省略できます。
+
+```jsonc
+{
+  "experimental": {
+    "conversation_memory": true
+  },
+  "conversation_memory": {
+    "soft_threshold_percent": 40
+  }
+}
+```
+
+LCM が有効な間、compaction.auto は Kilo の旧 compaction 機能だけを制御し、LCM 自体はオフにしません。
+
+#### Ollama
+
+Ollama には実際のサーバーアドレスを指定します。同じ端末なら通常 localhost:11434、別端末ならコンピューターの LAN アドレスです。Ollama がそのアドレスで待ち受け、firewall が許可し、num_ctx が Kilo に入力した context limit 以上か確認してください。
+
+### 動作確認
+
+チャットを始め、プロバイダーとモデルを選んで /lcm status を実行します。状態が enabled で、容量が認識されていることを確認してください。タスクヘッダーまたは Context ページに使用量と LCM の動作状況が表示されます。/compact を使うと手動で LCM を1回実行できます。短い新規チャットでは、まだ要約する内容がない場合があります。
+
+### 便利なヒント
+
+要約にはモデル呼び出しを使うため、少し時間と料金が増えることがあります。まずは 40% のまま使い、早めに整理したい場合は下げ、呼び出し回数を減らしたい場合は上げます。LCM の記憶は現在のチャット専用です。コンテキストの書き出しには、機密性の高いプロンプトやツール出力が含まれる場合があります。
+
+#### すぐできる対処
+
+lcm_capacity_unknown が出たら、選択中のカスタムモデルの context と output limit を入力します。再起動後に拡張機能が戻るなら auto-update を切り、VSIX を再インストールします。CLI が違うなら which -a kilo または where.exe kilo を確認します。Alpine は musl、古い x64 は baseline を試します。
+
+#### 更新またはロールバック
+
+更新するときは、新しい VSIX を上書きインストールするか、展開済みの CLI フォルダーを入れ替えます。チャットは Kilo の SQLite に残ります。すぐ元に戻すには experimental.conversation_memory を false にしてください。公式版 Kilo Code や以前のプレリリースを再インストールすることもできます。
+
+> [!NOTE]
+> この先は公式版 Kilo Code の説明です。下にある通常のインストールリンクからは、この LCM 版はインストールされません。
+
+<!-- LCM_ONBOARDING_END -->
+
 <p align="center">
   <a href="https://kilo.ai"><img width="250" alt="Kilo Code logo" src="https://github.com/user-attachments/assets/bdb0c174-b9fd-40ad-a47b-f3aab9b54e8d" /></a>
 </p>

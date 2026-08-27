@@ -40,6 +40,265 @@ permissions:
   pull-requests: write # kilocode_change - create automated JetBrains CLI pin bump PRs
 
 jobs:
+  # kilocode_change start - verify and publish LCM prerelease assets from the fork-only branch
+  lcm-prerelease-artifacts:
+    name: LCM prerelease artifacts
+    if: github.repository == 'KertarTheDev/LCM' && github.ref == 'refs/heads/kilocode-lcm-prerelease'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v6 # kilocode_change
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Verify exact product ancestry and overlay
+        run: |
+          base="$(node -p "require('./package.json').version.split('-')[0]")"
+          git fetch --no-tags origin \
+            "+refs/heads/kilocode-lcm-v${base}:refs/remotes/origin/kilocode-lcm-v${base}"
+          node "$GITHUB_WORKSPACE/script/lcm-prerelease-release.mjs" verify-overlay \
+            --base-ref "origin/kilocode-lcm-v${base}" \
+            --head-ref "$GITHUB_SHA"
+          bun run script/check-opencode-annotations.ts --base "origin/kilocode-lcm-v${base}"
+          bun run script/check-workflows.ts
+
+      - name: Verify v7.4.23 adaptation seams
+        run: |
+          cd "$GITHUB_WORKSPACE/packages/opencode"
+          bun test \
+            test/kilocode/lcm/upstream-compat.test.ts \
+            test/kilocode/lcm/prompt-seam.test.ts \
+            test/kilocode/lcm/tui-command.test.ts \
+            --timeout 120000
+          bun test \
+            test/event-manifest.test.ts \
+            test/kilocode/lcm/api-contracts.test.ts \
+            --timeout 120000
+          bun test test/session/processor-effect.test.ts \
+            -t 'external context management|upstream policy' \
+            --timeout 180000
+          bun test test/kilocode/lcm/transcript-source.test.ts \
+            -t 'a later successful provider step consumes sequential and parallel LCM tool results' \
+            --timeout 120000
+          bun test test/kilocode/lcm/tool-contracts.test.ts --timeout 120000
+          bun test test/kilocode/agent-permission-overrides.test.ts \
+            -t 'Conversation Memory' \
+            --timeout 120000
+          bun test test/kilocode/sessions/remote-command.test.ts -t 'compact' \
+            --timeout 120000
+          bun test test/kilocode/sessions/remote-sender.test.ts \
+            -t 'send_command rejects process exit before ACK without invoking command or graceful exit' \
+            --timeout 120000
+          bun run --cwd "$GITHUB_WORKSPACE/packages/opencode" lcm:contracts:check
+          bun run --cwd "$GITHUB_WORKSPACE/packages/opencode" lcm:docs:check
+          cd "$GITHUB_WORKSPACE/packages/kilo-vscode"
+          bunx eslint --no-cache \
+            src/KiloProvider.ts \
+            src/kilo-provider/early-message.ts \
+            src/kilo-provider/conversation-memory.ts \
+            src/services/cli-backend/connection-utils.ts \
+            src/shared/custom-provider.ts \
+            tests/unit/connection-utils.test.ts \
+            tests/unit/conversation-memory-export.test.ts \
+            tests/unit/custom-provider-dialog-validate.test.ts \
+            tests/unit/custom-provider.test.ts \
+            tests/unit/i18n-keys.test.ts \
+            tests/unit/kilo-provider-load-messages.test.ts \
+            tests/unit/lcm-ui.test.ts \
+            webview-ui/src/components/chat/ContextProgress.tsx \
+            webview-ui/src/components/chat/TaskHeader.tsx \
+            webview-ui/src/components/chat/TaskTimeline.tsx \
+            webview-ui/src/components/settings/ContextTab.tsx \
+            webview-ui/src/components/settings/CustomProviderDialog.tsx \
+            webview-ui/src/components/settings/CustomProviderModelCard.tsx \
+            webview-ui/src/components/settings/CustomProviderValidation.ts \
+            webview-ui/src/components/settings/ExperimentalTab.tsx \
+            webview-ui/src/context/lcm-state.ts \
+            webview-ui/src/context/session.tsx \
+            webview-ui/src/types/messages/config.ts \
+            webview-ui/src/types/messages/extension-messages.ts \
+            webview-ui/src/types/messages/index.ts \
+            webview-ui/src/types/messages/lcm.ts \
+            webview-ui/src/types/messages/webview-messages.ts
+          bun test \
+            tests/unit/conversation-memory-export.test.ts \
+            tests/unit/connection-utils.test.ts \
+            tests/unit/early-message.test.ts \
+            tests/unit/lcm-ui.test.ts \
+            --timeout 120000
+          bun test \
+            tests/unit/custom-provider.test.ts \
+            tests/unit/custom-provider-dialog-validate.test.ts \
+            --timeout 120000
+          bun test tests/unit/kilo-provider-load-messages.test.ts --timeout 120000
+          bun test tests/unit/i18n-keys.test.ts --timeout 120000
+          node --test "$GITHUB_WORKSPACE/script/lcm-prerelease-release.test.mjs"
+
+      - name: Typecheck affected packages
+        run: |
+          bun run --cwd "$GITHUB_WORKSPACE/packages/opencode" typecheck
+          bun run --cwd "$GITHUB_WORKSPACE/packages/sdk/js" typecheck
+          bun run --cwd "$GITHUB_WORKSPACE/packages/kilo-i18n" typecheck
+          bun run --cwd "$GITHUB_WORKSPACE/packages/tui" typecheck
+          bun run --cwd "$GITHUB_WORKSPACE/packages/kilo-vscode" typecheck
+          bun run --cwd "$GITHUB_WORKSPACE/packages/kilo-vscode" check-kilocode-change
+
+      - name: Prove generated contracts are stable
+        run: |
+          bun run script/generate.ts
+          git diff --exit-code
+
+      - name: Compute LCM prerelease version
+        id: alpha
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          base="${INPUT_VERSION:-}"
+          if [ -z "$base" ]; then
+            base="$(node -p "require('./package.json').version")"
+          fi
+          base="${base#v}"
+          base="${base%%-*}"
+          node -e 'const semver = require("semver"); const base = process.argv[1]; if (!semver.valid(base)) { console.error(`Invalid upstream base version: ${base}`); process.exit(1); }' "$base"
+          node "$GITHUB_WORKSPACE/script/lcm-prerelease-release.mjs" next-version \
+            --repo "$GITHUB_REPOSITORY" \
+            --base "$base" \
+            --sha "$GITHUB_SHA" \
+            --output "$GITHUB_OUTPUT"
+
+      - name: Setup Zig for Linux sandbox helpers
+        run: |
+          curl --fail --location --retry 3 \
+            https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz \
+            --output "$RUNNER_TEMP/zig.tar.xz"
+          echo "473ec26806133cf4d1918caf1a410f8403a13d979726a9045b421b685031a982  $RUNNER_TEMP/zig.tar.xz" | sha256sum --check --status
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-linux-x86_64-0.14.0" >> "$GITHUB_PATH"
+
+      - name: Build CLI archives
+        env:
+          KILO_VERSION: ${{ steps.alpha.outputs.version }}
+          KILO_PRE_RELEASE: "true"
+          KILO_RELEASE: "1"
+          KILO_RELEASE_ARCHIVE_ONLY: "true"
+        run: bun run --cwd "$GITHUB_WORKSPACE/packages/opencode" build
+
+      - name: Install VSIX packager
+        run: bun install -g @vscode/vsce
+
+      - name: Build VSIX packages
+        env:
+          CLI_DIST_DIR: ${{ github.workspace }}/packages/opencode/dist
+          KILO_VERSION: ${{ steps.alpha.outputs.version }}
+          KILO_PRE_RELEASE: "true"
+        run: bun script/build.ts
+        working-directory: packages/kilo-vscode
+
+      - name: Smoke packaged Linux x64 Conversation Memory runtime
+        run: |
+          snapshot="$GITHUB_WORKSPACE/packages/kilo-vscode/out/kilo-vscode-linux-x64.vsix"
+          bun run --cwd "$GITHUB_WORKSPACE/packages/opencode" lcm:packaged-smoke -- --vsix "$snapshot"
+
+      - name: Upload CLI archives as workflow artifact
+        uses: actions/upload-artifact@v7 # kilocode_change
+        with:
+          name: kilo-cli-${{ steps.alpha.outputs.version }}
+          path: |
+            ${{ github.workspace }}/packages/opencode/dist/kilo-*.tar.gz
+            ${{ github.workspace }}/packages/opencode/dist/kilo-*.zip
+
+      - name: Upload VSIX files as workflow artifact
+        uses: actions/upload-artifact@v7 # kilocode_change
+        with:
+          name: kilo-vscode-${{ steps.alpha.outputs.version }}
+          path: ${{ github.workspace }}/packages/kilo-vscode/out/*.vsix
+
+      - name: Create exact draft prerelease
+        id: release
+        env:
+          BASE: ${{ steps.alpha.outputs.base }}
+          TAG: ${{ steps.alpha.outputs.tag }}
+          VERSION: ${{ steps.alpha.outputs.version }}
+        run: |
+          notes="$RUNNER_TEMP/lcm-prerelease-notes.md"
+          node "$GITHUB_WORKSPACE/script/lcm-prerelease-release.mjs" write-notes \
+            --base "$BASE" \
+            --tag "$TAG" \
+            --sha "$GITHUB_SHA" \
+            --output-file "$notes"
+          node "$GITHUB_WORKSPACE/script/lcm-prerelease-release.mjs" create-draft \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$TAG" \
+            --sha "$GITHUB_SHA" \
+            --title "LCM prerelease $VERSION" \
+            --body-file "$notes" \
+            --output "$GITHUB_OUTPUT"
+
+      - name: Upload exact prerelease asset manifest
+        run: |
+          node "$GITHUB_WORKSPACE/script/lcm-prerelease-release.mjs" upload-assets \
+            --repo "$GITHUB_REPOSITORY" \
+            --release-id "${{ steps.release.outputs.id }}" \
+            --tag "${{ steps.alpha.outputs.tag }}" \
+            --sha "$GITHUB_SHA" \
+            --profile lcm-prerelease \
+            --asset "$GITHUB_WORKSPACE/packages/opencode/dist/kilo-linux-arm64.tar.gz" \
+            --asset "$GITHUB_WORKSPACE/packages/opencode/dist/kilo-linux-x64.tar.gz" \
+            --asset "$GITHUB_WORKSPACE/packages/opencode/dist/kilo-linux-x64-baseline.tar.gz" \
+            --asset "$GITHUB_WORKSPACE/packages/opencode/dist/kilo-linux-arm64-musl.tar.gz" \
+            --asset "$GITHUB_WORKSPACE/packages/opencode/dist/kilo-linux-x64-musl.tar.gz" \
+            --asset "$GITHUB_WORKSPACE/packages/opencode/dist/kilo-linux-x64-baseline-musl.tar.gz" \
+            --asset "$GITHUB_WORKSPACE/packages/opencode/dist/kilo-darwin-arm64.zip" \
+            --asset "$GITHUB_WORKSPACE/packages/opencode/dist/kilo-darwin-x64.zip" \
+            --asset "$GITHUB_WORKSPACE/packages/opencode/dist/kilo-darwin-x64-baseline.zip" \
+            --asset "$GITHUB_WORKSPACE/packages/opencode/dist/kilo-windows-arm64.zip" \
+            --asset "$GITHUB_WORKSPACE/packages/opencode/dist/kilo-windows-x64.zip" \
+            --asset "$GITHUB_WORKSPACE/packages/opencode/dist/kilo-windows-x64-baseline.zip" \
+            --asset "$GITHUB_WORKSPACE/packages/kilo-vscode/out/kilo-vscode-linux-x64.vsix" \
+            --asset "$GITHUB_WORKSPACE/packages/kilo-vscode/out/kilo-vscode-linux-arm64.vsix" \
+            --asset "$GITHUB_WORKSPACE/packages/kilo-vscode/out/kilo-vscode-alpine-x64.vsix" \
+            --asset "$GITHUB_WORKSPACE/packages/kilo-vscode/out/kilo-vscode-alpine-arm64.vsix" \
+            --asset "$GITHUB_WORKSPACE/packages/kilo-vscode/out/kilo-vscode-darwin-x64.vsix" \
+            --asset "$GITHUB_WORKSPACE/packages/kilo-vscode/out/kilo-vscode-darwin-arm64.vsix" \
+            --asset "$GITHUB_WORKSPACE/packages/kilo-vscode/out/kilo-vscode-win32-x64.vsix" \
+            --asset "$GITHUB_WORKSPACE/packages/kilo-vscode/out/kilo-vscode-win32-arm64.vsix"
+
+      - name: Validate draft prerelease
+        run: |
+          node "$GITHUB_WORKSPACE/script/lcm-prerelease-release.mjs" validate-release \
+            --repo "$GITHUB_REPOSITORY" \
+            --release-id "${{ steps.release.outputs.id }}" \
+            --tag "${{ steps.alpha.outputs.tag }}" \
+            --sha "$GITHUB_SHA" \
+            --profile lcm-prerelease \
+            --body-file "$RUNNER_TEMP/lcm-prerelease-notes.md" \
+            --draft true
+
+      - name: Publish exact prerelease
+        run: |
+          node "$GITHUB_WORKSPACE/script/lcm-prerelease-release.mjs" publish \
+            --repo "$GITHUB_REPOSITORY" \
+            --release-id "${{ steps.release.outputs.id }}" \
+            --tag "${{ steps.alpha.outputs.tag }}" \
+            --sha "$GITHUB_SHA" \
+            --title "LCM prerelease ${{ steps.alpha.outputs.version }}" \
+            --body-file "$RUNNER_TEMP/lcm-prerelease-notes.md" \
+            --profile lcm-prerelease
+
+      - name: Clean failed draft prerelease
+        if: failure() && steps.release.outputs.id != ''
+        run: |
+          node "$GITHUB_WORKSPACE/script/lcm-prerelease-release.mjs" cleanup \
+            --repo "$GITHUB_REPOSITORY" \
+            --release-id "${{ steps.release.outputs.id }}" \
+            --tag "${{ steps.alpha.outputs.tag }}" \
+            --sha "$GITHUB_SHA"
+  # kilocode_change end
   version:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.repository == 'Kilo-Org/kilocode'

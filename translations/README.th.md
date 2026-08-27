@@ -2,6 +2,131 @@
   <a href="../README.md">English</a> | <a href="README.zh.md">简体中文</a> | <a href="README.zht.md">繁體中文</a> | <a href="README.ko.md">한국어</a> | <a href="README.de.md">Deutsch</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.it.md">Italiano</a> | <a href="README.da.md">Dansk</a> | <a href="README.ja.md">日本語</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.bs.md">Bosanski</a> | <a href="README.ar.md">العربية</a> | <a href="README.no.md">Norsk</a> | <a href="README.br.md">Português (Brasil)</a> | ไทย | <a href="README.tr.md">Türkçe</a> | <a href="README.uk.md">Українська</a> | <a href="README.bn.md">বাংলা</a> | <a href="README.gr.md">Ελληνικά</a> | <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
+<!-- LCM_ONBOARDING_START -->
+<a id="install-lcm-prerelease"></a>
+## ลองใช้ LCM รุ่นก่อนเผยแพร่
+
+Kilo Code รุ่นทดลองนี้ช่วยให้แชตยาวยังใช้งานได้ โดยเปลี่ยนบริบทเก่าที่ใช้แล้วเป็นต้นไม้สรุปที่ค้นหาได้ งานล่าสุดยังคงตรงตามต้นฉบับ และเอเจนต์ดึงรายละเอียดเก่ากลับมาได้เมื่อต้องการ
+
+> [!IMPORTANT]
+> รุ่นที่มี LCM เปิดให้ดาวน์โหลดเฉพาะใน GitHub Releases ของคลังนี้เท่านั้น ส่วน Marketplace, Open VSX, npm, Homebrew, AUR, บริการคลาวด์ และ JetBrains จะติดตั้ง Kilo Code รุ่นทางการที่ไม่มี LCM
+
+[อยากรู้แนวคิดเบื้องหลังหรือไม่ อ่านงานวิจัย LCM ต้นฉบับโดย Clint Ehrlich และ Theodore Blackman](https://arxiv.org/abs/2605.04050)
+
+**รุ่นปัจจุบัน:** [`v7.4.23-lcm.12`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.12)
+
+### เลือกไฟล์ดาวน์โหลด
+
+หากใช้ VS Code หรือ VSCodium ให้เลือกไฟล์ VSIX หากทำงานในเทอร์มินัลให้เลือกไฟล์บีบอัด CLI และสามารถติดตั้งทั้งสองแบบได้
+
+#### ตรวจระบบของคุณ
+
+บน Windows ดู Settings → System → About → System type; บน macOS ดู Apple menu → About This Mac; บน Linux รัน uname -m โดย x86_64 หรือ amd64 คือ x64 ส่วน arm64 หรือ aarch64 คือ ARM64
+
+Linux สำหรับเดสก์ท็อปส่วนใหญ่ใช้ glibc ส่วน Alpine และคอนเทนเนอร์ขนาดเล็กใช้ musl เลือก baseline เฉพาะโปรเซสเซอร์ x64 รุ่นเก่า หรือเมื่อ CLI ปกติหยุดด้วยข้อผิดพลาด illegal instruction เท่านั้น ไม่มีไฟล์ VSIX แบบ baseline แยกต่างหาก
+
+#### VS Code / VSCodium
+
+ต้องใช้ VS Code หรือ VSCodium 1.105.1 ขึ้นไป VSIX ใช้ extension ID เดียวกับ Kilo Code ปกติ จึงแทนที่รุ่น Marketplace ที่ติดตั้งอยู่
+
+|ระบบ|ไฟล์|
+|---|---|
+|Windows x64|`kilo-vscode-win32-x64.vsix`|
+|Windows ARM64|`kilo-vscode-win32-arm64.vsix`|
+|macOS x64 (Intel)|`kilo-vscode-darwin-x64.vsix`|
+|macOS ARM64 (Apple Silicon)|`kilo-vscode-darwin-arm64.vsix`|
+|Linux x64 (glibc)|`kilo-vscode-linux-x64.vsix`|
+|Linux ARM64 (glibc)|`kilo-vscode-linux-arm64.vsix`|
+|Alpine x64 (musl)|`kilo-vscode-alpine-x64.vsix`|
+|Alpine ARM64 (musl)|`kilo-vscode-alpine-arm64.vsix`|
+
+ดาวน์โหลดไฟล์ที่ตรงกับเครื่อง ปิดการอัปเดตอัตโนมัติของ Kilo Code แล้วเลือก Extensions → … → Install from VSIX จากนั้น reload หน้าต่าง หรือใช้คำสั่งด้านล่าง
+
+```bash
+code --install-extension ./kilo-vscode-linux-x64.vsix --force
+codium --install-extension ./kilo-vscode-linux-x64.vsix --force
+```
+
+#### CLI
+
+ดาวน์โหลด archive หนึ่งไฟล์จากตาราง แตกไฟล์ทั้งหมดไว้ใน folder แยก และเก็บไฟล์สนับสนุนทุกไฟล์ไว้ข้าง executable
+
+|ระบบ|ไฟล์|
+|---|---|
+|Windows x64|`kilo-windows-x64.zip`|
+|Windows x64 baseline|`kilo-windows-x64-baseline.zip`|
+|Windows ARM64|`kilo-windows-arm64.zip`|
+|macOS x64 (Intel)|`kilo-darwin-x64.zip`|
+|macOS x64 baseline|`kilo-darwin-x64-baseline.zip`|
+|macOS ARM64 (Apple Silicon)|`kilo-darwin-arm64.zip`|
+|Linux x64 (glibc)|`kilo-linux-x64.tar.gz`|
+|Linux x64 baseline (glibc)|`kilo-linux-x64-baseline.tar.gz`|
+|Linux ARM64 (glibc)|`kilo-linux-arm64.tar.gz`|
+|Linux x64 (musl)|`kilo-linux-x64-musl.tar.gz`|
+|Linux x64 baseline (musl)|`kilo-linux-x64-baseline-musl.tar.gz`|
+|Linux ARM64 (musl)|`kilo-linux-arm64-musl.tar.gz`|
+
+ลองรัน binary ที่แตกไฟล์แล้วหนึ่งครั้งก่อนเพิ่ม folder ลง PATH หากภายหลังเปิด Kilo คนละรุ่น ให้ใช้คำสั่งตรวจ path ด้านล่างและวาง folder LCM ไว้ก่อนใน PATH
+
+```bash
+mkdir -p kilo-lcm
+tar -xzf kilo-linux-x64.tar.gz -C kilo-lcm
+./kilo-lcm/kilo --version
+
+unzip kilo-darwin-arm64.zip -d kilo-lcm
+./kilo-lcm/kilo --version
+
+which -a kilo
+```
+
+```powershell
+Expand-Archive .\kilo-windows-x64.zip .\kilo-lcm
+.\kilo-lcm\kilo.exe --version
+where.exe kilo
+```
+
+### ตั้งค่า Kilo และ LCM
+
+เชื่อมต่อผู้ให้บริการที่ใช้เป็นประจำแล้วเลือกโมเดล Conversation Memory เปิดไว้โดยค่าเริ่มต้น ตรวจสอบได้ที่ Settings → Experimental จากนั้นเปิด Settings → Context โดยจุดเริ่มต้นตั้งไว้ที่ 40% โมเดลที่กำหนดเองต้องระบุขีดจำกัดบริบทและโทเค็นขาออกเป็นจำนวนบวก ส่วนขีดจำกัดขาเข้าไม่บังคับ
+
+```jsonc
+{
+  "experimental": {
+    "conversation_memory": true
+  },
+  "conversation_memory": {
+    "soft_threshold_percent": 40
+  }
+}
+```
+
+เมื่อเปิด LCM ค่า compaction.auto จะควบคุมเฉพาะระบบย่อบริบทแบบเก่าของ Kilo และไม่ได้ปิด LCM
+
+#### Ollama
+
+สำหรับ Ollama ให้ใช้ที่อยู่ server จริง—มักเป็น localhost:11434 บนเครื่องเดียวกัน หรือ LAN address ของคอมพิวเตอร์เมื่อเชื่อมจากอุปกรณ์อื่น ตรวจว่า Ollama ฟังอยู่ที่ address นั้น firewall อนุญาต และ num_ctx ไม่น้อยกว่า context limit ที่ใส่ใน Kilo
+
+### ตรวจว่าใช้งานได้
+
+เริ่มแชต เลือกผู้ให้บริการและโมเดล แล้วรัน /lcm status สถานะควรเป็น enabled และระบบควรรู้ความจุ ส่วนหัวงานหรือหน้า Context จะแสดงการใช้งานและกิจกรรมของ LCM คำสั่ง /compact จะเริ่มรอบ LCM ด้วยตนเองหนึ่งครั้ง แชตใหม่สั้น ๆ อาจยังไม่มีเนื้อหาให้สรุป
+
+### เคล็ดลับ
+
+การสรุปต้องเรียกใช้โมเดล จึงอาจเพิ่มเวลาและค่าใช้จ่ายเล็กน้อย เริ่มที่ 40% ลดค่าหากต้องการให้จัดการเร็วขึ้น หรือเพิ่มค่าเพื่อลดจำนวนครั้งที่เรียกโมเดล หน่วยความจำ LCM เป็นของแชตปัจจุบัน การส่งออกบริบทอาจมีพรอมต์และผลลัพธ์จากเครื่องมือที่เป็นข้อมูลสำคัญ
+
+#### วิธีแก้ด่วน
+
+หากเห็น lcm_capacity_unknown ให้กรอก context และ output limit ของ custom model หาก extension เปลี่ยนกลับหลัง restart ให้ปิด auto-update และติดตั้ง VSIX ใหม่ หาก CLI ผิดรุ่นให้ดู which -a kilo หรือ where.exe kilo บน Alpine ใช้ musl; CPU x64 เก่าให้ลอง baseline
+
+#### อัปเดตหรือย้อนกลับ
+
+อัปเดตได้โดยติดตั้ง VSIX ใหม่ทับของเดิม หรือเปลี่ยนโฟลเดอร์ CLI ที่แตกไฟล์ไว้ แชตยังคงอยู่ใน SQLite ของ Kilo หากต้องย้อนกลับอย่างรวดเร็ว ให้ตั้ง experimental.conversation_memory เป็น false หรือกลับไปติดตั้ง Kilo Code รุ่นทางการหรือรุ่นก่อนเผยแพร่ที่เก่ากว่า
+
+> [!NOTE]
+> เนื้อหาที่เหลือของหน้านี้อธิบาย Kilo Code รุ่นทางการ ลิงก์ติดตั้งทั่วไปด้านล่างจะไม่ติดตั้งรุ่นที่มี LCM นี้
+
+<!-- LCM_ONBOARDING_END -->
+
 <p align="center">
   <a href="https://kilo.ai"><img width="250" alt="Kilo Code logo" src="https://github.com/user-attachments/assets/bdb0c174-b9fd-40ad-a47b-f3aab9b54e8d" /></a>
 </p>

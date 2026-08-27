@@ -2,6 +2,131 @@
   <a href="../README.md">English</a> | <a href="README.zh.md">简体中文</a> | <a href="README.zht.md">繁體中文</a> | <a href="README.ko.md">한국어</a> | <a href="README.de.md">Deutsch</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.it.md">Italiano</a> | <a href="README.da.md">Dansk</a> | <a href="README.ja.md">日本語</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | <a href="README.bs.md">Bosanski</a> | <a href="README.ar.md">العربية</a> | <a href="README.no.md">Norsk</a> | <a href="README.br.md">Português (Brasil)</a> | <a href="README.th.md">ไทย</a> | <a href="README.tr.md">Türkçe</a> | <a href="README.uk.md">Українська</a> | বাংলা | <a href="README.gr.md">Ελληνικά</a> | <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
+<!-- LCM_ONBOARDING_START -->
+<a id="install-lcm-prerelease"></a>
+## LCM প্রিরিলিজ ব্যবহার করে দেখুন
+
+Kilo Code-এর এই পরীক্ষামূলক বিল্ড পুরোনো, ইতিমধ্যে ব্যবহৃত কনটেক্সটকে খোঁজা যায় এমন সারাংশ-ট্রিতে বদলে দীর্ঘ চ্যাটকে কাজে লাগার মতো রাখে। সাম্প্রতিক কাজ হুবহু থাকে, আর দরকার হলে এজেন্ট পুরোনো বিস্তারিত ফেরত আনতে পারে।
+
+> [!IMPORTANT]
+> LCM-সহ build শুধু এই repository-র GitHub Releases পাতায় পাওয়া যায়। Marketplace, Open VSX, npm, Homebrew, AUR, cloud বা JetBrains থেকে install করলে Kilo Code-এর সাধারণ সংস্করণ পাবেন; তাতে LCM নেই।
+
+[ভাবনাটির উৎস জানতে Clint Ehrlich ও Theodore Blackman-এর মূল LCM পেপার পড়ুন।](https://arxiv.org/abs/2605.04050)
+
+**বর্তমান prerelease:** [`v7.4.23-lcm.12`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.12)
+
+### কোনটি ডাউনলোড করবেন
+
+VS Code বা VSCodium ব্যবহার করলে VSIX file নিন। terminal-এ কাজ করলে CLI archive নিন। চাইলে দুটিই install করতে পারেন।
+
+#### আপনার system চিনুন
+
+Windows-এ Settings → System → About → System type, macOS-এ Apple menu → About This Mac দেখুন; Linux-এ uname -m চালান। x86_64 বা amd64 মানে x64, আর arm64 বা aarch64 মানে ARM64।
+
+বেশিরভাগ Linux ডেস্কটপ glibc ব্যবহার করে; Alpine ও কিছু ছোট container musl ব্যবহার করে। শুধু পুরোনো x64 CPU বা সাধারণ CLI-তে illegal instruction হলে baseline নিন; আলাদা baseline VSIX নেই।
+
+#### VS Code / VSCodium
+
+VS Code বা VSCodium 1.105.1 বা নতুন লাগবে। VSIX সাধারণ Kilo Code extension ID ব্যবহার করে, তাই ইনস্টল করা Marketplace বিল্ডটি বদলে যাবে।
+
+|System|Asset|
+|---|---|
+|Windows x64|`kilo-vscode-win32-x64.vsix`|
+|Windows ARM64|`kilo-vscode-win32-arm64.vsix`|
+|macOS x64 (Intel)|`kilo-vscode-darwin-x64.vsix`|
+|macOS ARM64 (Apple Silicon)|`kilo-vscode-darwin-arm64.vsix`|
+|Linux x64 (glibc)|`kilo-vscode-linux-x64.vsix`|
+|Linux ARM64 (glibc)|`kilo-vscode-linux-arm64.vsix`|
+|Alpine x64 (musl)|`kilo-vscode-alpine-x64.vsix`|
+|Alpine ARM64 (musl)|`kilo-vscode-alpine-arm64.vsix`|
+
+সঠিক ফাইল ডাউনলোড করুন, Kilo Code-এর auto-update বন্ধ করুন, তারপর Extensions → … → Install from VSIX ব্যবহার করুন। ইনস্টলের পর window reload করুন। নিচের command-ও ব্যবহার করতে পারেন।
+
+```bash
+code --install-extension ./kilo-vscode-linux-x64.vsix --force
+codium --install-extension ./kilo-vscode-linux-x64.vsix --force
+```
+
+#### CLI
+
+টেবিল থেকে একটি archive নিন। পুরো archive আলাদা folder-এ extract করুন এবং সব support file executable-এর পাশেই রাখুন।
+
+|System|Asset|
+|---|---|
+|Windows x64|`kilo-windows-x64.zip`|
+|Windows x64 baseline|`kilo-windows-x64-baseline.zip`|
+|Windows ARM64|`kilo-windows-arm64.zip`|
+|macOS x64 (Intel)|`kilo-darwin-x64.zip`|
+|macOS x64 baseline|`kilo-darwin-x64-baseline.zip`|
+|macOS ARM64 (Apple Silicon)|`kilo-darwin-arm64.zip`|
+|Linux x64 (glibc)|`kilo-linux-x64.tar.gz`|
+|Linux x64 baseline (glibc)|`kilo-linux-x64-baseline.tar.gz`|
+|Linux ARM64 (glibc)|`kilo-linux-arm64.tar.gz`|
+|Linux x64 (musl)|`kilo-linux-x64-musl.tar.gz`|
+|Linux x64 baseline (musl)|`kilo-linux-x64-baseline-musl.tar.gz`|
+|Linux ARM64 (musl)|`kilo-linux-arm64-musl.tar.gz`|
+
+folder-টি PATH-এ দেওয়ার আগে extracted binary একবার চালান। পরে অন্য Kilo চালু হলে নিচের path check ব্যবহার করে LCM folder-টি PATH-এ আগে রাখুন।
+
+```bash
+mkdir -p kilo-lcm
+tar -xzf kilo-linux-x64.tar.gz -C kilo-lcm
+./kilo-lcm/kilo --version
+
+unzip kilo-darwin-arm64.zip -d kilo-lcm
+./kilo-lcm/kilo --version
+
+which -a kilo
+```
+
+```powershell
+Expand-Archive .\kilo-windows-x64.zip .\kilo-lcm
+.\kilo-lcm\kilo.exe --version
+where.exe kilo
+```
+
+### Kilo ও LCM setup
+
+প্রথমে আপনার নিয়মিত provider যুক্ত করে একটি model বেছে নিন। Conversation Memory ডিফল্টভাবেই চালু থাকে। extension-এ Settings → Experimental থেকে সেটি যাচাই করুন, তারপর Settings → Context-এ 40% শুরুর সীমা দেখুন। custom model-এর context ও output token limit অবশ্যই ধনাত্মক হতে হবে; input limit দেওয়া ঐচ্ছিক।
+
+```jsonc
+{
+  "experimental": {
+    "conversation_memory": true
+  },
+  "conversation_memory": {
+    "soft_threshold_percent": 40
+  }
+}
+```
+
+LCM চালু থাকলে compaction.auto শুধু Kilo-এর পুরোনো compaction ব্যবস্থা নিয়ন্ত্রণ করে; এটি LCM বন্ধ করে না।
+
+#### Ollama
+
+Ollama-র আসল server address দিন—একই machine-এ সাধারণত localhost:11434, অন্য device থেকে computer-এর LAN address। Ollama যেন সেই address-এ শোনে, firewall অনুমতি দেয় এবং model-এর num_ctx যেন Kilo-তে দেওয়া context limit-এর সমান বা বেশি হয়।
+
+### কাজ করছে কি না দেখুন
+
+একটি chat খুলে provider ও model বেছে /lcm status চালান। status যেন enabled হয় এবং capacity জানা থাকে। task header বা Context settings-এ ব্যবহার ও LCM-এর কাজ দেখা যাবে। /compact একটি LCM cycle হাতে চালায়; ছোট নতুন chat-এ সংক্ষেপ করার মতো কিছু নাও থাকতে পারে।
+
+### কিছু দরকারি tip
+
+Summary তৈরিতে model call লাগে, তাই সামান্য সময় ও provider cost বাড়তে পারে। 40% দিয়ে শুরু করুন; আগে maintenance চাইলে কমান, কম call চাইলে বাড়ান। LCM memory শুধু বর্তমান chat-এর। Context export-এ sensitive prompt বা tool output থাকতে পারে, তাই chat-এর মতোই নিরাপদ রাখুন।
+
+#### দ্রুত সমাধান
+
+lcm_capacity_unknown দেখলে নির্বাচিত custom model-এর context ও output limit পূরণ করুন। Restart-এর পর extension বদলে গেলে auto-update বন্ধ করে VSIX আবার দিন। CLI version ভুল হলে which -a kilo বা where.exe kilo দেখুন। Alpine-এ musl এবং পুরোনো x64 CPU-তে baseline চেষ্টা করুন।
+
+#### Update বা rollback
+
+Update করতে নতুন VSIX পুরোনোটির উপর install করুন বা extracted CLI folder বদলান। Chat Kilo SQLite database-এ থাকে। দ্রুত rollback করতে experimental.conversation_memory false করুন; চাইলে Kilo Code-এর সাধারণ সংস্করণ বা পুরোনো prerelease আবার install করুন।
+
+> [!NOTE]
+> এই পৃষ্ঠার বাকি অংশ Kilo Code-এর সাধারণ সংস্করণ নিয়ে। নিচের নিয়মিত install link দিয়ে এই LCM prerelease install হবে না।
+
+<!-- LCM_ONBOARDING_END -->
+
 <p align="center">
   <a href="https://kilo.ai"><img width="250" alt="Kilo Code logo" src="https://github.com/user-attachments/assets/bdb0c174-b9fd-40ad-a47b-f3aab9b54e8d" /></a>
 </p>

@@ -2,6 +2,131 @@
   <a href="../README.md">English</a> | <a href="README.zh.md">简体中文</a> | <a href="README.zht.md">繁體中文</a> | <a href="README.ko.md">한국어</a> | <a href="README.de.md">Deutsch</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.it.md">Italiano</a> | <a href="README.da.md">Dansk</a> | <a href="README.ja.md">日本語</a> | <a href="README.pl.md">Polski</a> | <a href="README.ru.md">Русский</a> | Bosanski | <a href="README.ar.md">العربية</a> | <a href="README.no.md">Norsk</a> | <a href="README.br.md">Português (Brasil)</a> | <a href="README.th.md">ไทย</a> | <a href="README.tr.md">Türkçe</a> | <a href="README.uk.md">Українська</a> | <a href="README.bn.md">বাংলা</a> | <a href="README.gr.md">Ελληνικά</a> | <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
+<!-- LCM_ONBOARDING_START -->
+<a id="install-lcm-prerelease"></a>
+## Isprobajte LCM predizdanje
+
+Ova eksperimentalna verzija Kilo Codea održava duge razgovore korisnim tako što stariji, već iskorišteni kontekst pretvara u pretraživo stablo sažetaka. Nedavni rad ostaje tačan, a agent može vratiti starije detalje kada zatrebaju.
+
+> [!IMPORTANT]
+> LCM verzije dostupne su samo u GitHub Releases ovog repozitorija. Instalacije preko Marketplacea, Open VSX-a, npm-a, Homebrewa, AUR-a, clouda ili JetBrainsa daju službenu verziju Kilo Codea bez LCM-a.
+
+[Želite pozadinu ideje? Pročitajte originalni LCM rad Clinta Ehrlicha i Theodorea Blackmana.](https://arxiv.org/abs/2605.04050)
+
+**Trenutno predizdanje:** [`v7.4.23-lcm.12`](https://github.com/KertarTheDev/LCM/releases/tag/v7.4.23-lcm.12)
+
+### Izaberite preuzimanje
+
+Izaberite VSIX za VS Code ili VSCodium, a CLI arhivu za terminal. Možete instalirati oba.
+
+#### Provjerite sistem
+
+Na Windowsu otvorite Settings → System → About → System type; na macOS-u Apple menu → About This Mac; na Linuxu pokrenite uname -m. x86_64 ili amd64 znači x64, a arm64 ili aarch64 znači ARM64.
+
+Većina Linux desktopa koristi glibc; Alpine i mali kontejneri koriste musl. baseline birajte samo za stari x64 CPU ili ako obični CLI završi s illegal instruction; poseban baseline VSIX ne postoji.
+
+#### VS Code / VSCodium
+
+Potreban je VS Code ili VSCodium 1.105.1 ili noviji. VSIX koristi isti ID kao obični Kilo Code, pa zamjenjuje Marketplace instalaciju.
+
+|Sistem|Fajl|
+|---|---|
+|Windows x64|`kilo-vscode-win32-x64.vsix`|
+|Windows ARM64|`kilo-vscode-win32-arm64.vsix`|
+|macOS x64 (Intel)|`kilo-vscode-darwin-x64.vsix`|
+|macOS ARM64 (Apple Silicon)|`kilo-vscode-darwin-arm64.vsix`|
+|Linux x64 (glibc)|`kilo-vscode-linux-x64.vsix`|
+|Linux ARM64 (glibc)|`kilo-vscode-linux-arm64.vsix`|
+|Alpine x64 (musl)|`kilo-vscode-alpine-x64.vsix`|
+|Alpine ARM64 (musl)|`kilo-vscode-alpine-arm64.vsix`|
+
+Preuzmite odgovarajući fajl, isključite automatsko ažuriranje za Kilo Code i odaberite Extensions → … → Install from VSIX. Zatim ponovo učitajte prozor. Možete koristiti i naredbe ispod.
+
+```bash
+code --install-extension ./kilo-vscode-linux-x64.vsix --force
+codium --install-extension ./kilo-vscode-linux-x64.vsix --force
+```
+
+#### CLI
+
+Preuzmite jednu arhivu iz tabele. Raspakujte cijelu arhivu u zaseban folder i ostavite sve pomoćne fajlove uz izvršni fajl.
+
+|Sistem|Fajl|
+|---|---|
+|Windows x64|`kilo-windows-x64.zip`|
+|Windows x64 baseline|`kilo-windows-x64-baseline.zip`|
+|Windows ARM64|`kilo-windows-arm64.zip`|
+|macOS x64 (Intel)|`kilo-darwin-x64.zip`|
+|macOS x64 baseline|`kilo-darwin-x64-baseline.zip`|
+|macOS ARM64 (Apple Silicon)|`kilo-darwin-arm64.zip`|
+|Linux x64 (glibc)|`kilo-linux-x64.tar.gz`|
+|Linux x64 baseline (glibc)|`kilo-linux-x64-baseline.tar.gz`|
+|Linux ARM64 (glibc)|`kilo-linux-arm64.tar.gz`|
+|Linux x64 (musl)|`kilo-linux-x64-musl.tar.gz`|
+|Linux x64 baseline (musl)|`kilo-linux-x64-baseline-musl.tar.gz`|
+|Linux ARM64 (musl)|`kilo-linux-arm64-musl.tar.gz`|
+
+Pokrenite raspakovani program prije dodavanja foldera u PATH. Ako se kasnije pokrene drugi Kilo, provjerite putanje ispod i stavite LCM folder ranije u PATH.
+
+```bash
+mkdir -p kilo-lcm
+tar -xzf kilo-linux-x64.tar.gz -C kilo-lcm
+./kilo-lcm/kilo --version
+
+unzip kilo-darwin-arm64.zip -d kilo-lcm
+./kilo-lcm/kilo --version
+
+which -a kilo
+```
+
+```powershell
+Expand-Archive .\kilo-windows-x64.zip .\kilo-lcm
+.\kilo-lcm\kilo.exe --version
+where.exe kilo
+```
+
+### Podesite Kilo i LCM
+
+Prvo povežite pružaoca kojeg inače koristite i izaberite model. Conversation Memory je uključena prema zadanim postavkama. U ekstenziji to provjerite pod Settings → Experimental, a zatim otvorite Settings → Context; početni prag je 40%. Prilagođeni modeli moraju imati pozitivne limite konteksta i izlaza, dok je limit ulaza neobavezan.
+
+```jsonc
+{
+  "experimental": {
+    "conversation_memory": true
+  },
+  "conversation_memory": {
+    "soft_threshold_percent": 40
+  }
+}
+```
+
+Dok je LCM uključen, compaction.auto upravlja samo starim Kilo sistemom sažimanja; ne isključuje LCM.
+
+#### Ollama
+
+Za Ollama koristite stvarnu adresu servera—obično localhost:11434 na istom računaru ili LAN adresu računara s drugog uređaja. Ollama mora slušati na toj adresi, firewall je mora propustiti, a num_ctx mora biti barem jednak limitu konteksta u Kilou.
+
+### Provjerite rad
+
+Pokrenite razgovor, izaberite pružaoca i model te unesite /lcm status. Status treba biti enabled, a kapacitet poznat. Zaglavlje zadatka ili stranica Context prikazuje iskorištenost i aktivnost LCM-a. /compact pokreće jedan ručni LCM ciklus; u kratkom novom razgovoru možda još nema šta sažeti.
+
+### Korisni savjeti
+
+Sažeci koriste pozive modelu pa mogu dodati malo vremena i troška. Počnite sa 40%; smanjite za ranije održavanje ili povećajte za manje poziva. LCM memorija pripada trenutnom razgovoru. Izvoz konteksta može sadržati osjetljive upite i izlaz alata.
+
+#### Brza rješenja
+
+Ako vidite lcm_capacity_unknown, unesite limite konteksta i izlaza izabranog prilagođenog modela. Ako se ekstenzija vrati nakon restarta, isključite auto-update i ponovo instalirajte VSIX. Za pogrešan CLI provjerite which -a kilo ili where.exe kilo. Na Alpineu koristite musl, a na starom x64 CPU-u baseline.
+
+#### Nadogradnja ili vraćanje
+
+Za nadogradnju instalirajte novi VSIX preko starog ili zamijenite raspakovani CLI folder. Razgovori ostaju u Kilo SQLite bazi. Za brzo vraćanje postavite experimental.conversation_memory na false ili instalirajte službenu verziju Kilo Codea ili starije predizdanje.
+
+> [!NOTE]
+> Ostatak stranice opisuje službenu verziju Kilo Codea. Uobičajeni linkovi za instalaciju ispod ne instaliraju ovu LCM verziju.
+
+<!-- LCM_ONBOARDING_END -->
+
 <p align="center">
   <a href="https://kilo.ai"><img width="250" alt="Kilo Code logo" src="https://github.com/user-attachments/assets/bdb0c174-b9fd-40ad-a47b-f3aab9b54e8d" /></a>
 </p>
