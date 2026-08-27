@@ -1,7 +1,7 @@
 import type { ModelMessage } from "ai"
 
-export const LCM_SCHEMA_VERSION = 13
-export const LCM_TREE_POLICY = "lcm-tree-v10"
+export const LCM_SCHEMA_VERSION = 14
+export const LCM_TREE_POLICY = "lcm-tree-v11"
 export const DEFAULT_SOFT_THRESHOLD_RATIO = 0.4
 export const DEFAULT_RECENT_TAIL_RATIO = 0.15
 

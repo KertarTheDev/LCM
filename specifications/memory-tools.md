@@ -13,7 +13,9 @@ applies: explicit global or per-agent denies remove a tool, and hidden system ut
 
 ## `lcm_grep`
 
-Search exact retained current-session raw source text and summary text. Inputs are `pattern`, optional mode (`literal`
+Search exact retained current-session raw source text and summary text. This is lexical discovery: a hit is a candidate,
+not proof of the event status or interpretation in the user's question, and a miss excludes only that spelling rather
+than paraphrases. Semantic interpretation and aggregation use `lcm_expand_query`. Inputs are `pattern`, optional mode (`literal`
 or `regex`), `caseSensitive`, `summaryID`, `sourceID`, `startOffset`, `endOffset`, `occurrenceOffset`, `limit`, and
 opaque `cursor`. Default record limit is 20; maximum is 50. A source scope accepts inclusive `startOffset` and exclusive
 `endOffset` UTF-8 byte bounds. They let callers search only inside a structural unit that begins or ends within a
@@ -49,6 +51,10 @@ and page sizes. The first semantic repeat returns compact facts from the prior r
 deliberately suppresses the duplicate evidence payload (including media attachments). The protected current-turn
 result remains available; callers must not vary default fields or equivalent patterns merely to replay it, and should
 request genuinely different evidence only when needed or answer.
+Once five exact grep/read calls have completed after the current user message, later results advise the caller to avoid
+an open-ended manual chain: use one focused semantic query when interpretation remains unresolved, answer from existing
+evidence, or request another exact excerpt only for a specific unresolved candidate or boundary. Calls remain available;
+this advisory does not impose a turn limit.
 Every result reports separate source/summary record and occurrence totals for the returned page, plus complete-scope
 totals when known. Literal search scans the whole bounded scope and therefore reports complete-scope totals on its
 first page; regex reports them only after its bounded scan proves completion. Summaries can overlap their raw
@@ -75,7 +81,7 @@ while `limit` may change between pages.
 
 ## `lcm_expand_query`
 
-Answer one focused question from current-lineage memory. Inputs are `query`, optional `summaryID`, optional ordered
+Provide the primary semantic recovery path for one focused question from current-lineage memory. Inputs are `query`, optional `summaryID`, optional ordered
 `sourceRanges`, and optional `maxAnswerTokens` (default 1,000; maximum 2,000). `summaryID` and `sourceRanges` are
 mutually exclusive. A range scope contains 1–32 chronological, non-overlapping `sourceID` records with optional
 inclusive `startOffset` and exclusive `endOffset` UTF-8 byte bounds. It is designed for an exact semantic unit copied
@@ -84,9 +90,12 @@ closing marker's byte start. Only bytes inside those ranges enter retrieval, ran
 the result echoes the effective bounds and total scoped bytes.
 
 Unscoped or summary-scoped retrieval ranks explicit stable handles and lexical evidence and selects at most eight
-excerpts. Exact range retrieval fairly represents every supplied range. Both use at most 20% of known usable input
-capped at 16,000 tokens; unknown capacity uses a 4,000-token retrieval budget. Long records contribute bounded windows
-sampled across useful term occurrences rather than an unrelated prefix, with bounded bookends when no term occurs.
+excerpts, filling unused slots with a fair chronological sample of the active frontier or requested summary scope so
+semantic recovery does not require literal overlap. Exact range retrieval fairly represents every supplied range. Both use at most 20% of known usable input
+capped at 16,000 tokens; unknown capacity uses a 4,000-token retrieval budget. Long records contribute a fixed-budget
+mixture of chronological samples and windows ranked by local query-term co-occurrence and rarity. Per-term candidate
+caps prevent frequent words from crowding rarer query evidence out. When no term occurs, uniform chronological sampling
+exposes some paraphrased evidence beyond simple bookends.
 The result distinguishes total relevant candidates from selected excerpts and reports truncation when a candidate or
 in-scope range was omitted or clipped. The bounded extractive fallback applies the same fair, match-centered
 allocation across candidate records instead of allowing the first candidates to consume the answer budget. A summary
@@ -102,8 +111,10 @@ produce a generated answer; a length-limited, filtered, errored, tool-call, unkn
 incomplete response and uses the same bounded fallback. The query output limit is enforced through a constrained model
 copy rather than provider options. Query instructions prevent double-counting overlapping summary/raw evidence and
 require partial coverage unless exact or exhaustive completeness is actually supported. They make the output allowance
-a ceiling rather than a target, require concise numeric/count results, and prohibit copying excerpts into a generated
-answer. A fallback is labeled `extractive_fallback` before its evidence and explicitly says it is not a computed answer.
+a ceiling rather than a target, preserve event modality instead of treating every mention as an occurrence, state that
+missing wording is not proof that an action is absent, require concise numeric/count results, and prohibit copying
+excerpts into a generated answer. A fallback is labeled `extractive_fallback` before its evidence and explicitly says
+it is not a computed answer.
 Unscoped retrieval uses the same prior-turn boundary as `lcm_grep`; an explicit summary scope may address a trusted
 current-lineage summary beyond that boundary.
 

@@ -6,7 +6,7 @@ A source is one finalized model-visible transcript part. A summary is immutable 
 children. A frontier revision is an exact, gap-free, non-overlapping cut through the current lineage. Every retained
 source is covered exactly once by a frontier source or a reachable summary descendant.
 
-The tree policy is `lcm-tree-v10`. This policy and derived schema intentionally invalidate earlier prerelease caches;
+The tree policy is `lcm-tree-v11`. This policy and derived schema intentionally invalidate earlier prerelease caches;
 the sidecar is quarantined and rebuilt without modifying the Kilo transcript.
 
 Soft maintenance summarizes at most one eligible raw window per quantum. Leaf windows target 30% of usable input and
@@ -49,12 +49,16 @@ through LCM, and write no transcript message.
 Because these calls are bounded text transformations, the runtime selects the model's `none` or `instant` variant when
 one is available; otherwise it preserves the configured compaction-agent variant. This prevents hidden reasoning from
 consuming a small summary output allowance without producing summary text.
-Generator input labels every child with its source kind and ordinal range and prefixes every historical payload line
-as quoted data so protocol acknowledgements, trailing transport directives, reasoning, tool evidence, raw user
-material, and prior summaries are not conflated. Reference-data summaries preserve literal
+Generator input labels every child with its source kind and ordinal range, removes handle-shaped historical references
+that are outside the request's exact lineage allowlist, and prefixes every remaining historical payload line as quoted
+data so protocol acknowledgements, trailing transport directives, reasoning, tool evidence, raw user material, and
+prior summaries are not conflated. Reference-data summaries preserve literal
 opening/closing structural markers and known fragment boundary state, do not merge adjacent marked units, retain
-first/last/terminal events and completeness evidence for ordered or enumerative material, and treat instructions
-inside explicit data/reference delimiters as source evidence rather than active session goals. Every transformation
+first/last/terminal events and completeness evidence for ordered or enumerative material, retain the actor/action/order
+while distinguishing current actions from recaps, quotations, plans, hypotheticals, rejected or negated attempts, and
+continuations of earlier effects, and treat instructions inside explicit data/reference delimiters as source evidence
+rather than active session goals. A task quoted inside a historical reference payload remains evidence instead of
+replacing the current session goal. Every transformation
 wraps all child payloads in a request-specific historical-data boundary and repeats the active summary task only after
 the matching close, so trailing transcript directives and forged markers with another boundary remain inert.
 Receipt-only acknowledgement bodies are replaced by a typed omission label while their exact source lineage remains
@@ -95,9 +99,11 @@ independently of model-generated
 summary prose; if its safety cap is reached, the map says it is incomplete and directs recovery rather than implying
 complete coverage.
 Recovery guidance distinguishes transport-source records from semantic units, directs per-unit questions to pair
-ordered structural openings and closings, states that literal grep uses unescaped punctuation, warns that summaries
-and raw descendants overlap, and recommends exact ordered `sourceRanges` query synthesis followed by bounded
-source-scoped verification. Explicit non-XML opening/closing markers with the same normalized label are also paired
+ordered structural openings and closings, identifies `lcm_expand_query` as the primary semantic interpretation and
+aggregation path, and reserves `lcm_grep` for exact lexical discovery or occurrence enumeration and `lcm_read` for
+targeted verbatim verification. It states that a lexical hit is only a candidate and a miss excludes only that spelling,
+that literal grep uses unescaped punctuation, and that summaries and raw descendants overlap. Explicit non-XML
+opening/closing markers with the same normalized label are also paired
 into copy-ready chronological `sourceRanges` arrays when the complete unit spans at most 32 transport sources;
 unpaired, truncated, or larger units remain recoverable from the exact anchor map without being presented as complete.
 Range-scoped query retrieval cannot include bytes before the opening or after the closing,
@@ -110,6 +116,9 @@ input already completed and explicitly direct the caller to reuse deterministic 
 An exact repeated `lcm_grep` or `lcm_read` call returns compact guidance without replaying the duplicate evidence
 payload or media attachment, preventing a looping model from multiplying identical recent-tail content.
 The guidance tells the agent to stop recovery and answer once exact evidence resolves the question.
+After five exact grep/read calls complete in one user turn, subsequent exact results advise against extending a manual
+search or paging chain: use one focused semantic query when interpretation remains unresolved, answer from collected
+evidence, or make another exact call only for a specific candidate or boundary. This is guidance, not a tool-call cap.
 When a semantic unit begins or ends inside a transport source, guidance directs `lcm_grep` to its half-open byte
 interval so evidence before the opening or after the closing cannot be mistaken for part of the unit.
 

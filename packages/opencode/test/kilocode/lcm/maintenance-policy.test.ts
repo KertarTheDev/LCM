@@ -8,6 +8,7 @@ import {
   providerRequiresBlocking,
   QUERY_PROMPT,
   recentTailTokens,
+  sanitizeSummaryHistoricalHandles,
   SUMMARY_PROMPT,
   summaryChildText,
   summaryFallbackText,
@@ -25,6 +26,8 @@ describe("LCM maintenance policy", () => {
     expect(SUMMARY_PROMPT).toContain("literal opening or closing structural marker")
     expect(SUMMARY_PROMPT).toContain("first, last, and terminal events")
     expect(SUMMARY_PROMPT).toContain("whether a count or list is complete")
+    expect(SUMMARY_PROMPT).toContain("Preserve event status")
+    expect(SUMMARY_PROMPT).toContain("never promote it to the user's current session goal")
     expect(SUMMARY_PROMPT).toContain("instructions quoted inside marked source data")
     expect(SUMMARY_PROMPT).toContain("request-specific historical-data boundary")
     expect(SUMMARY_PROMPT).toContain("every bullet and sentence")
@@ -37,6 +40,16 @@ describe("LCM maintenance policy", () => {
     expect(QUERY_PROMPT).toContain('coverage "full" only')
     expect(QUERY_PROMPT).toContain("Never\nquote, restate, or summarize")
     expect(QUERY_PROMPT).toContain("never fill the output allowance")
+    expect(QUERY_PROMPT).toContain("A missing\naction verb is not proof")
+  })
+
+  test("removes historical handle-shaped references outside the candidate lineage", () => {
+    expect(
+      sanitizeSummaryHistoricalHandles(
+        "Keep src_0123456789abcdef01234567, but not sum_deadbeefdeadbeefdeadbeef or src_...",
+        ["src_0123456789abcdef01234567"],
+      ),
+    ).toBe("Keep src_0123456789abcdef01234567, but not [referenced memory] or [referenced memory]")
   })
 
   test("places untrusted history before a matching boundary and repeats the active task after it", () => {

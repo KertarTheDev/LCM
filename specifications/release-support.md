@@ -56,6 +56,19 @@ summaries use these rules; Kilo SQLite remains the raw source of truth. A fresh 
 pending after the OpenRouter quota reset; the prerelease remains experimental and does not claim that external result
 in advance.
 
+The exact published `.10` 175k trace subsequently exposed general semantic-recovery and summary-input defects. Exact
+grep/read chains could continue for dozens of distinct calls without escalating interpretation to `lcm_expand_query`;
+lexical hits and misses were easy to treat as semantic conclusions; match-only query excerpting could hide paraphrased
+evidence and allowed frequent terms to crowd rarer local co-occurrences out; and summary input could retain historical
+out-of-lineage handle references while losing the status of a mentioned event. Schema-v14/tree-v11 rebuilds the
+disposable sidecar for event-status-aware summaries with sanitized historical handles. The recovery contract now makes
+semantic query synthesis primary, mixes relevance-ranked and chronological evidence within the existing fixed budget,
+samples the active frontier when literal overlap is absent, and advises against open-ended exact recovery after five
+grep/read calls without imposing a hard tool limit. These are model- and workload-neutral corrections. `.10` is
+therefore known inferior to the pending fixed product state; exact release ID `377351189`, tag `v7.4.23-lcm.10`, and
+candidate `072e84c88b8d0a15c5668cee661e71b2ca15bce2` are authorized for removal only after a differently tagged
+replacement is published and independently verified.
+
 The GitHub Actions major outage on 2026-08-26 produced retained audit runs
 [`32985474928`](https://github.com/KertarTheDev/LCM/actions/runs/32985474928), which ended in `startup_failure` before a
 job or release existed, and [`32985701284`](https://github.com/KertarTheDev/LCM/actions/runs/32985701284), which remained

@@ -104,7 +104,9 @@ interface QueryAnswer {
   coverage: "full" | "partial" | "none"
 }
 
-type QueryMemoryView = Pick<MemoryView, "sources" | "summaries" | "children" | "content">
+type QueryMemoryView = Pick<MemoryView, "sources" | "summaries" | "children" | "content"> & {
+  revision?: MemoryView["revision"]
+}
 
 function scope(summaryID: string, view: Pick<MemoryView, "children">) {
   const ids = new Set([summaryID])
@@ -189,41 +191,85 @@ function bookends(text: string, maxChars: number) {
   return `${text.slice(0, head)}${marker}${text.slice(text.length - (available - head))}`
 }
 
+function evenlySpaced<T>(items: readonly T[], limit: number) {
+  if (items.length <= limit) return [...items]
+  if (limit <= 0) return []
+  if (limit === 1) return [items.at(-1)!]
+  return Array.from({ length: limit }, (_, index) => items[Math.round((index * (items.length - 1)) / (limit - 1))]!)
+}
+
 export function queryExcerpt(text: string, terms: string[], maxChars: number) {
   const limit = Math.max(1, Math.floor(maxChars))
   if (text.length <= limit) return text
   const lower = text.toLocaleLowerCase()
-  const positions: Array<{ start: number; end: number }> = []
+  const positions: Array<{ start: number; end: number; term: string }> = []
+  const frequencies = new Map<string, number>()
   const seen = new Set<string>()
+  const perTermLimit = Math.max(1, Math.min(4_096, Math.floor(16_384 / Math.max(1, terms.length))))
   for (const term of terms) {
     let offset = 0
     let termMatches = 0
-    while (termMatches < 4_096 && positions.length < 16_384) {
+    while (termMatches < perTermLimit) {
       const start = lower.indexOf(term, offset)
       if (start < 0) break
       const end = start + term.length
       const key = `${start}:${end}`
       if (!seen.has(key)) {
         seen.add(key)
-        positions.push({ start, end })
+        positions.push({ start, end, term })
       }
       termMatches++
       offset = start + Math.max(1, term.length)
     }
-    if (positions.length >= 16_384) break
+    frequencies.set(term, termMatches)
   }
   positions.sort((a, b) => a.start - b.start || a.end - b.end)
-  if (positions.length === 0) return bookends(text, limit)
 
   const separator = "\n[… omitted …]\n"
   const maxWindows = Math.max(1, Math.min(8, Math.floor(limit / 120)))
-  const chosen =
-    positions.length <= maxWindows
-      ? positions
-      : Array.from(
-          { length: maxWindows },
-          (_, index) => positions[Math.round((index * (positions.length - 1)) / Math.max(1, maxWindows - 1))]!,
-        )
+  const chosen: typeof positions = []
+  const chosenKeys = new Set<string>()
+  const add = (position: (typeof positions)[number]) => {
+    const key = `${position.start}:${position.end}`
+    if (chosenKeys.has(key) || chosen.length >= maxWindows) return
+    chosenKeys.add(key)
+    chosen.push(position)
+  }
+  const scoringWindow = Math.max(120, Math.floor(limit / maxWindows))
+  const ranked = positions
+    .map((position) => {
+      const start = Math.max(0, position.start - Math.floor(scoringWindow * 0.4))
+      const local = lower.slice(start, Math.min(text.length, start + scoringWindow))
+      const present = terms.filter((term) => local.includes(term))
+      const rarity = present.reduce((total, term) => total + 1 / Math.max(1, frequencies.get(term) ?? 1), 0)
+      return { position, coverage: present.length, rarity }
+    })
+    .toSorted(
+      (left, right) =>
+        right.coverage - left.coverage ||
+        right.rarity - left.rarity ||
+        left.position.start - right.position.start ||
+        left.position.end - right.position.end,
+    )
+  const addTimeline = (count: number) => {
+    for (let index = 0; index < count; index++) {
+      const start = Math.round((index * Math.max(0, text.length - 1)) / Math.max(1, count - 1))
+      add({ start, end: Math.min(text.length, start + 1), term: "" })
+    }
+  }
+  if (positions.length === 0) {
+    // With no lexical match, uniform bounded coverage is the only way to expose paraphrased evidence beyond bookends.
+    if (maxWindows === 1) return bookends(text, limit)
+    addTimeline(maxWindows)
+  } else if (maxWindows < 4) {
+    for (const candidate of ranked) add(candidate.position)
+    addTimeline(maxWindows - chosen.length)
+  } else {
+    // Mix source chronology with local relevance. Either signal alone can hide decisive paraphrased or isolated facts.
+    addTimeline(Math.min(3, maxWindows - 1))
+    for (const candidate of ranked) add(candidate.position)
+  }
+  chosen.sort((a, b) => a.start - b.start || a.end - b.end)
   const windowChars = Math.max(
     Math.max(...chosen.map((position) => position.end - position.start)),
     Math.floor((limit - separator.length * Math.max(0, chosen.length - 1)) / chosen.length),
@@ -269,7 +315,7 @@ export function selectQueryExcerpts(
     score: 1,
     sourceRange: range,
   }))
-  const memoryCandidates: Candidate[] = sourceRanges
+  const allMemoryCandidates: Candidate[] = sourceRanges
     ? []
     : [
         ...[...view.sources.values()]
@@ -302,16 +348,41 @@ export function selectQueryExcerpts(
           const lexical = terms.reduce((score, term) => score + (text.includes(term) ? 1 : 0), 0)
           return { ...item, score: explicit + lexical }
         })
-        .filter((item) => item.score > 0)
-        .toSorted(
-          (a, b) =>
-            b.score - a.score ||
-            (a.kind === b.kind ? 0 : a.kind === "source" ? -1 : 1) ||
-            b.ordinal - a.ordinal ||
-            a.id.localeCompare(b.id),
-        )
-  const relevant = sourceRanges ? rangeCandidates : memoryCandidates
-  const candidates = sourceRanges ? relevant : relevant.slice(0, MAX_QUERY_EXCERPTS)
+  const lexicalCandidates = allMemoryCandidates
+    .filter((item) => item.score > 0)
+    .toSorted(
+      (a, b) =>
+        b.score - a.score ||
+        (a.kind === b.kind ? 0 : a.kind === "source" ? -1 : 1) ||
+        b.ordinal - a.ordinal ||
+        a.id.localeCompare(b.id),
+    )
+  const byKey = new Map(allMemoryCandidates.map((candidate) => [candidate.key, candidate]))
+  const semanticPool = summaryID
+    ? [
+        ...(byKey.get(summaryID) ? [byKey.get(summaryID)!] : []),
+        ...allMemoryCandidates
+          .filter((candidate) => candidate.key !== summaryID)
+          .toSorted((a, b) => a.ordinal - b.ordinal || a.key.localeCompare(b.key)),
+      ]
+    : view.revision
+      ? view.revision.items.flatMap((item) => {
+          const candidate = byKey.get(item.id)
+          return candidate ? [candidate] : []
+        })
+      : allMemoryCandidates.toSorted((a, b) => a.ordinal - b.ordinal || a.key.localeCompare(b.key))
+  const chosenKeys = new Set(lexicalCandidates.slice(0, MAX_QUERY_EXCERPTS).map((candidate) => candidate.key))
+  const memoryCandidates = [
+    ...lexicalCandidates.slice(0, MAX_QUERY_EXCERPTS),
+    ...evenlySpaced(
+      semanticPool.filter((candidate) => !chosenKeys.has(candidate.key)),
+      Math.max(0, MAX_QUERY_EXCERPTS - chosenKeys.size),
+    ),
+  ]
+  const relevant = sourceRanges
+    ? rangeCandidates
+    : [...new Map([...lexicalCandidates, ...semanticPool].map((candidate) => [candidate.key, candidate])).values()]
+  const candidates = sourceRanges ? relevant : memoryCandidates
   const candidateLimitReached = candidates.length < relevant.length
 
   let remaining = Math.max(1, budgetTokens) * 4
@@ -411,7 +482,7 @@ export const LcmExpandQueryTool = Tool.define(
     const sessions = yield* Session.Service
     return {
       description:
-        "Synthesize or aggregate one focused candidate answer about earlier current-session memory from fairly budgeted, match-centered excerpts with validated src_/sum_ citations. Prefer this to manually paging entire large sources. For a document, episode, section, or other semantic unit, pass ordered sourceRanges copied from the structural-anchor map so bytes before its opening and after its close cannot contaminate the answer. Include chronological intermediate sources. For exact, exhaustive, first/last, count, or complete-list work, verify only cited candidates and necessary boundaries with bounded lcm_grep or lcm_read before claiming completeness.",
+        "Primary semantic recovery for earlier current-session memory: synthesize or aggregate one focused candidate answer from fairly budgeted, match-centered excerpts with validated src_/sum_ citations. Use this when meaning, event status, paraphrases, ordering, or evidence across sources matters; prefer it to manually paging large sources. For a document, section, or other semantic unit, pass ordered sourceRanges copied from the structural-anchor map so bytes before its opening and after its close cannot contaminate the answer. Include chronological intermediate sources. For exact, exhaustive, first/last, count, or complete-list work, verify only cited candidates and necessary boundaries with bounded lcm_grep or lcm_read before claiming completeness.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {

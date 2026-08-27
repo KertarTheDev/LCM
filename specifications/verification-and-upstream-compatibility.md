@@ -14,7 +14,7 @@ Acceptance must prove:
 - disabled prompt, idle, deletion, API, CLI, and tool paths neither create nor mutate a sidecar, while re-enable
   reuses or rebuilds retained state;
 - newest-first stream normalization and stable chronology for new, legacy, imported, and 100+ source sessions;
-- schema-v13/tree-v10 discard-and-rebuild of earlier derived caches without raw-body duplication or semantic migration;
+- schema-v14/tree-v11 discard-and-rebuild of earlier derived caches without raw-body duplication or semantic migration;
 - durable per-provider-step successful-request consumption, proof-based recovery after an unconsumed retry-suffix
   replacement, and protection after cancel/failure/overflow;
 - sequential and parallel LCM recovery-tool results entering source lineage, becoming eligible after a later
@@ -39,15 +39,18 @@ Acceptance must prove:
   compact nonduplicated grep previews with separate raw/summary totals and actionable regex guidance,
   packaged regex-worker availability, distinct startup/timeout/syntax failures, exact source byte-interval search,
   copy-ready final occurrence pages, unbounded transport-source warnings, chronological non-receipt neighbors,
-  prior-identical-call diagnostics, page-size-independent continuation, cursor-bound read end offsets, and one-call
-  cited `lcm_expand_query` recovery with exact ordered source-range scopes, fair occurrence-sampled excerpts, explicit
-  relevant/selected/truncation reporting, and fallback;
+  prior-identical-call diagnostics, current-turn exact-recovery escalation guidance without a hard call cap,
+  page-size-independent continuation, cursor-bound read end offsets, and one-call cited `lcm_expand_query` recovery
+  with exact ordered source-range scopes, a fixed-budget mixture of chronological and relevance-ranked excerpts,
+  per-term match fairness, active-frontier sampling without lexical overlap, explicit relevant/selected/truncation
+  reporting, and fallback;
 - substantive, grounded exact-lineage summary citations, deterministic direct-child citation completion when otherwise
   useful output omits handles, receipt-body omission with preserved lineage, an authoritative handle allowlist, and
   rejection of invented, stale, protocol-only, protocol-contaminated, answer-wrapped, ungrounded, content-free, or
   non-`stop`/length-truncated model output; request-specific quoted source-data isolation, provisional treatment of
-  in-progress hypotheses, fair full-body extractive fallback, and transformation caps enforced through the model rather
-  than provider options;
+  in-progress hypotheses, event-status and nested-reference-goal preservation, pre-model removal of out-of-lineage
+  historical handle references, fair full-body extractive fallback, and transformation caps enforced through the model
+  rather than provider options;
   preservation of structural boundary/completeness evidence for reference data, an explicit lossy-summary recovery
   warning for exhaustive questions, a deterministic ordered boundary map with half-open UTF-8 byte ranges from every
   consumed exact source including

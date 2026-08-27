@@ -5,6 +5,7 @@ import {
   canonicalRecoveryToolInput,
   completedToolCallHistory,
   completedToolCallCount,
+  currentTurnRecoveryCallCount,
   priorTurnSourceCutoff,
   recoveryCallGuidance,
   repeatedRecoveryResult,
@@ -17,6 +18,7 @@ import {
   literalPatternAdvice,
   literalRanges,
   lastOccurrencePageOffset,
+  lexicalSearchAdvice,
   occurrencePaginationAdvice,
   occurrenceTotals,
   regexErrorMessage,
@@ -73,6 +75,8 @@ describe("LCM tool contracts", () => {
     expect(grepTotalsComplete("literal", false)).toBe(true)
     expect(grepTotalsComplete("regex", false)).toBe(false)
     expect(grepTotalsComplete("regex", true)).toBe(true)
+    expect(lexicalSearchAdvice(0)).toContain("paraphrases")
+    expect(lexicalSearchAdvice(2)).toContain("not semantic conclusions")
   })
 
   test("bounds unscoped recovery before the current user turn", () => {
@@ -140,8 +144,21 @@ describe("LCM tool contracts", () => {
       sourceID: "src_a",
     })
     expect(
-      recoveryCallGuidance({ tool: "lcm_grep", previousIdenticalCalls: 3, sourceScoped: true }).instruction,
+      recoveryCallGuidance({
+        tool: "lcm_grep",
+        previousIdenticalCalls: 3,
+        sourceScoped: true,
+        completedRecoveryCalls: 5,
+      }).instruction,
     ).toContain("do not resubmit it")
+    expect(
+      recoveryCallGuidance({
+        tool: "lcm_grep",
+        previousIdenticalCalls: 0,
+        sourceScoped: true,
+        completedRecoveryCalls: 5,
+      }).instruction,
+    ).toContain("one focused lcm_expand_query")
     expect(repeatedRecoveryResult({ tool: "lcm_grep", previousIdenticalCalls: 0, sourceScoped: true })).toBeUndefined()
     expect(repeatedRecoveryResult({ tool: "lcm_grep", previousIdenticalCalls: 1, sourceScoped: true })).toMatchObject({
       callGuidance: { previousIdenticalCalls: 1 },
@@ -155,6 +172,25 @@ describe("LCM tool contracts", () => {
         priorResult: { matchedRecords: 2 },
       }),
     ).toMatchObject({ priorResult: { matchedRecords: 2 } })
+  })
+
+  test("counts exact recovery calls only after the current user turn", () => {
+    const completed = (tool: string) => ({
+      type: "tool",
+      tool,
+      state: { status: "completed", input: {} },
+    })
+    const messages = [
+      { info: { role: "assistant" }, parts: [completed("lcm_grep")] },
+      { info: { role: "user" }, parts: [] },
+      { info: { role: "assistant" }, parts: [completed("lcm_read"), completed("lcm_expand_query")] },
+      {
+        info: { role: "assistant" },
+        parts: [{ type: "tool", tool: "lcm_grep", state: { status: "running", input: {} } }],
+      },
+      { info: { role: "assistant" }, parts: [completed("lcm_grep")] },
+    ]
+    expect(currentTurnRecoveryCallCount(messages)).toBe(2)
   })
 
   test("reports chronological transport neighbors while skipping pure receipt records", () => {
@@ -230,6 +266,73 @@ describe("LCM tool contracts", () => {
     expect(excerpt).toContain("late needle")
     expect(excerpt).toContain("omitted")
     expect(excerpt.length).toBeLessThanOrEqual(500)
+  })
+
+  test("retains a locally decisive multi-term region alongside chronological coverage", () => {
+    const text = [
+      `early action ${"background action ".repeat(80)}`,
+      `middle action ${"background action ".repeat(80)}`,
+      "rareentity performed decisive operation",
+      `${"background action ".repeat(80)} late action`,
+    ].join("\n")
+    const excerpt = queryExcerpt(text, ["action", "rareentity", "performed", "operation"], 600)
+    expect(excerpt).toContain("early action")
+    expect(excerpt).toContain("rareentity performed decisive operation")
+    expect(excerpt).toContain("late action")
+    expect(excerpt.length).toBeLessThanOrEqual(600)
+  })
+
+  test("samples chronology when no query term matches a paraphrased region", () => {
+    const text = `${"opening material ".repeat(100)}paraphrased decisive evidence${"closing material ".repeat(100)}`
+    const excerpt = queryExcerpt(text, ["absentwording"], 600)
+    expect(excerpt).toContain("opening material")
+    expect(excerpt).toContain("paraphrased decisive evidence")
+    expect(excerpt).toContain("closing material")
+    expect(excerpt.length).toBeLessThanOrEqual(600)
+  })
+
+  test("falls back to a fair active-frontier sample when no record has lexical overlap", () => {
+    const sources = Array.from(
+      { length: 10 },
+      (_, ordinal): FinalSource => ({
+        id: `src_${String(ordinal).padStart(24, "0")}`,
+        sessionID: "ses_semantic_fallback",
+        messageID: `msg_${ordinal}`,
+        partID: `part_${ordinal}`,
+        ordinal,
+        kind: "user_text",
+        digest: `digest_${ordinal}`,
+        tokens: 10,
+        bytes: 40,
+        excerpt: `historical material ${ordinal}`,
+      }),
+    )
+    const view = {
+      sources: new Map(sources.map((source) => [source.id, source])),
+      summaries: new Map(),
+      children: new Map(),
+      content: new Map(
+        sources.map((source) => [source.id, { metadata: source, content: `historical material ${source.ordinal}` }]),
+      ),
+      revision: {
+        id: "rev_semantic_fallback",
+        sessionID: "ses_semantic_fallback",
+        lineageDigest: "lineage_semantic_fallback",
+        reason: "append" as const,
+        items: sources.map((source) => ({
+          kind: "source" as const,
+          id: source.id,
+          ordinal: source.ordinal,
+        })),
+        createdAt: 1,
+      },
+    }
+    const retrieval = selectQueryExcerpts(view, "unmatched vocabulary question", undefined, 1_000)
+    expect(retrieval.selected).toHaveLength(8)
+    expect(retrieval.selected.map((item) => item.id)).toContain(sources[0]!.id)
+    expect(retrieval.selected.map((item) => item.id)).toContain(sources[9]!.id)
+    expect(retrieval.relevant).toBe(10)
+    expect(retrieval.candidateLimitReached).toBe(true)
   })
 
   test("resolves ordered non-overlapping UTF-8 source ranges and retrieves only their bytes", () => {

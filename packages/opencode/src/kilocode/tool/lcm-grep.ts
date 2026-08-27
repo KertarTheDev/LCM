@@ -6,6 +6,7 @@ import { decodeCursor, encodeCursor } from "@/kilocode/session/lcm/cursor"
 import { REGEX_SEARCH_LIMITS, regexSearch } from "@/kilocode/session/lcm/regex-search"
 import {
   completedToolCallHistory,
+  currentTurnRecoveryCallCount,
   inertOutput,
   LcmToolError,
   loadMemory,
@@ -28,6 +29,12 @@ export function grepRangeLimit(sourceScoped: boolean) {
 export function occurrencePaginationAdvice(sourceScoped: boolean, matchCounts: number[]) {
   if (!sourceScoped || !matchCounts.some((count) => count > MAX_RANGES_PER_RECORD)) return
   return "This source has more matches than one page. Copy occurrencePage.nextOffset for forward enumeration or occurrencePage.lastOffset to jump directly to the final page for a last-occurrence question. Otherwise refine the pattern or use sourceRanges with lcm_expand_query for focused semantic synthesis."
+}
+
+export function lexicalSearchAdvice(matchCount: number) {
+  return matchCount === 0
+    ? "No exact text match proves only that this spelling is absent from the searched scope; paraphrases or differently worded evidence may remain. Use lcm_expand_query when the question requires semantic interpretation."
+    : "Exact matches are candidates, not semantic conclusions: a mention may be retrospective, quoted, planned, hypothetical, negated, rejected, or a continuation rather than a new event. Use lcm_expand_query when that distinction affects the answer."
 }
 
 export function lastOccurrencePageOffset(matchCount: number) {
@@ -247,7 +254,7 @@ export const LcmGrepTool = Tool.define(
     const database = yield* Database.Service
     const definition: Tool.DefWithoutID<typeof Parameters, LcmGrepMetadata> = {
       description:
-        "Discover earlier current-session evidence in exact finalized raw text and active summaries. Literal mode is the default: enter punctuation exactly without regex backslashes; set mode to regex for alternatives such as foo|bar and keep every regex within 512 characters. A src_ handle is one transport record, never proof of a complete document, episode, section, or other semantic unit. Unscoped results include one preview plus exact counts and may contain overlapping summaries and raw descendants, so do not add both occurrence totals. For exact or exhaustive per-unit work, identify candidate src_ handles, apply structural startOffset/endOffset bounds, continue across chronological sources when needed, and seek with lcm_read.",
+        "Exact lexical discovery over earlier current-session finalized raw text and active summaries. A hit is a wording candidate, not proof of the event or interpretation a question asks about; a miss excludes only that spelling, not paraphrases. Use lcm_expand_query as the primary tool for semantic interpretation or aggregation. Literal mode is the default: enter punctuation exactly without regex backslashes; set mode to regex for alternatives such as foo|bar and keep every regex within 512 characters. A src_ handle is one transport record, never proof of a complete document, episode, section, or other semantic unit. Unscoped results include one preview plus exact counts and may contain overlapping summaries and raw descendants, so do not add both occurrence totals. For exact or exhaustive per-unit work, identify candidate src_ handles, apply structural startOffset/endOffset bounds, continue across chronological sources when needed, and seek with lcm_read.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
@@ -259,6 +266,7 @@ export const LcmGrepTool = Tool.define(
           })
           const history = completedToolCallHistory(ctx.messages, "lcm_grep", params)
           const previousIdenticalCalls = history.count
+          const completedRecoveryCalls = currentTurnRecoveryCallCount(ctx.messages) + 1
           const view = yield* loadMemory({ sessionID: ctx.sessionID, signal: ctx.abort, memory, database })
           const limit = Math.min(50, Math.max(1, Math.floor(params.limit ?? 20)))
           if (
@@ -357,6 +365,7 @@ export const LcmGrepTool = Tool.define(
             tool: "lcm_grep",
             previousIdenticalCalls,
             sourceScoped: Boolean(params.sourceID),
+            completedRecoveryCalls,
             priorResult: history.priorResult,
           })
           if (repeated)
@@ -454,8 +463,10 @@ export const LcmGrepTool = Tool.define(
             tool: "lcm_grep",
             previousIdenticalCalls,
             sourceScoped: Boolean(params.sourceID),
+            completedRecoveryCalls,
           })
           const advice = [
+            lexicalSearchAdvice(matches.length),
             literalPatternAdvice(params.pattern, params.mode ?? "literal"),
             occurrencePaginationAdvice(
               Boolean(params.sourceID),

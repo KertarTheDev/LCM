@@ -191,6 +191,24 @@ function historicalToolPart(part: unknown): part is {
   return state.status === "completed" && "input" in state
 }
 
+export function currentTurnRecoveryCallCount(
+  messages: readonly { info?: { role?: string }; parts: readonly unknown[] }[],
+) {
+  let start = 0
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.info?.role !== "user") continue
+    start = index + 1
+    break
+  }
+  let count = 0
+  for (const message of messages.slice(start)) {
+    for (const part of message.parts) {
+      if (historicalToolPart(part) && (part.tool === "lcm_grep" || part.tool === "lcm_read")) count++
+    }
+  }
+  return count
+}
+
 export function completedToolCallHistory(
   messages: readonly { parts: readonly unknown[] }[],
   tool: RecoveryTool,
@@ -229,15 +247,20 @@ export function recoveryCallGuidance(input: {
   tool: RecoveryTool
   previousIdenticalCalls: number
   sourceScoped: boolean
+  completedRecoveryCalls?: number
 }) {
   const scope = input.sourceScoped ? "this digest-verified source" : "the current prior-turn memory view"
+  const chainGuidance =
+    (input.completedRecoveryCalls ?? 0) >= 5
+      ? ` ${input.completedRecoveryCalls} exact grep/read calls have now completed in this turn. Avoid extending a manual search or paging chain: if the unresolved work requires interpretation, aggregation, or paraphrase recovery, use one focused lcm_expand_query with known sourceRanges when available; otherwise answer from the evidence already collected. Request more exact evidence only for a specific unresolved candidate or boundary.`
+      : ""
   return {
     deterministic: true,
     previousIdenticalCalls: input.previousIdenticalCalls,
     instruction:
       input.previousIdenticalCalls > 0
-        ? `This semantically identical ${input.tool} input already completed ${input.previousIdenticalCalls} previous time(s). It is deterministic for ${scope}; reuse the prior result and do not resubmit it. Do not add explicit default values or rephrase an equivalent pattern merely to bypass suppression. Make a genuinely different evidence request only when needed, or answer now.`
-        : `This completed ${input.tool} call is deterministic for ${scope}. Reuse this result instead of repeating identical input.`,
+        ? `This semantically identical ${input.tool} input already completed ${input.previousIdenticalCalls} previous time(s). It is deterministic for ${scope}; reuse the prior result and do not resubmit it. Do not add explicit default values or rephrase an equivalent pattern merely to bypass suppression. Make a genuinely different evidence request only when needed, or answer now.${chainGuidance}`
+        : `This completed ${input.tool} call is deterministic for ${scope}. Reuse this result instead of repeating identical input.${chainGuidance}`,
   }
 }
 
@@ -245,6 +268,7 @@ export function repeatedRecoveryResult(input: {
   tool: RecoveryTool
   previousIdenticalCalls: number
   sourceScoped: boolean
+  completedRecoveryCalls?: number
   priorResult?: unknown
 }) {
   if (input.previousIdenticalCalls < 1) return

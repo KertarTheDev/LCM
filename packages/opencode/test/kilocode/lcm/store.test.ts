@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { lineageDigest, nodeKey, sha256, sourceID, summaryID } from "@/kilocode/session/lcm/ids"
 import { sidecarPath, SqliteConversationMemoryStore } from "@/kilocode/session/lcm/store"
-import type { FinalSource, SummaryChild, SummaryNode } from "@/kilocode/session/lcm/types"
+import { LCM_SCHEMA_VERSION, type FinalSource, type SummaryChild, type SummaryNode } from "@/kilocode/session/lcm/types"
 import { Database } from "bun:sqlite"
 import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
@@ -342,7 +342,7 @@ describe("LCM SQLite store", () => {
     const target = path.join(root, "kilo.lcm.db")
     const old = new Database(target)
     old.exec("CREATE TABLE lcm_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-    old.query("INSERT INTO lcm_meta(key, value) VALUES ('schema_version', '6')").run()
+    old.query("INSERT INTO lcm_meta(key, value) VALUES ('schema_version', ?)").run(String(LCM_SCHEMA_VERSION - 1))
     old.close()
 
     const store = SqliteConversationMemoryStore.open({ databasePath: path.join(root, "kilo.db"), derivedPath: target })
