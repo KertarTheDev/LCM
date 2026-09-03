@@ -1020,10 +1020,10 @@ describe("LCM isolated recovery contract", () => {
   test("reads the terminal structured answer persisted after a tool transition", () => {
     const submission = {
       answer: "The supported result.",
-      coverage: "full",
+      coverage: "full" as const,
       citations: [],
       unresolved: [],
-    } as const
+    }
     expect(
       latestRecoverySubmission(
         messages([

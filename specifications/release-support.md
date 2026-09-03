@@ -65,6 +65,14 @@ does not claim a deterministic score gain. Focused and integration verification 
 local release typecheck stopped safely under the VPS resource guard and was not resumed; canonical workflow run
 `33101947543` subsequently passed the authoritative typechecks and every release gate.
 
+The first v7.5.9 candidate `67887ecd84e56dc376331cb69ed2b5c40f3a7175` stopped in exact-SHA workflow run
+[`33734467246`](https://github.com/KertarTheDev/LCM/actions/runs/33734467246) during the OpenCode typecheck, before
+versioning or draft creation. Canonical compilation exposed a metadata-union inference mismatch in
+`lcm_expand_query`, missing assistant/completed-state discriminant guards in isolated recovery, an optional attachment
+access across host-suppressed query results, and two readonly/message-role test-fixture narrowings. The product now
+makes those boundaries explicit without changing runtime behavior. The failed SHA has no release, tag, or assets; its
+Actions audit history is retained.
+
 The healthy `v7.4.23-lcm.12` release remains published because prerelease publication authorization does not authorize
 release or tag deletion. No release, tag, asset, or Actions history was deleted. It is retained pending separate
 deletion authorization even though `.13` is the independently verified current recommendation.

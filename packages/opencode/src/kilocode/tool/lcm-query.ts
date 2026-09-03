@@ -401,6 +401,7 @@ function assistantText(message: SessionV1.WithParts) {
 function recoverySynthesisText(message: SessionV1.WithParts) {
   const text = assistantText(message).trim()
   if (text) return text
+  if (message.info.role !== "assistant") return ""
   const structured = record(message.info.structured) ? message.info.structured : undefined
   return typeof structured?.answer === "string" ? structured.answer.trim() : ""
 }
@@ -613,6 +614,7 @@ export function recoveryModelUsage(messages: readonly SessionV1.WithParts[]) {
     usage.cost += nonNegativeFinite(message.info.cost)
     for (const part of message.parts) {
       if (part.type !== "tool" || part.tool !== "lcm_expand_query") continue
+      if (part.state.status !== "completed") continue
       const metadata = record(part.state.metadata) ? part.state.metadata : undefined
       const semantic = metadata && record(metadata.semanticModelUsage) ? metadata.semanticModelUsage : undefined
       if (!semantic) continue

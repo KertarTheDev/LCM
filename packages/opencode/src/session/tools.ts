@@ -209,15 +209,18 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
                   ? lcmQueryBudgetResult(queryReservation)
                   : yield* SandboxPolicy.executeTool(ctx.sessionID, item, item.execute(args, ctx))
             // kilocode_change end
+            // kilocode_change start - host-suppressed LCM results intentionally have no attachment field
+            const attachments = "attachments" in result ? result.attachments : undefined
             const output = {
               ...result,
-              attachments: result.attachments?.map((attachment) => ({
+              attachments: attachments?.map((attachment) => ({
                 ...attachment,
                 id: PartID.ascending(),
                 sessionID: ctx.sessionID,
                 messageID: input.processor.message.id,
               })),
             }
+            // kilocode_change end
             // kilocode_change - mark successful targeted memory recalls for the assistant badge
             if (item.id === "kilo_memory_recall") MemoryMarker.recall({ result: output, cache: input.memoryCache }) // kilocode_change
             yield* plugin.trigger(

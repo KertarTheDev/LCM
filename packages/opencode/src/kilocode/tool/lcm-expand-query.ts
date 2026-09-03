@@ -1050,6 +1050,18 @@ function activeModel(value: unknown) {
   return model as Provider.Model
 }
 
+type LcmExpandQueryMetadata = {
+  citations: number
+  truncated: boolean
+  isolatedResearchEvidence?: boolean
+  providerInference?: boolean
+  semanticModelUsage?: unknown
+}
+
+function expandQueryMetadata(value: LcmExpandQueryMetadata) {
+  return value
+}
+
 export const LcmExpandQueryTool = Tool.define(
   "lcm_expand_query",
   Effect.gen(function* () {
@@ -1181,7 +1193,7 @@ export const LcmExpandQueryTool = Tool.define(
                 truncated: false,
                 noAnswerReason: "no_relevant_memory",
               }),
-              metadata: { citations: 0, truncated: false },
+              metadata: expandQueryMetadata({ citations: 0, truncated: false }),
             }
           }
           const nestedInference = queryUsesNestedInference(
@@ -1223,12 +1235,12 @@ export const LcmExpandQueryTool = Tool.define(
                 truncated: retrieval.truncated,
                 ...(!extracted.answer ? { noAnswerReason: "insufficient_query_evidence" } : {}),
               }),
-              metadata: {
+              metadata: expandQueryMetadata({
                 citations: extracted.citations.length,
                 truncated: retrieval.truncated,
                 isolatedResearchEvidence: true,
                 providerInference: false,
-              },
+              }),
             }
           }
           const excerpts = [
@@ -1338,12 +1350,12 @@ export const LcmExpandQueryTool = Tool.define(
                   : { noAnswerReason: "insufficient_query_evidence" }
                 : {}),
             }),
-            metadata: {
+            metadata: expandQueryMetadata({
               citations: result.citations.length,
               truncated: retrieval.truncated || answerTruncated,
               providerInference: true,
               ...(generated.ok ? { semanticModelUsage: generated.value.usage } : {}),
-            },
+            }),
           }
         }).pipe(Effect.orDie),
     }

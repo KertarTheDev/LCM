@@ -664,7 +664,10 @@ describe("SessionPrompt recovery", () => {
         expect(recovered.state.status).toBe("error")
         if (recovered.state.status !== "error") throw new Error("expected interrupted error state")
         expect(recovered.state.metadata?.interrupted).toBe(true)
-        expect(msgs.find((message) => message.info.id === stale.id)?.info.time.completed).toBeNumber()
+        const recoveredMessage = msgs.find((message) => message.info.id === stale.id)
+        expect(recoveredMessage?.info.role).toBe("assistant")
+        if (recoveredMessage?.info.role !== "assistant") throw new Error("expected recovered assistant message")
+        expect(recoveredMessage.info.time.completed).toBeNumber()
       }),
       { git: true, config: providerCfg },
     ),
