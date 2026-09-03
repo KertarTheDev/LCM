@@ -12,7 +12,48 @@ replacement first, then remove each exact superseded release ID and matching tag
 history. Never select a deletion target from `latest` or tag ordering; capture and re-resolve its tag, release ID, and
 candidate SHA immediately before deletion.
 
-The current public prerelease is `v7.4.23-lcm.13`. It was published on 2026-08-27 from candidate
+The current public prerelease is `v7.5.9-lcm.1`. It was published on 2026-09-03 from candidate
+`58dfd2fa193b724f9dedc161bef10e122c1962c9`, containing verified product
+`5e7df6a67c55e5c43c2bbbb488df9c7eea2e7b0d`. Exact-SHA workflow run
+[`33737939477`](https://github.com/KertarTheDev/LCM/actions/runs/33737939477) completed successfully. Its LCM job
+proved exact 27-path overlay ancestry, the focused v7.5.9 adaptation suites, all affected-package typechecks, stable
+second contract generation, all 12 CLI and eight VSIX builds, and packaged Linux x64 Conversation Memory runtime
+isolation; unrelated upstream version, build, validation, and publish jobs were skipped. Release
+[`381892341`](https://github.com/KertarTheDev/LCM/releases/tag/v7.5.9-lcm.1) is a non-draft prerelease whose tag resolves
+to the candidate SHA. Its published body describes the direct v7.5.9 port, the model-neutral isolated `lcm_query`
+contract, the 60% default as a cost-informed research starting point, the honest retained 175k limitations, and the
+schema-v14/tree-v11 disposable-cache rebuild. Its exact GitHub-reported asset manifest is:
+
+|Asset|Bytes|SHA-256|
+|---|---:|---|
+|`kilo-darwin-arm64.zip`|52,468,333|`a50992f938ba8a8f9def18d6ee270e6ea376269c569bbeb496ca931fdad6455e`|
+|`kilo-darwin-x64-baseline.zip`|54,727,246|`6e732b35d2ea87cf0621dd00bd19531d29a25b8d21f44ee5b493732d848697a8`|
+|`kilo-darwin-x64.zip`|54,727,246|`155e67f8c924f6e88cceae048e375019d37ef508aa2ceec6043e6cca02b84692`|
+|`kilo-linux-arm64-musl.tar.gz`|69,246,071|`54911575e74ac8c368c36577b2fa1f6cf302d992323271d6c41400e8b98bfc9b`|
+|`kilo-linux-arm64.tar.gz`|67,130,967|`fd079ebc09bcde823c04401f9a073cae94e6ad9086ce958d1a7f52e167f2355c`|
+|`kilo-linux-x64-baseline-musl.tar.gz`|69,737,897|`a08965c378f2cf0ef63b0e1a48f5f7e7bbe0f9060b0d0bdda070519a9e91da78`|
+|`kilo-linux-x64-baseline.tar.gz`|67,374,095|`8e0bda3bff42d7eee8867682adec45d0859ef88cd8e250767ef5c3f95dd74b80`|
+|`kilo-linux-x64-musl.tar.gz`|69,737,059|`9b258de315135a01644f3007d4414e9b49e0b58572d780553b4b60ae98263c92`|
+|`kilo-linux-x64.tar.gz`|67,374,150|`589bab56a70529115c1ced592e8a23bd1d3196b67d99f01b295dc5c8a143ed00`|
+|`kilo-vscode-alpine-arm64.vsix`|118,699,502|`144c9bd20c707798a300922c7079ba680739c90c3f127e5153df9a9078e00852`|
+|`kilo-vscode-alpine-x64.vsix`|125,909,208|`fa0eec14ab31905ac829abcf68ade65949de85f1beaf88a9f3ee9e67e336f317`|
+|`kilo-vscode-darwin-arm64.vsix`|101,438,688|`b4ccb19ec7f7206ff1692238735be81d7b8b38dc81f1d1e94f14f6a1a97290a2`|
+|`kilo-vscode-darwin-x64.vsix`|109,504,538|`f82b7cfd697f272f0abb645f1c31fcd77eced2d9377e01b7cd42d8d880f01ef7`|
+|`kilo-vscode-linux-arm64.vsix`|116,538,756|`d2ab96fe146fdfad1041c5030e23fed7762df2a8f18d304a6965f198c33de782`|
+|`kilo-vscode-linux-x64.vsix`|123,481,304|`3c9ecfb30d88e54efded209693db7b83a07700aea1e146e03d5c56628fa80773`|
+|`kilo-vscode-win32-arm64.vsix`|98,313,134|`93c8d3c847d94aa9a1a4145a9c172b255721c0e15bdc1c3a1c2e17692a857f0d`|
+|`kilo-vscode-win32-x64.vsix`|122,354,053|`e2337b20f202e933be568056086aaca9823bdfad5f3fa1dc391db4c3456c3d81`|
+|`kilo-windows-arm64.zip`|65,055,832|`557653055b1923ff45edcae4f56c881f6ba3e66f2bdcbd4a82ab613bb2333648`|
+|`kilo-windows-x64-baseline.zip`|66,728,886|`8693016b51ec3af211be17de3b6ef833b1ac00524e0011c88c937b9f3255703e`|
+|`kilo-windows-x64.zip`|66,728,886|`aa1b94c55b9197d2c40c0ff9e243cd1732096af66862c2c9a5da5198d9946d42`|
+
+The product is rebuilt directly on upstream tag `v7.5.9`; no old LCM commit history was replayed. It reuses upstream
+compaction-model selection, incomplete-response retry/output caps, per-user editor-context stability, and the newer
+drain/cancel/background/queue lifecycle while retaining LCM's separate exact-lineage tree and isolated current-session
+recovery. The default `conversation_memory.soft_threshold_percent` is 60%. No new full benchmark was run for this
+port; the next research phase resumes from that default with controlled canaries before another expensive full run.
+
+The retained previous public prerelease is `v7.4.23-lcm.13`. It was published on 2026-08-27 from candidate
 `6f3c08417b89b8195c33130658e013912f25e1ca`, containing verified product
 `e63a527f31f6f819628f2a733fb7e565a9e1c266`. Exact-SHA workflow run
 [`33101947543`](https://github.com/KertarTheDev/LCM/actions/runs/33101947543) completed successfully. Its LCM job
@@ -65,13 +106,23 @@ does not claim a deterministic score gain. Focused and integration verification 
 local release typecheck stopped safely under the VPS resource guard and was not resumed; canonical workflow run
 `33101947543` subsequently passed the authoritative typechecks and every release gate.
 
-The first v7.5.9 candidate `67887ecd84e56dc376331cb69ed2b5c40f3a7175` stopped in exact-SHA workflow run
+Three v7.5.9 audit candidates failed safely before publication. Candidate
+`67887ecd84e56dc376331cb69ed2b5c40f3a7175` stopped in exact-SHA workflow run
 [`33734467246`](https://github.com/KertarTheDev/LCM/actions/runs/33734467246) during the OpenCode typecheck, before
 versioning or draft creation. Canonical compilation exposed a metadata-union inference mismatch in
 `lcm_expand_query`, missing assistant/completed-state discriminant guards in isolated recovery, an optional attachment
 access across host-suppressed query results, and two readonly/message-role test-fixture narrowings. The product now
-makes those boundaries explicit without changing runtime behavior. The failed SHA has no release, tag, or assets; its
-Actions audit history is retained.
+makes those boundaries explicit without changing runtime behavior. Candidate
+`e0afef836b1a4bf3a7ccbd5c05098c86d494fb6c` stopped in run
+[`33735789387`](https://github.com/KertarTheDev/LCM/actions/runs/33735789387) during the adaptation gate because the
+release workflow batched independent stateful OpenCode files into one Bun process; each owning test passed in
+isolation, and the workflow now gives those files separate processes. Candidate
+`2b814b0edcce642b70ad0e8ccba45fbfe3119f4e` stopped in run
+[`33736191375`](https://github.com/KertarTheDev/LCM/actions/runs/33736191375) after all typechecks and artifact builds,
+when packaged smoke still expected the five raw primitives on ordinary agents instead of asserting the current
+isolation contract. Product commit `5e7df6a67c55e5c43c2bbbb488df9c7eea2e7b0d` makes packaged smoke require only
+`lcm_query` and reject every hidden primitive on ordinary agents. All three failed candidates have no release, tag, or
+assets; their Actions audit history is retained.
 
 The healthy `v7.4.23-lcm.12` release remains published because prerelease publication authorization does not authorize
 release or tag deletion. No release, tag, asset, or Actions history was deleted. It is retained pending separate
