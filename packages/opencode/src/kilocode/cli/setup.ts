@@ -12,6 +12,7 @@ import {
   DevAliasCommand,
   DevSetupCommand,
   KiloConsoleCommand,
+  LcmCommand,
   ProfileCommand,
   PtySmokeCommand,
   RemoteCommand,
@@ -51,6 +52,7 @@ export namespace KiloCli {
       .command(DaemonCommand)
       .command(ConfigCLICommand)
       .command(WorktreeCommand)
+      .command(LcmCommand)
     if (process.env.KILO_PTY_SMOKE === "1") cli.command(PtySmokeCommand)
     if (InstallationBuildKind !== "release") cli.command(DevSetupCommand).command(DevAliasCommand)
     // Safe self-reference: `cli` is a typed parameter and yargs `.command()` returns the same
@@ -113,10 +115,7 @@ export namespace KiloCli {
     }
 
     // Migrate legacy Kilo CLI auth (~/.kilocode/cli/config.json) into auth.json if present.
-    await migrateLegacyKiloAuth(
-      async () => (await getAuth()) !== undefined,
-      setAuth,
-    )
+    await migrateLegacyKiloAuth(async () => (await getAuth()) !== undefined, setAuth)
 
     const auth = await getAuth()
     if (auth) {

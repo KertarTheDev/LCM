@@ -25,6 +25,7 @@ import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
 import { KiloMemory } from "@kilocode/kilo-memory/effect"
 import { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
+import * as LcmToolRegistry from "./lcm-registry"
 
 const log = Log.create({ service: "kilocode-tool-registry" })
 type Deps = { agent: Agent.Interface; truncate: Truncate.Interface; indexing?: boolean }
@@ -85,8 +86,23 @@ export namespace KiloToolRegistry {
       const sessions = yield* KiloSessions.Service
       const notify = yield* NotifyUserTool.pipe(Effect.provideService(KiloSessions.Service, sessions))
       const send = yield* SendFileTool
+      const lcm = yield* LcmToolRegistry.infos
       if (!notebook)
-        return { recall, managerModels, memory, save, manager, process, browser, chart, image, terminal, notify, send }
+        return {
+          recall,
+          managerModels,
+          memory,
+          save,
+          manager,
+          process,
+          browser,
+          chart,
+          image,
+          terminal,
+          notify,
+          send,
+          lcm,
+        }
       const tools = yield* Effect.all({
         notebookRead: NotebookReadTool,
         notebookEdit: NotebookEditTool,
@@ -105,6 +121,7 @@ export namespace KiloToolRegistry {
         terminal,
         notify,
         send,
+        lcm,
         ...tools,
       }
     })
@@ -126,6 +143,7 @@ export namespace KiloToolRegistry {
       terminal?: Tool.Info
       notify: Tool.Info
       send: Tool.Info
+      lcm?: readonly Tool.Info[]
       notebookRead?: Tool.Info
       notebookEdit?: Tool.Info
       notebookExecute?: Tool.Info
@@ -148,6 +166,7 @@ export namespace KiloToolRegistry {
       })
       const terminal = tools.terminal ? yield* Tool.init(tools.terminal) : undefined
       const browser = tools.browser ? yield* Tool.init(tools.browser) : undefined
+      const lcm = yield* LcmToolRegistry.build(tools.lcm ?? [])
       const notebooks =
         tools.notebookRead && tools.notebookEdit && tools.notebookExecute
           ? yield* Effect.all({
@@ -157,7 +176,7 @@ export namespace KiloToolRegistry {
             })
           : {}
       const semantic = yield* semanticTool(deps, loaders)
-      return { ...base, terminal, browser, ...notebooks, semantic, notify: base.notify, send: base.send }
+      return { ...base, terminal, browser, ...notebooks, semantic, lcm, notify: base.notify, send: base.send }
     })
   }
 
@@ -200,6 +219,7 @@ export namespace KiloToolRegistry {
 
   /** Hide human-driven tools from agents that cannot interact with the user directly. */
   export function available(tool: Tool.Def, agent: Agent.Info) {
+    if (tool.id.startsWith("lcm_")) return LcmToolRegistry.available(tool.id, agent.name)
     if (tool.id === "notify_user") return KiloSessions.remoteStatus().enabled
     if (tool.id === "send_file") return KiloSessions.remoteStatus().connected
     if (tool.id !== "interactive_terminal") return true
@@ -222,12 +242,18 @@ export namespace KiloToolRegistry {
       terminal?: Tool.Def
       notify: Tool.Def
       send: Tool.Def
+      lcm?: Tool.Def[]
       notebookRead?: Tool.Def
       notebookEdit?: Tool.Def
       notebookExecute?: Tool.Def
     },
     cfg: {
-      experimental?: { image_generation?: boolean; native_notebook_tools?: boolean; task_model_selection?: boolean }
+      experimental?: {
+        conversation_memory?: boolean
+        image_generation?: boolean
+        native_notebook_tools?: boolean
+        task_model_selection?: boolean
+      }
     },
   ): Tool.Def[] {
     return [
@@ -253,6 +279,7 @@ export namespace KiloToolRegistry {
         : []),
       tools.notify,
       tools.send,
+      ...LcmToolRegistry.extra(tools.lcm ?? [], cfg),
     ]
   }
 

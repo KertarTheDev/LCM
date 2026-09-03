@@ -198,13 +198,22 @@ export function stripMessageMetadata(info: Info): Info {
 }
 // kilocode_change end
 
-// kilocode_change - apply stripping inside helpers so all read paths are covered
-const info = (row: typeof MessageTable.$inferSelect) =>
-  stripMessageMetadata({
+// kilocode_change - restore schema classes after SQLite JSON hydration
+const decodeStoredFormat = Schema.decodeUnknownSync(SessionV1.Format)
+
+// kilocode_change - apply normalization and stripping inside helpers so all read paths are covered
+const info = (row: typeof MessageTable.$inferSelect) => {
+  const hydrated = {
     ...row.data,
     id: row.id,
     sessionID: row.session_id,
-  } as Info)
+  } as Info
+  const normalized =
+    hydrated.role === "user" && hydrated.format
+      ? { ...hydrated, format: decodeStoredFormat(hydrated.format) }
+      : hydrated
+  return stripMessageMetadata(normalized)
+}
 
 const part = (row: typeof PartTable.$inferSelect) =>
   stripPartMetadata({

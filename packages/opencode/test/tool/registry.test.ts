@@ -19,6 +19,14 @@ import { MessageID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as SandboxNetwork from "@/kilocode/sandbox/network" // kilocode_change
 import { run as runSandbox, type Profile } from "@kilocode/sandbox" // kilocode_change
+// kilocode_change start
+import {
+  LCM_INTERNAL_RECOVERY_TOOLS,
+  LCM_QUERY_TOOL,
+  LCM_RECOVERY_AGENT,
+  LCM_RECOVERY_FINALIZER_AGENT,
+} from "@/kilocode/session/lcm/recovery-contract"
+// kilocode_change end
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
@@ -158,8 +166,33 @@ function sandboxProfile(): Profile {
 }
 // kilocode_change end
 
-describe("tool.registry", () => {
+describe("tool.registry", () => { // kilocode_change
   // kilocode_change start
+  it.instance("Conversation Memory isolates parent and recovery-child tool surfaces", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const build = yield* agents.get("build")
+      const recovery = yield* agents.get(LCM_RECOVERY_AGENT)
+      const finalizer = yield* agents.get(LCM_RECOVERY_FINALIZER_AGENT)
+      if (!build || !recovery || !finalizer)
+        return yield* Effect.die(new Error("expected Conversation Memory agents are missing"))
+      const input = {
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+      }
+      const parentTools = yield* registry.tools({ ...input, agent: build })
+      const recoveryTools = yield* registry.tools({ ...input, agent: recovery })
+      const finalizerTools = yield* registry.tools({ ...input, agent: finalizer })
+
+      expect(parentTools.map((tool) => tool.id).filter((id) => id.startsWith("lcm_"))).toEqual([LCM_QUERY_TOOL])
+      expect(recoveryTools.map((tool) => tool.id).filter((id) => id.startsWith("lcm_"))).toEqual([
+        ...LCM_INTERNAL_RECOVERY_TOOLS,
+      ])
+      expect(finalizerTools.map((tool) => tool.id).filter((id) => id.startsWith("lcm_"))).toEqual([])
+    }),
+  )
+
   it.instance("hides websearch for a third-party provider by default", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service

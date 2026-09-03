@@ -8,6 +8,15 @@ import { KiloTask } from "../../src/kilocode/tool/task"
 import { deriveSubagentSessionPermission } from "../../src/agent/subagent-permissions"
 import { provideTestInstance } from "../fixture/fixture"
 import { disposeAllInstances, provideInstance, testInstanceStoreLayer, tmpdir } from "../fixture/fixture"
+import {
+  LCM_RECOVERY_FINALIZER_AGENT,
+  LCM_RECOVERY_FINALIZER_MAX_STEPS,
+  LCM_RECOVERY_RESEARCH_MAX_STEPS,
+} from "../../src/kilocode/session/lcm/recovery-contract"
+
+const PUBLIC_LCM_TOOLS = ["lcm_query"]
+const INTERNAL_LCM_TOOLS = ["lcm_grep", "lcm_describe", "lcm_expand_query", "lcm_expand", "lcm_read"]
+const ALL_LCM_TOOLS = [...PUBLIC_LCM_TOOLS, ...INTERNAL_LCM_TOOLS]
 
 function load<A>(dir: string, fn: (svc: Agent.Interface) => Effect.Effect<A>) {
   return Effect.runPromise(
@@ -35,6 +44,96 @@ function expectPlan(item: Agent.Info | undefined, action: Permission.Action = "a
 
 afterEach(async () => {
   await disposeAllInstances()
+})
+
+test("restricted built-in agents retain the isolated Conversation Memory query", async () => {
+  for (const name of ["ask", "plan", "explore", "orchestrator"]) {
+    const agent = await get({}, name)
+    expect(agent).toBeDefined()
+    expect(Permission.disabled(PUBLIC_LCM_TOOLS, agent!.permission)).toEqual(new Set())
+  }
+})
+
+test("explicit user Conversation Memory query denies override built-in recovery defaults", async () => {
+  const ask = await get(
+    {
+      permission: {
+        lcm_query: "deny",
+      },
+    },
+    "ask",
+  )
+  expect(Permission.disabled(PUBLIC_LCM_TOOLS, ask!.permission)).toEqual(new Set(["lcm_query"]))
+})
+
+test("hidden LCM recovery agent is locked to private primitives", async () => {
+  const recovery = await get(
+    {
+      agent: {
+        "lcm-recovery": {
+          disable: true,
+          mode: "primary",
+          hidden: false,
+          steps: 99,
+          permission: {
+            "*": "allow",
+            lcm_query: "allow",
+          },
+        },
+      },
+    },
+    "lcm-recovery",
+  )
+  expect(recovery).toBeDefined()
+  expect(recovery!.mode).toBe("subagent")
+  expect(recovery!.hidden).toBe(true)
+  expect(recovery!.steps).toBe(LCM_RECOVERY_RESEARCH_MAX_STEPS)
+  expect(Permission.disabled(INTERNAL_LCM_TOOLS, recovery!.permission)).toEqual(new Set())
+  expect(Permission.disabled(PUBLIC_LCM_TOOLS, recovery!.permission)).toEqual(new Set(["lcm_query"]))
+  expect(Permission.evaluate("StructuredOutput", "*", recovery!.permission).action).toBe("allow")
+
+  const finalizer = await get(
+    {
+      agent: {
+        [LCM_RECOVERY_FINALIZER_AGENT]: {
+          disable: true,
+          mode: "primary",
+          hidden: false,
+          steps: 99,
+          permission: { "*": "allow" },
+        },
+      },
+    },
+    LCM_RECOVERY_FINALIZER_AGENT,
+  )
+  expect(finalizer).toBeDefined()
+  expect(finalizer!.mode).toBe("subagent")
+  expect(finalizer!.hidden).toBe(true)
+  expect(finalizer!.steps).toBe(LCM_RECOVERY_FINALIZER_MAX_STEPS)
+  expect(Permission.disabled(ALL_LCM_TOOLS, finalizer!.permission)).toEqual(new Set(ALL_LCM_TOOLS))
+  expect(Permission.evaluate("StructuredOutput", "*", finalizer!.permission).action).toBe("allow")
+})
+
+test("hidden LCM recovery agent honors only the configured research-step budget", async () => {
+  const recovery = await get(
+    {
+      conversation_memory: { recovery: { max_research_steps: 6 } },
+      agent: {
+        "lcm-recovery": {
+          mode: "primary",
+          hidden: false,
+          steps: 99,
+          permission: { "*": "allow" },
+        },
+      },
+    },
+    "lcm-recovery",
+  )
+  expect(recovery).toBeDefined()
+  expect(recovery!.steps).toBe(6)
+  expect(recovery!.mode).toBe("subagent")
+  expect(recovery!.hidden).toBe(true)
+  expect(Permission.disabled(PUBLIC_LCM_TOOLS, recovery!.permission)).toEqual(new Set(["lcm_query"]))
 })
 
 test("ask agent honors per-agent MCP allow over generated ask rule", async () => {
@@ -472,17 +571,15 @@ test("plan agent still hard-denies non-plan edits after user edit allow", async 
 })
 
 test("plan agent still hard-denies non-plan edits after per-agent edit ask", async () => {
-  const plan = await get(
-    {
-      agent: {
-        plan: {
-          permission: {
-            edit: "ask",
-          },
+  const plan = await get({
+    agent: {
+      plan: {
+        permission: {
+          edit: "ask",
         },
       },
     },
-  )
+  })
   expectPlan(plan)
 })
 
@@ -508,73 +605,65 @@ test("plan agent honors global and per-agent plan allows after wildcard edit den
 })
 
 test("plan agent preserves scalar edit deny", async () => {
-  const plan = await get(
-    {
-      agent: {
-        plan: {
-          permission: {
-            edit: "deny",
-          },
+  const plan = await get({
+    agent: {
+      plan: {
+        permission: {
+          edit: "deny",
         },
       },
     },
-  )
+  })
   expectPlan(plan, "deny")
 })
 
 test("plan agent preserves a terminal wildcard edit deny", async () => {
-  const plan = await get(
-    {
-      agent: {
-        plan: {
-          permission: {
-            edit: {
-              ".kilo/plans/*": "allow",
-              "*": "deny",
-            },
+  const plan = await get({
+    agent: {
+      plan: {
+        permission: {
+          edit: {
+            ".kilo/plans/*": "allow",
+            "*": "deny",
           },
         },
       },
     },
-  )
+  })
   expectPlan(plan, "deny")
 })
 
 test("plan agent preserves explicit per-agent edit denies", async () => {
-  const plan = await get(
-    {
-      agent: {
-        plan: {
-          permission: {
-            edit: {
-              ".kilo/plans/private.md": "deny",
-            },
+  const plan = await get({
+    agent: {
+      plan: {
+        permission: {
+          edit: {
+            ".kilo/plans/private.md": "deny",
           },
         },
       },
     },
-  )
+  })
   expectPlan(plan)
   expect(Permission.evaluate("edit", ".kilo/plans/private.md", plan!.permission).action).toBe("deny")
 })
 
 test("plan agent preserves global edit denies after per-agent edit ask", async () => {
-  const plan = await get(
-    {
-      permission: {
-        edit: {
-          ".kilo/plans/private.md": "deny",
-        },
+  const plan = await get({
+    permission: {
+      edit: {
+        ".kilo/plans/private.md": "deny",
       },
-      agent: {
-        plan: {
-          permission: {
-            edit: "ask",
-          },
+    },
+    agent: {
+      plan: {
+        permission: {
+          edit: "ask",
         },
       },
     },
-  )
+  })
   expectPlan(plan)
   expect(Permission.evaluate("edit", ".kilo/plans/private.md", plan!.permission).action).toBe("deny")
 })
@@ -593,20 +682,18 @@ test("plan agent preserves global non-edit denies before broader allows", async 
 })
 
 test("plan agent preserves per-agent tool allows with a wildcard deny", async () => {
-  const plan = await get(
-    {
-      agent: {
-        plan: {
-          permission: {
-            "*": "deny",
-            read: "allow",
-            glob: "allow",
-            edit: "ask",
-          },
+  const plan = await get({
+    agent: {
+      plan: {
+        permission: {
+          "*": "deny",
+          read: "allow",
+          glob: "allow",
+          edit: "ask",
         },
       },
     },
-  )
+  })
   expectPlan(plan)
   expect(Permission.evaluate("read", "src/output.log", plan!.permission).action).toBe("allow")
   expect(Permission.evaluate("glob", "*", plan!.permission).action).toBe("allow")
@@ -659,23 +746,26 @@ test("non-planning agents retain per-agent edit permissions", async () => {
   expect(Permission.evaluate("edit", "src/output.log", code!.permission).action).toBe("ask")
 })
 
-test("system utility agents ignore per-agent permission allows", async () => {
+test("system utility agents deny Conversation Memory recovery tools despite per-agent allows", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
         title: {
           permission: {
             bash: "allow",
+            lcm_read: "allow",
           },
         },
         summary: {
           permission: {
             read: "allow",
+            lcm_grep: "allow",
           },
         },
         compaction: {
           permission: {
             skill: "allow",
+            lcm_expand: "allow",
           },
         },
       },
@@ -694,6 +784,11 @@ test("system utility agents ignore per-agent permission allows", async () => {
       expect(Permission.evaluate("bash", "*", title!.permission).action).toBe("deny")
       expect(Permission.evaluate("read", "*", summary!.permission).action).toBe("deny")
       expect(Permission.evaluate("skill", "using-superpowers", compaction!.permission).action).toBe("deny")
+      for (const id of ALL_LCM_TOOLS) {
+        expect(Permission.evaluate(id, "*", title!.permission).action).toBe("deny")
+        expect(Permission.evaluate(id, "*", summary!.permission).action).toBe("deny")
+        expect(Permission.evaluate(id, "*", compaction!.permission).action).toBe("deny")
+      }
     },
   })
 })

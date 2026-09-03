@@ -422,6 +422,38 @@
   color: var(--vscode-descriptionForeground);
 }
 
+.context-progress-stack {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.context-memory-details {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--text-weak-base, var(--vscode-descriptionForeground));
+  font-size: var(--kilo-font-size-11);
+}
+
+.context-memory-details button {
+  border: 1px solid var(--border-weak-base);
+  border-radius: 4px;
+  padding: 1px 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.context-memory-warning {
+  color: var(--vscode-errorForeground);
+  white-space: normal;
+}
+
 .context-progress-count {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;

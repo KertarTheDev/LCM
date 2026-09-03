@@ -211,6 +211,10 @@ const cfg = {
 function providerCfg(url: string) {
   return {
     ...cfg,
+    // This upstream-owned suite verifies legacy compaction behavior. LCM is
+    // enabled by default, so opt out explicitly instead of accidentally
+    // exercising the LCM overflow path with legacy call-count assertions.
+    experimental: { conversation_memory: false },
     provider: {
       ...cfg.provider,
       test: {
@@ -615,6 +619,52 @@ describe("SessionPrompt recovery", () => {
         )
         expect(empty).toHaveLength(0)
         expect(msgs.some((msg) => msg.info.id === stale.id)).toBe(false)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  )
+
+  it.live("terminalizes a persisted running recovery tool before replying", () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Prompt tool recovery" })
+        const first = yield* user(chat.id, "Before the interrupted recovery")
+        const stale = yield* dangling(chat.id, first.id)
+        const tool = yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: stale.id,
+          sessionID: chat.id,
+          type: "tool",
+          callID: "call_interrupted_recovery",
+          tool: "lcm_query",
+          state: {
+            status: "running",
+            input: { question: "What was decided earlier?" },
+            time: { start: Date.now() - 1_000 },
+            metadata: { isolatedSessionID: "ses_interrupted_recovery" },
+          },
+        } satisfies MessageV2.ToolPart)
+
+        yield* llm.text("recovered after restart")
+        const result = yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          parts: [{ type: "text", text: "Continue after the interrupted recovery" }],
+        })
+
+        expect(result.parts.some((part) => part.type === "text" && part.text === "recovered after restart")).toBe(true)
+        const msgs = yield* sessions.messages({ sessionID: chat.id })
+        const recovered = msgs
+          .find((message) => message.info.id === stale.id)
+          ?.parts.find((part) => part.id === tool.id)
+        expect(recovered?.type).toBe("tool")
+        if (recovered?.type !== "tool") throw new Error("expected recovered tool part")
+        expect(recovered.state.status).toBe("error")
+        if (recovered.state.status !== "error") throw new Error("expected interrupted error state")
+        expect(recovered.state.metadata?.interrupted).toBe(true)
+        expect(msgs.find((message) => message.info.id === stale.id)?.info.time.completed).toBeNumber()
       }),
       { git: true, config: providerCfg },
     ),

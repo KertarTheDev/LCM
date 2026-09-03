@@ -459,6 +459,59 @@ it.live("session.processor effect tests stop after token overflow requests compa
   ),
 )
 
+// kilocode_change start
+it.live(
+  "session.processor external context management preserves a successful response across upstream thresholds",
+  () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          const { processors, session, provider } = yield* boot()
+          yield* llm.text("kept response", { usage: { input: 60_000, output: 100 } })
+
+          const chat = yield* session.create({})
+          const parent = yield* user(chat.id, "continue")
+          const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+          const handle = yield* processors.create({
+            assistantMessage: msg,
+            sessionID: chat.id,
+            model: mdl,
+            contextManagement: "external",
+          })
+
+          const value = yield* handle.process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "x".repeat(220_000) }],
+            tools: {},
+          })
+
+          const parts = yield* MessageV2.parts(msg.id)
+          expect(value).toBe("continue")
+          expect(yield* llm.calls).toBe(1)
+          expect(parts.some((part) => part.type === "text" && part.text === "kept response")).toBe(true)
+        }),
+      {
+        config: (url) => ({
+          ...providerCfg(url),
+          compaction: { auto: true, threshold_percent: 50 },
+        }),
+      },
+    ),
+)
+// kilocode_change end
+
 // kilocode_change start - configured output ceiling must reach finish-step overflow accounting
 capped.live("session.processor respects the configured output token ceiling", () =>
   provideTmpdirServer(
@@ -747,7 +800,8 @@ it.live("session.processor effect tests publish retry status updates", () =>
   ),
 )
 
-it.live("session.processor effect tests compact on structured context overflow", () =>
+// kilocode_change start
+it.live("session.processor upstream policy compacts on structured context overflow", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
       Effect.gen(function* () {
@@ -789,6 +843,104 @@ it.live("session.processor effect tests compact on structured context overflow",
     { config: (url) => providerCfg(url) },
   ),
 )
+
+it.live("session.processor external context management reports structured provider overflow for hard recovery", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.error(400, { type: "error", error: { code: "context_length_exceeded" } })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "recover with lcm")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+          contextManagement: "external",
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "recover with lcm" }],
+          tools: {},
+        })
+
+        expect(value).toBe("compact")
+        expect(yield* llm.calls).toBe(1)
+        expect(handle.message.error).toBeUndefined()
+      }),
+    {
+      config: (url) => ({
+        ...providerCfg(url),
+        compaction: { auto: false },
+      }),
+    },
+  ),
+)
+
+it.live("session.processor upstream policy surfaces provider overflow when automatic compaction is disabled", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        yield* llm.error(400, { type: "error", error: { code: "context_length_exceeded" } })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "do not compact")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+          contextManagement: "upstream",
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "do not compact" }],
+          tools: {},
+        })
+
+        expect(value).toBe("stop")
+        expect(handle.message.finish).toBe("error")
+        expect(handle.message.error?.name).toBe("ContextOverflowError")
+      }),
+    {
+      config: (url) => ({
+        ...providerCfg(url),
+        compaction: { auto: false },
+      }),
+    },
+  ),
+)
+// kilocode_change end
 
 it.live("session.processor effect tests complete AI SDK tool calls when native flag is off", () =>
   provideTmpdirServer(

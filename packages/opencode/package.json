@@ -9,6 +9,17 @@
     "typecheck": "tsgo --noEmit",
     "test": "bun run script/test-runner.ts",
     "test:httpapi": "bun run script/httpapi-exercise.ts --mode coverage --fail-on-missing --fail-on-skip && bun run script/httpapi-exercise.ts --mode auth --fail-on-missing --fail-on-skip && bun run script/httpapi-exercise.ts --mode effect --fail-on-missing --fail-on-skip --shards 4",
+    "lcm:store": "bun test test/kilocode/lcm/store.test.ts test/kilocode/lcm/transcript-source.test.ts --timeout 120000",
+    "lcm:tree": "bun test test/kilocode/lcm/summary-tree.test.ts --timeout 120000",
+    "lcm:projection": "bun test test/kilocode/lcm/projector.test.ts test/kilocode/lcm/prompt-seam.test.ts test/kilocode/lcm/maintenance-policy.test.ts --timeout 120000",
+    "lcm:tools": "bun test test/kilocode/lcm/tool-contracts.test.ts test/kilocode/lcm/isolated-recovery.test.ts --timeout 120000 && bun test test/kilocode/agent-permission-overrides.test.ts test/tool/registry.test.ts -t \"Conversation Memory\" --timeout 120000",
+    "lcm:api": "bun test test/kilocode/lcm/api-contracts.test.ts test/kilocode/lcm/config.test.ts --timeout 120000",
+    "lcm:export": "bun test test/kilocode/lcm/context-export.test.ts --timeout 120000",
+    "lcm:upstream-compat": "bun run script/test-runner.ts --concurrency 1 --timeout 180000 --file-timeout 600000 --verbose kilocode/lcm/upstream-compat.test.ts kilocode/lcm/tui-command.test.ts kilocode/session-overflow.test.ts kilocode/tool/notify-user.test.ts tool/recall.test.ts && bun test test/kilocode/session-prompt-queue.test.ts -t \"^(?!.*cancel drops queued prompts and resets internal state).*$\" --timeout 180000",
+    "lcm:long-context": "bun test test/kilocode/lcm/long-context.test.ts --timeout 120000",
+    "lcm:packaged-smoke": "bun run script/lcm-packaged-smoke.ts",
+    "lcm:contracts:check": "bun run script/check-lcm-contracts.ts",
+    "lcm:docs:check": "bun run script/check-lcm-docs.ts",
     "bench:test": "bun run script/bench-test-suite.ts",
     "profile:test": "bun run script/profile-test-files.ts",
     "build": "bun run script/build.ts",
@@ -28,6 +39,11 @@
       "bun": "./src/storage/db.bun.ts",
       "node": "./src/storage/db.node.ts",
       "default": "./src/storage/db.bun.ts"
+    },
+    "#lcm-db": {
+      "bun": "./src/kilocode/session/lcm/store-sqlite.bun.ts",
+      "node": "./src/kilocode/session/lcm/store-sqlite.node.ts",
+      "default": "./src/kilocode/session/lcm/store-sqlite.bun.ts"
     }
   },
   "devDependencies": {

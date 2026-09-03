@@ -17,6 +17,38 @@ import PROMPT_DEBUG from "../../agent/prompt/debug.txt"
 import PROMPT_ORCHESTRATOR from "../../agent/prompt/orchestrator.txt"
 import PROMPT_ASK from "../../agent/prompt/ask.txt"
 import PROMPT_EXPLORE from "../../agent/prompt/explore.txt"
+import PROMPT_LCM_RECOVERY from "./lcm-recovery.txt"
+import PROMPT_LCM_RECOVERY_FINALIZER from "./lcm-recovery-finalizer.txt"
+import {
+  LCM_INTERNAL_RECOVERY_TOOLS,
+  LCM_QUERY_TOOL,
+  LCM_RECOVERY_AGENT,
+  LCM_RECOVERY_FINALIZER_AGENT,
+  LCM_RECOVERY_FINALIZER_MAX_STEPS,
+  LCM_RECOVERY_STRUCTURED_TOOL,
+  lcmRecoveryLimits,
+} from "@/kilocode/session/lcm/recovery-contract"
+
+export const LCM_RECOVERY_TOOLS = [LCM_QUERY_TOOL] as const
+
+export function lcmRecoveryPermissions() {
+  return Permission.fromConfig(Object.fromEntries(LCM_RECOVERY_TOOLS.map((tool) => [tool, "allow" as const])))
+}
+
+function lcmInternalRecoveryPermissions() {
+  return Permission.fromConfig({
+    "*": "deny",
+    ...Object.fromEntries(LCM_INTERNAL_RECOVERY_TOOLS.map((tool) => [tool, "allow" as const])),
+    [LCM_RECOVERY_STRUCTURED_TOOL]: "allow",
+  })
+}
+
+function lcmFinalizerPermissions() {
+  return Permission.fromConfig({
+    "*": "deny",
+    [LCM_RECOVERY_STRUCTURED_TOOL]: "allow",
+  })
+}
 
 const readable: Record<string, "allow"> = {
   "cat *": "allow",
@@ -175,10 +207,7 @@ function editRestrictions(rules: Permission.Ruleset) {
 }
 
 function restrictions(user: Permission.Ruleset) {
-  return [
-    ...user.filter((rule) => rule.action === "deny" && rule.permission !== "edit"),
-    ...editRestrictions(user),
-  ]
+  return [...user.filter((rule) => rule.action === "deny" && rule.permission !== "edit"), ...editRestrictions(user)]
 }
 
 function askEditGuard() {
@@ -413,7 +442,11 @@ export function processConfigItem(item: {
   }
 }
 
-const locked = new Set(["compaction", "title", "summary"])
+const locked = new Set(["compaction", "title", "summary", LCM_RECOVERY_AGENT, LCM_RECOVERY_FINALIZER_AGENT])
+
+export function isLockedAgent(name: string) {
+  return locked.has(name)
+}
 
 function hardRules() {
   return Permission.fromConfig({
@@ -427,10 +460,45 @@ export function harden(item?: { name: string; permission: Permission.Ruleset }) 
   item.permission = hardRules()
 }
 
-export function hardenSystemAgents<T extends { name: string; permission: Permission.Ruleset }>(
-  agents: Record<string, T>,
-) {
+export function hardenSystemAgents<
+  T extends {
+    name: string
+    permission: Permission.Ruleset
+    prompt?: string
+    mode?: "subagent" | "primary" | "all"
+    hidden?: boolean
+    steps?: number
+    options?: Record<string, unknown>
+    model?: { modelID: string; providerID: string }
+    variant?: string
+  },
+>(agents: Record<string, T>, cfg?: Config.Info) {
+  const recoveryLimits = lcmRecoveryLimits(cfg)
   for (const [key, item] of Object.entries(agents)) {
+    if (key === LCM_RECOVERY_AGENT) {
+      item.name = LCM_RECOVERY_AGENT
+      item.permission = lcmInternalRecoveryPermissions()
+      item.prompt = PROMPT_LCM_RECOVERY
+      item.mode = "subagent"
+      item.hidden = true
+      item.steps = recoveryLimits.researchMaxSteps
+      item.options = {}
+      delete item.model
+      delete item.variant
+      continue
+    }
+    if (key === LCM_RECOVERY_FINALIZER_AGENT) {
+      item.name = LCM_RECOVERY_FINALIZER_AGENT
+      item.permission = lcmFinalizerPermissions()
+      item.prompt = PROMPT_LCM_RECOVERY_FINALIZER
+      item.mode = "subagent"
+      item.hidden = true
+      item.steps = LCM_RECOVERY_FINALIZER_MAX_STEPS
+      item.options = {}
+      delete item.model
+      delete item.variant
+      continue
+    }
     if (locked.has(key)) {
       item.permission = hardRules()
       continue
@@ -481,6 +549,7 @@ export function patchAgents(
   worktree: string,
   whitelistedDirs: string[],
 ) {
+  const recoveryLimits = lcmRecoveryLimits(cfg)
   // Rename "build" → "code" for backward compatibility
   if (agents.build) {
     agents.code = {
@@ -498,7 +567,7 @@ export function patchAgents(
 
   // Patch plan mode
   if (agents.plan) {
-    const guard = planGuard(worktree, kilo.mcpRules)
+    const guard = Permission.merge(planGuard(worktree, kilo.mcpRules), lcmRecoveryPermissions())
     agents.plan = {
       ...agents.plan,
       description: "Plan mode. Can only edit plan files; all other filesystem mutations are denied.",
@@ -539,6 +608,7 @@ export function patchAgents(
             ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
           },
         }),
+        lcmRecoveryPermissions(),
         user,
         // Explore is always delegated, so user allows cannot make its shell writable.
         Permission.fromConfig({ bash: exploreBash }),
@@ -546,6 +616,30 @@ export function patchAgents(
       ),
       prompt: PROMPT_EXPLORE,
     }
+  }
+
+  agents[LCM_RECOVERY_AGENT] = {
+    name: LCM_RECOVERY_AGENT,
+    description: "Internal read-only researcher for one focused current-session Conversation Memory question.",
+    prompt: PROMPT_LCM_RECOVERY,
+    options: {},
+    permission: lcmInternalRecoveryPermissions(),
+    mode: "subagent",
+    native: true,
+    hidden: true,
+    steps: recoveryLimits.researchMaxSteps,
+  }
+
+  agents[LCM_RECOVERY_FINALIZER_AGENT] = {
+    name: LCM_RECOVERY_FINALIZER_AGENT,
+    description: "Internal tool-free synthesizer for one focused Conversation Memory answer.",
+    prompt: PROMPT_LCM_RECOVERY_FINALIZER,
+    options: {},
+    permission: lcmFinalizerPermissions(),
+    mode: "subagent",
+    native: true,
+    hidden: true,
+    steps: LCM_RECOVERY_FINALIZER_MAX_STEPS,
   }
 
   // Add debug agent
@@ -594,6 +688,7 @@ export function patchAgents(
           [Truncate.GLOB]: "allow",
         },
       }),
+      lcmRecoveryPermissions(),
       user,
       // Enforce bash deny after user so user config cannot re-enable shell
       Permission.fromConfig({
@@ -606,7 +701,7 @@ export function patchAgents(
   }
 
   // Add ask agent
-  const guard = askGuard(kilo.mcpRules)
+  const guard = Permission.merge(askGuard(kilo.mcpRules), lcmRecoveryPermissions())
   agents.ask = {
     name: "ask",
     description: "Get answers and explanations without making changes to the codebase.",
@@ -624,7 +719,7 @@ export function patchAgents(
     native: true,
   }
 
-  hardenSystemAgents(agents)
+  hardenSystemAgents(agents, cfg)
 }
 
 export const RemoveError = NamedError.create("AgentRemoveError", {
@@ -740,9 +835,8 @@ async function removeConfigAgent(name: string, sources: KilocodeConfigSources.So
     const opts = { formattingOptions: { insertSpaces: true, tabSize: 2 } }
     const next = applyEdits(text, modify(text, ["agent", name], undefined, opts))
     const parsed = parseJsonc(next)
-    const final = parsed.default_agent === name
-      ? applyEdits(next, modify(next, ["default_agent"], undefined, opts))
-      : next
+    const final =
+      parsed.default_agent === name ? applyEdits(next, modify(next, ["default_agent"], undefined, opts)) : next
     await Bun.write(file, final)
     found = true
   }

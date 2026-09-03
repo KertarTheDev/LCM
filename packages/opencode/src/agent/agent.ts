@@ -148,7 +148,7 @@ const layer = Layer.effect(
           // kilocode_change start
           repo_clone: "deny",
           repo_overview: "deny",
-          // kilocode_change end
+        // kilocode_change end
           // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
           read: {
             "*": "allow",
@@ -269,6 +269,7 @@ const layer = Layer.effect(
                         [path.join(Global.Path.repos, "*")]: "allow",
                       },
                     }),
+                    KiloAgent.lcmRecoveryPermissions(),
                     user,
                   ),
                   description: `Docs and dependency-source specialist. Use this when you need to inspect external documentation, clone dependency repositories into the managed cache, and research library implementation details without modifying the user's workspace.`,
@@ -335,6 +336,7 @@ const layer = Layer.effect(
         for (const [key, value] of Object.entries(agentConfigs)) {
           // kilocode_change end
           if (value.disable) {
+            if (KiloAgent.isLockedAgent(key)) continue // kilocode_change - internal utility agents cannot be disabled
             delete agents[key]
             continue
           }
@@ -439,7 +441,7 @@ const layer = Layer.effect(
               native: false,
             }
           }
-        // kilocode_change end
+          // kilocode_change end
         }
 
         // Ensure Truncate.GLOB is allowed unless explicitly configured
@@ -458,7 +460,7 @@ const layer = Layer.effect(
           )
         }
 
-        KiloAgent.hardenSystemAgents(agents) // kilocode_change - keep system utility agents deny-only after config merges
+        KiloAgent.hardenSystemAgents(agents, cfg) // kilocode_change - keep system utility agents deny-only after config merges
 
         const get = Effect.fnUntraced(function* (agent: string) {
           return agents[KiloAgent.resolveKey(agent)] // kilocode_change - treat "build" as "code"

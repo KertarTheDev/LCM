@@ -51,7 +51,10 @@ Open the model selector dropdown in the Kilo Code chat interface and choose the 
 
 ### Context condensing
 
-When a conversation grows long, use `/compact` (also searchable as `smol` or `condense`) to summarize the history and free up context space. You can also enable **auto-compaction** in **Settings → Context** so Kilo compacts automatically when approaching the context limit, without any manual intervention.
+Conversation Memory automatically reduces consumed older history as a conversation grows. Use `/compact` (also
+searchable as `smol` or `condense`) to force one full maintenance cycle, and inspect or tune its raw-history pressure
+threshold in **Settings → Context**. It is currently experimental and enabled by default; switch it off in
+**Settings → Experimental** to use legacy compaction.
 
 ### Max tokens for thinking models
 

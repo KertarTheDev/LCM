@@ -59,8 +59,9 @@ const it = testEffect(AppNodeBuilder.build(LayerNode.group([LLM.node, Provider.n
 const drain = (input: LLM.StreamInput) => LLM.Service.use((svc) => svc.stream(input).pipe(Stream.runDrain))
 
 // collect runs the stream and returns every emitted LLMEvent for assertions. // kilocode_change
-const collect = (input: LLM.StreamInput) => // kilocode_change
-  LLM.Service.use((svc) => svc.stream(input).pipe(Stream.runCollect)) // kilocode_change
+const collect = (
+  input: LLM.StreamInput, // kilocode_change
+) => LLM.Service.use((svc) => svc.stream(input).pipe(Stream.runCollect)) // kilocode_change
 
 // drainWith builds an isolated runtime so custom replacements fully own LLM and
 // its transitive deps.
@@ -2181,7 +2182,9 @@ describe("session.llm.stream", () => {
                     delta: {
                       role: "assistant",
                       content: null,
-                      tool_calls: [{ index: 0, id: "call-1", type: "function", function: { name: " bash", arguments: "" } }],
+                      tool_calls: [
+                        { index: 0, id: "call-1", type: "function", function: { name: " bash", arguments: "" } },
+                      ],
                     },
                   },
                 ],
@@ -2273,7 +2276,9 @@ describe("session.llm.stream", () => {
                     delta: {
                       role: "assistant",
                       content: null,
-                      tool_calls: [{ index: 0, id: "call-1", type: "function", function: { name: "Write", arguments: "" } }],
+                      tool_calls: [
+                        { index: 0, id: "call-1", type: "function", function: { name: "Write", arguments: "" } },
+                      ],
                     },
                   },
                 ],
@@ -2337,6 +2342,122 @@ describe("session.llm.stream", () => {
         expect(errors[0].name).toBe("Write")
         expect(errors[0].message).toContain("unavailable tool 'Write'")
         expect(errors[0].message).not.toContain("invalid")
+      }),
+    {
+      config: () => ({
+        enabled_providers: [alibabaQwenFixture.providerID],
+        provider: {
+          [alibabaQwenFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
+    "repairs a bounded double-encoded lcm_query argument",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(alibabaQwenFixture.providerID, alibabaQwenFixture.modelID)
+        let receivedQuestion: string | undefined
+
+        waitRequest(
+          "/chat/completions",
+          createEventResponse(
+            [
+              {
+                id: "chatcmpl-lcm-repair",
+                object: "chat.completion.chunk",
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      role: "assistant",
+                      content: null,
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: "call-lcm-repair",
+                          type: "function",
+                          function: { name: "lcm_query", arguments: "" },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+              {
+                id: "chatcmpl-lcm-repair",
+                object: "chat.completion.chunk",
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          function: {
+                            arguments: JSON.stringify({
+                              value: JSON.stringify({ question: "What changed?" }),
+                            }),
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+              {
+                id: "chatcmpl-lcm-repair",
+                object: "chat.completion.chunk",
+                choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+              },
+            ],
+            true,
+          ),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(alibabaQwenFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-lcm-repair")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-lcm-repair"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Recover the earlier answer" }],
+          tools: {
+            lcm_query: tool({
+              description: "Ask Conversation Memory",
+              inputSchema: z.object({ question: z.string().max(1_024) }),
+              execute: async ({ question }) => {
+                receivedQuestion = question
+                return { output: "" }
+              },
+            }),
+          },
+        })
+
+        expect(receivedQuestion).toBe("What changed?")
       }),
     {
       config: () => ({

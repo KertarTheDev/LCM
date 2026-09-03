@@ -292,11 +292,54 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  // kilocode_change start - Conversation Memory owns active-history maintenance independently of legacy compaction
+  conversation_memory: Schema.optional(
+    Schema.Struct({
+      soft_threshold_percent: Schema.optional(Schema.NullOr(Percent)).annotate({
+        description: "Raw conversation-lane pressure that starts Conversation Memory maintenance (default: 60%).",
+      }),
+      recovery: Schema.optional(
+        Schema.Struct({
+          max_queries_per_turn: Schema.optional(NonNegativeInt).annotate({
+            description: "Maximum isolated recovery children started by one parent user turn (default: 2).",
+          }),
+          max_research_steps: Schema.optional(PositiveInt).annotate({
+            description: "Maximum provider steps in one hidden evidence-acquisition session (default: 1).",
+          }),
+          max_tool_calls: Schema.optional(NonNegativeInt).annotate({
+            description: "Maximum completed recovery primitive calls in one hidden child lifetime (default: 2).",
+          }),
+          max_semantic_inferences: Schema.optional(NonNegativeInt).annotate({
+            description: "Maximum nested semantic synthesis calls in one hidden child lifetime (default: 1).",
+          }),
+          max_repair_attempts: Schema.optional(NonNegativeInt).annotate({
+            description: "Maximum fresh-session repair calls after same-session synthesis fails (default: 2).",
+          }),
+          research_timeout_seconds: Schema.optional(PositiveInt).annotate({
+            description: "Active wall-time limit for hidden evidence acquisition, in seconds (default: 540).",
+          }),
+          finalizer_timeout_seconds: Schema.optional(PositiveInt).annotate({
+            description: "Shared wall-time limit for same-session synthesis and repair, in seconds (default: 600).",
+          }),
+          cleanup_timeout_seconds: Schema.optional(PositiveInt).annotate({
+            description: "Bounded cancellation and bookkeeping cleanup time, in seconds (default: 60).",
+          }),
+        }),
+      ).annotate({
+        description:
+          "Advanced isolated-recovery resource budgets. These do not expose private recovery primitives to ordinary agents.",
+      }),
+    }),
+  ),
+  // kilocode_change end
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
       batch_tool: Schema.optional(Schema.Boolean).annotate({ description: "Enable the batch tool" }),
       // kilocode_change start
+      conversation_memory: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable experimental Conversation Memory context management (default: true)",
+      }),
       image_generation: Schema.optional(Schema.Boolean).annotate({ description: "Enable AI image generation" }),
       image_generation_model: Schema.optional(Schema.String).annotate({
         description: "Model ID to use for image generation (default: openrouter/auto)",

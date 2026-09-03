@@ -1,0 +1,70 @@
+{
+  "sessionID": "ses_binding_state",
+  "usableInputTokens": 8000,
+  "protectedSources": 2,
+  "entries": [
+    "Initial goal: port the extension by replaying the older branch.",
+    "Constraint: preserve the upstream notify_user and recall tools.",
+    "Decisive error: SQLITE_BUSY while opening /workspace/.kilo/kilo.db.",
+    "Decision: use a rebuildable SQLite sidecar beside the selected Kilo database.",
+    "Rejected path: do not retry the PGlite worker integration.",
+    "Exact command: bun run --cwd packages/opencode lcm:tree.",
+    "Numeric limit: soft raw-lane maintenance starts at 40 percent by default.",
+    "Promotion rule: hard maintenance promotes complete active summary levels until the configured soft target is feasible.",
+    "File owner: packages/opencode/src/kilocode/session/lcm/service.ts.",
+    "Issue ID: LCM-423 tracks the v7.4.23 compatibility review.",
+    "Completed work: newest-first message streams are normalized once before final-source indexing.",
+    "Remaining work: verify the corrected packaged VSIX on macOS and VSCodium.",
+    "Preference override: apply the current-state delta instead of replaying old commits.",
+    "Continuity rule: protect unconsumed current work and a recent tail of 15 percent, clamped to 2000 through 20000 tokens.",
+    "Release base: upstream Kilo Code v7.4.23 at 40fa10e50a75c4887978d892520d1246515413bf.",
+    "Current goal: ship a frictionless single-session continuity layer without disabling upstream features."
+  ],
+  "bindings": [
+    {
+      "name": "storage",
+      "sourceOrdinal": 3,
+      "exact": "use a rebuildable SQLite sidecar beside the selected Kilo database"
+    },
+    {
+      "name": "rejected-path",
+      "sourceOrdinal": 4,
+      "exact": "do not retry the PGlite worker integration"
+    },
+    {
+      "name": "command",
+      "sourceOrdinal": 5,
+      "exact": "bun run --cwd packages/opencode lcm:tree"
+    },
+    {
+      "name": "numeric-limit",
+      "sourceOrdinal": 6,
+      "exact": "soft raw-lane maintenance starts at 40 percent"
+    },
+    {
+      "name": "file-owner",
+      "sourceOrdinal": 8,
+      "exact": "packages/opencode/src/kilocode/session/lcm/service.ts"
+    },
+    {
+      "name": "remaining-work",
+      "sourceOrdinal": 11,
+      "exact": "verify the corrected packaged VSIX on macOS and VSCodium"
+    },
+    {
+      "name": "preference-override",
+      "sourceOrdinal": 12,
+      "exact": "apply the current-state delta instead of replaying old commits"
+    },
+    {
+      "name": "release-base",
+      "sourceOrdinal": 14,
+      "exact": "40fa10e50a75c4887978d892520d1246515413bf"
+    },
+    {
+      "name": "current-goal",
+      "sourceOrdinal": 15,
+      "exact": "frictionless single-session continuity layer without disabling upstream features"
+    }
+  ]
+}

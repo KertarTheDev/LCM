@@ -57,6 +57,7 @@ import { KiloSessionTuiSync } from "@/kilocode/session/tui-sync"
 import { slashMatches } from "@/kilocode/cli/cmd/command-display"
 import { createCostAlertController } from "@/kilocode/cli/cmd/tui/cost-alert"
 import { MemoryPrompt } from "@/kilocode/cli/cmd/tui/component/memory-prompt"
+import { LcmPrompt } from "@/kilocode/cli/cmd/tui/component/lcm-prompt"
 // kilocode_change end
 import { KILO_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../config"
@@ -1079,6 +1080,30 @@ export function Prompt(props: PromptProps) {
       },
     })
     if (memory) return true
+    const lcm = await LcmPrompt.run({
+      text: store.prompt.input,
+      client: sdk.client,
+      workspace: project.workspace.current(),
+      directory: props.directory,
+      sessionID: props.sessionID,
+      toast,
+      dialog,
+      done: () => {
+        history.append({
+          ...store.prompt,
+          mode: store.mode,
+        })
+        input.extmarks.clear()
+        setStore("prompt", {
+          input: "",
+          parts: [],
+        })
+        setStore("extmarkToPartIndex", new Map())
+        props.onSubmit?.()
+        input.clear()
+      },
+    })
+    if (lcm) return true
     // kilocode_change end
     const selectedModel = local.model.current()
     if (!selectedModel) {

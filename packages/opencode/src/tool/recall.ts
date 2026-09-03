@@ -12,6 +12,9 @@ import { SessionID } from "../session/schema" // kilocode_change
 import { RecallSearch } from "../kilocode/session/recall-search" // kilocode_change
 import { SessionTranscript } from "../kilocode/session/transcript" // kilocode_change
 import { KiloSessionPromptQueue } from "../kilocode/session/prompt-queue" // kilocode_change
+import { LCM_RECOVERY_AGENTS, isLcmRecoveryAgent } from "../kilocode/session/lcm/recovery-contract" // kilocode_change
+import { Config } from "../config/config" // kilocode_change
+import * as ConversationMemoryFeature from "../kilocode/session/lcm/feature" // kilocode_change
 import DESCRIPTION from "./recall.txt"
 
 const Parameters = Schema.Struct({
@@ -34,16 +37,18 @@ export const RecallTool = Tool.define(
   Effect.gen(function* () {
     const git = yield* Git.Service
     const sessions = yield* Session.Service // kilocode_change
+    const config = yield* Config.Service // kilocode_change
     return {
       description: DESCRIPTION,
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const bridge = yield* EffectBridge.make()
+          const lcmEnabled = ConversationMemoryFeature.enabled(yield* config.get()) // kilocode_change
           if (params.mode === "search") {
-            return yield* Effect.promise(() => search(params, ctx, bridge, git))
+            return yield* Effect.promise(() => search(params, ctx, bridge, git, lcmEnabled))
           }
-          return yield* Effect.promise(() => read(params, ctx, bridge, git, sessions))
+          return yield* Effect.promise(() => read(params, ctx, bridge, git, sessions, lcmEnabled))
         }).pipe(Effect.orDie),
     }
   }),
@@ -54,6 +59,7 @@ async function search(
   ctx: Tool.Context,
   bridge: EffectBridge.Shape,
   git: Git.Interface,
+  lcmEnabled: boolean,
 ) {
   if (!params.query) {
     throw new Error("The 'query' parameter is required when mode is 'search'")
@@ -79,7 +85,9 @@ async function search(
       limit: params.limit,
       signal: ctx.abort,
       excludeSessionID: ctx.sessionID,
+      excludeSessionIDs: lcmEnabled ? [ctx.sessionID] : undefined, // kilocode_change - current-session raw recovery belongs to the isolated LCM worker
       excludeFromMessageID: boundary,
+      excludeAgents: LCM_RECOVERY_AGENTS, // kilocode_change - private research/finalizer transcripts never cross into parent recall
     }),
   ) // kilocode_change
 
@@ -117,6 +125,7 @@ async function read(
   bridge: EffectBridge.Shape,
   git: Git.Interface,
   sessions: Session.Interface,
+  lcmEnabled: boolean,
 ) {
   if (!params.sessionID) {
     throw new Error("The 'sessionID' parameter is required when mode is 'read'")
@@ -124,10 +133,16 @@ async function read(
   if (!Schema.is(SessionID)(params.sessionID)) {
     throw new Error("Invalid session ID. Use search mode first to find valid session IDs.")
   }
+  if (lcmEnabled && params.sessionID === ctx.sessionID) {
+    throw new Error("Session not found. Use search mode first to find valid session IDs.")
+  }
 
   const session = await bridge.promise(sessions.get(SessionID.make(params.sessionID))).catch(() => {
     throw new Error("Session not found. Use search mode first to find valid session IDs.")
   })
+  if (session.agent && isLcmRecoveryAgent(session.agent)) {
+    throw new Error("Session not found. Use search mode first to find valid session IDs.")
+  }
   const dirs = await bridge.promise(WorktreeFamily.list().pipe(Effect.provideService(Git.Service, git))) // kilocode_change
   // kilocode_change start
   const dir = Filesystem.resolve(session.directory)

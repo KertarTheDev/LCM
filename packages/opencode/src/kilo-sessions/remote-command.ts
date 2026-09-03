@@ -215,7 +215,7 @@ export namespace RemoteCommand {
         agent: string
         model: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
         auto: boolean
-      }) => Promise<void>
+      }) => Promise<"upstream" | "external">
     }
     prompt: { loop: (sessionID: SessionID) => Promise<void> }
   }
@@ -264,7 +264,7 @@ export namespace RemoteCommand {
               ? { providerID: user.info.model.providerID, modelID: user.info.model.modelID }
               : undefined) ??
             (await services.provider.default())
-          await services.compaction.create({
+          const route = await services.compaction.create({
             sessionID: input.sessionID,
             agent,
             model: {
@@ -273,7 +273,7 @@ export namespace RemoteCommand {
             },
             auto: false,
           })
-          await services.prompt.loop(input.sessionID)
+          if (route === "upstream") await services.prompt.loop(input.sessionID)
           return
         }
         await services.command({
@@ -347,11 +347,11 @@ export namespace RemoteCommand {
       },
       compaction: {
         create: async (input) => {
-          const [{ AppRuntime }, { SessionCompaction }] = await Promise.all([
+          const [{ AppRuntime }, ConversationMemoryManual] = await Promise.all([
             import("@/effect/app-runtime"),
-            import("@/session/compaction"),
+            import("@/kilocode/session/lcm/manual"),
           ])
-          await AppRuntime.runPromise(SessionCompaction.Service.use((service) => service.create(input)))
+          return AppRuntime.runPromise(ConversationMemoryManual.run(input))
         },
       },
       prompt: {

@@ -8,6 +8,8 @@ import { IconButton } from "@kilocode/kilo-ui/icon-button"
 import { useConfig } from "../../context/config"
 import { useLanguage } from "../../context/language"
 import { useMemory } from "../../context/memory"
+import { useSession } from "../../context/session"
+import { useVSCode } from "../../context/vscode"
 import { parseModelString } from "../../../../src/shared/provider-model"
 import { ModelSelectorBase } from "../shared/ModelSelector"
 import SettingsRow from "./SettingsRow"
@@ -16,15 +18,44 @@ const ContextTab: Component = () => {
   const { config, updateConfig } = useConfig()
   const memory = useMemory()
   const language = useLanguage()
+  const session = useSession()
+  const vscode = useVSCode()
   const [newPattern, setNewPattern] = createSignal("")
 
   const patterns = () => config().watcher?.ignore ?? []
-  const limit = () => {
+  const conversationMemoryEnabled = () => config().experimental?.conversation_memory !== false
+  const conversationMemorySessionID = () => {
+    const id = session.lcmStatus()?.sessionID
+    return id && !id.startsWith("cloud:") ? id : undefined
+  }
+  const conversationMemoryLimit = () => {
+    const value = config().conversation_memory?.soft_threshold_percent
+    return value === null || value === undefined ? "" : String(value)
+  }
+
+  const saveConversationMemoryLimit = (value: string) => {
+    const raw = value.trim()
+    if (!raw) {
+      updateConfig({
+        conversation_memory: { ...config().conversation_memory, soft_threshold_percent: null },
+      })
+      return
+    }
+
+    const percent = Number(raw)
+    if (!Number.isFinite(percent)) return
+    const next = Math.min(100, Math.max(1, percent))
+    updateConfig({
+      conversation_memory: { ...config().conversation_memory, soft_threshold_percent: next },
+    })
+  }
+
+  const compactionLimit = () => {
     const value = config().compaction?.threshold_percent
     return value === null || value === undefined ? "" : String(value)
   }
 
-  const saveLimit = (value: string) => {
+  const saveCompactionLimit = (value: string) => {
     const raw = value.trim()
     if (!raw) {
       updateConfig({ compaction: { ...config().compaction, threshold_percent: null } })
@@ -61,6 +92,24 @@ const ContextTab: Component = () => {
     if (status.index.estimatedTokens === 0) return language.t("chat.memory.project.empty")
     const tokens = status.index.estimatedTokens.toLocaleString(language.locale())
     return language.t("settings.context.memory.status.enabledTokens", { tokens })
+  }
+
+  const conversationMemoryStats = () => {
+    const status = session.lcmStatus()
+    if (!status)
+      return session.lcmStatusError()
+        ? language.t("conversationMemory.status.loadFailed", { message: session.lcmStatusError()! })
+        : language.t("conversationMemory.status.unavailable")
+    const pressure =
+      status.capacity.rawLaneRatio === undefined
+        ? language.t("conversationMemory.status.unmeasured")
+        : `${Math.round(status.capacity.rawLaneRatio * 100)}%`
+    return language.t("conversationMemory.status.summary", {
+      mode: `${status.mode}/${status.background.phase}`,
+      pressure,
+      summaries: status.composition.summaryItems,
+      health: status.health,
+    })
   }
 
   return (
@@ -124,23 +173,75 @@ const ContextTab: Component = () => {
         </Show>
       </Card>
 
-      {/* Compaction settings */}
+      <Show when={conversationMemoryEnabled()}>
+        <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>{language.t("conversationMemory.title")}</h4>
+        <Card>
+          <SettingsRow title={language.t("conversationMemory.activeSession")} description={conversationMemoryStats()}>
+            <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap", "justify-content": "flex-end" }}>
+              <Button
+                variant="secondary"
+                size="small"
+                icon="eye"
+                disabled={!conversationMemorySessionID()}
+                onClick={() =>
+                  vscode.postMessage({ type: "showLcmTimeline", sessionID: conversationMemorySessionID()! })
+                }
+              >
+                {language.t("conversationMemory.action.timeline")}
+              </Button>
+              <Button
+                variant="secondary"
+                size="small"
+                disabled={!conversationMemorySessionID()}
+                onClick={() =>
+                  vscode.postMessage({ type: "exportLcmContext", sessionID: conversationMemorySessionID()! })
+                }
+              >
+                {language.t("conversationMemory.action.export")}
+              </Button>
+            </div>
+          </SettingsRow>
+          <SettingsRow
+            title={language.t("conversationMemory.threshold.title")}
+            description={language.t("conversationMemory.threshold.description")}
+            last
+          >
+            <div style={{ display: "flex", "align-items": "center", gap: "6px", width: "96px" }}>
+              <TextField
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+                value={conversationMemoryLimit()}
+                placeholder="60"
+                onChange={saveConversationMemoryLimit}
+                hideLabel
+                label={language.t("conversationMemory.threshold.title")}
+              />
+              <span style={{ color: "var(--text-weak-base, var(--vscode-descriptionForeground))" }}>%</span>
+            </div>
+          </SettingsRow>
+        </Card>
+      </Show>
+
       <h4 style={{ "margin-top": "16px", "margin-bottom": "8px" }}>
         {language.t("settings.context.compaction.title")}
       </h4>
       <Card>
-        <SettingsRow
-          title={language.t("settings.context.autoCompaction.title")}
-          description={language.t("settings.context.autoCompaction.description")}
-        >
-          <Switch
-            checked={config().compaction?.auto ?? true}
-            onChange={(checked) => updateConfig({ compaction: { ...config().compaction, auto: checked } })}
-            hideLabel
+        <Show when={!conversationMemoryEnabled()}>
+          <SettingsRow
+            title={language.t("settings.context.autoCompaction.title")}
+            description={language.t("settings.context.autoCompaction.description")}
           >
-            {language.t("settings.context.autoCompaction.title")}
-          </Switch>
-        </SettingsRow>
+            <Switch
+              checked={config().compaction?.auto ?? true}
+              onChange={(checked) => updateConfig({ compaction: { ...config().compaction, auto: checked } })}
+              hideLabel
+            >
+              {language.t("settings.context.autoCompaction.title")}
+            </Switch>
+          </SettingsRow>
+        </Show>
         <SettingsRow
           title={language.t("settings.context.compactionModel.title")}
           description={language.t("settings.context.compactionModel.description")}
@@ -159,25 +260,27 @@ const ContextTab: Component = () => {
             description={language.t("settings.context.compactionModel.description")}
           />
         </SettingsRow>
-        <SettingsRow
-          title={language.t("settings.context.compactionLimit.title")}
-          description={language.t("settings.context.compactionLimit.description")}
-        >
-          <div style={{ display: "flex", "align-items": "center", gap: "6px", width: "96px" }}>
-            <TextField
-              type="number"
-              min="1"
-              max="100"
-              step="1"
-              value={limit()}
-              placeholder="80"
-              onChange={saveLimit}
-              hideLabel
-              label={language.t("settings.context.compactionLimit.title")}
-            />
-            <span style={{ color: "var(--text-weak-base, var(--vscode-descriptionForeground))" }}>%</span>
-          </div>
-        </SettingsRow>
+        <Show when={!conversationMemoryEnabled()}>
+          <SettingsRow
+            title={language.t("settings.context.compactionLimit.title")}
+            description={language.t("settings.context.compactionLimit.description")}
+          >
+            <div style={{ display: "flex", "align-items": "center", gap: "6px", width: "96px" }}>
+              <TextField
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+                value={compactionLimit()}
+                placeholder="80"
+                onChange={saveCompactionLimit}
+                hideLabel
+                label={language.t("settings.context.compactionLimit.title")}
+              />
+              <span style={{ color: "var(--text-weak-base, var(--vscode-descriptionForeground))" }}>%</span>
+            </div>
+          </SettingsRow>
+        </Show>
         <SettingsRow
           title={language.t("settings.context.prune.title")}
           description={language.t("settings.context.prune.description")}

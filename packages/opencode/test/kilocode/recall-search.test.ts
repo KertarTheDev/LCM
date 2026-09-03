@@ -14,6 +14,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { eq, sql } from "drizzle-orm"
 import { seedProject } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { LCM_RECOVERY_AGENT } from "../../src/kilocode/session/lcm/recovery-contract"
 
 type Stored<T> = T extends unknown ? Omit<T, "id" | "sessionID" | "messageID"> : never
 
@@ -146,6 +147,53 @@ it.instance(
       yield* add(user.id, "user", { type: "text", text: "ranking-needle" })
       yield* add(assistant.id, "assistant", { type: "text", text: "ranking-needle" })
       expect((yield* run("ranking-needle")).results.map((item) => item.id)).toEqual([title.id, user.id, assistant.id])
+    }),
+  { git: true },
+)
+
+it.instance(
+  "excludes isolated Conversation Memory research sessions",
+  () =>
+    Effect.gen(function* () {
+      yield* seedProject
+      const sessions = yield* Session.Service
+      const visible = yield* sessions.create({ title: "Visible research" })
+      const hidden = yield* sessions.create({ title: "Conversation Memory research", agent: LCM_RECOVERY_AGENT })
+      yield* add(visible.id, "user", { type: "text", text: "isolation-recall-needle" })
+      yield* add(hidden.id, "user", { type: "text", text: "isolation-recall-needle private transcript" })
+
+      const result = yield* RecallSearch.search({
+        query: "isolation-recall-needle",
+        projectID: Instance.project.id,
+        directories: [Instance.worktree],
+        excludeAgents: [LCM_RECOVERY_AGENT],
+      })
+      expect(result.results.map((item) => item.id)).toEqual([visible.id])
+      expect(result.sessions).toBe(1)
+      expect(result.results.some((item) => item.id === hidden.id)).toBe(false)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "can exclude an active session completely while retaining other sessions",
+  () =>
+    Effect.gen(function* () {
+      yield* seedProject
+      const sessions = yield* Session.Service
+      const active = yield* sessions.create({ title: "Active session" })
+      const historical = yield* sessions.create({ title: "Historical session" })
+      yield* add(active.id, "user", { type: "text", text: "isolated-active-session-needle" })
+      yield* add(historical.id, "user", { type: "text", text: "isolated-active-session-needle" })
+
+      const result = yield* RecallSearch.search({
+        query: "isolated-active-session-needle",
+        projectID: Instance.project.id,
+        directories: [Instance.worktree],
+        excludeSessionIDs: [active.id],
+      })
+      expect(result.results.map((item) => item.id)).toEqual([historical.id])
+      expect(result.sessions).toBe(1)
     }),
   { git: true },
 )

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect" // kilocode_change
 import { HttpClientResponse } from "effect/unstable/http"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -177,4 +177,55 @@ describe("session messages endpoint", () => {
     ),
     { git: true },
   )
+
+  // kilocode_change start
+  it.instance(
+    "returns persisted structured-output formats",
+    withoutWatcher(
+      Effect.gen(function* () {
+        const session = yield* sessionScoped
+        const sessions = yield* SessionNs.Service
+        const id = MessageID.ascending()
+        const format = Schema.decodeUnknownSync(SessionV1.Format)({
+          type: "json_schema",
+          schema: {
+            type: "object",
+            properties: { answer: { type: "string" } },
+            required: ["answer"],
+          },
+          retryCount: 0,
+        })
+        yield* sessions.updateMessage({
+          id,
+          sessionID: session.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model,
+          tools: {},
+          format,
+        } satisfies SessionV1.User)
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: id,
+          type: "text",
+          text: "return a structured answer",
+        } satisfies SessionV1.TextPart)
+
+        const res = yield* request(`/session/${session.id}/message`)
+        expect(res.status).toBe(200)
+        const body = yield* json<SessionV1.WithParts[]>(res)
+        expect(body).toHaveLength(1)
+        const user = body[0]!.info
+        expect(user.role).toBe("user")
+        if (user.role === "user") {
+          expect(user.format?.type).toBe("json_schema")
+          if (user.format?.type === "json_schema") expect(user.format.retryCount).toBe(0)
+        }
+      }),
+    ),
+    { git: true },
+  )
+  // kilocode_change end
 })

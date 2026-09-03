@@ -70,6 +70,8 @@ type Input = {
   // kilocode_change start
   telemetry?: ReviewTelemetry
   snapshotInitialization?: "wait"
+  /** Selects who owns automatic context maintenance around the provider request. */
+  contextManagement?: "upstream" | "external"
   // kilocode_change end
 }
 
@@ -149,6 +151,7 @@ const layer = Layer.effect(
         reasoningMap: {},
         // kilocode_change start
         telemetry: input.telemetry,
+        contextManagement: input.contextManagement,
         stepStart: 0,
         stepStartDate: undefined,
         step: { reasoning: false, text: false, tool: false },
@@ -706,6 +709,7 @@ const layer = Layer.effect(
               })
               .pipe(Effect.ignore, Effect.forkIn(scope))
             if (
+              ctx.contextManagement !== "external" && // kilocode_change - LCM owns post-response pressure checks
               !ctx.assistantMessage.summary &&
               // kilocode_change start
               isOverflow({
@@ -873,6 +877,12 @@ const layer = Layer.effect(
         ctx.compactionError = MessageV2.ContextOverflowError.isInstance(error) ? error : ctx.compactionError
         // kilocode_change end
         if (MessageV2.ContextOverflowError.isInstance(error)) {
+          // kilocode_change start - external context management still needs the processor's ordinary overflow signal
+          if (ctx.contextManagement === "external" && !ctx.assistantMessage.summary) {
+            ctx.needsCompaction = true
+            return
+          }
+          // kilocode_change end
           // respect compaction.auto === false by surfacing overflow as a hard error instead of auto-compacting
           if ((yield* config.get()).compaction?.auto === false && !ctx.assistantMessage.summary) {
             ctx.assistantMessage.error = error
@@ -941,7 +951,7 @@ const layer = Layer.effect(
               ctx.step = { reasoning: false, text: false, tool: false }
               const stream = llm.stream({
                 ...streamInput,
-                preflight: !ctx.assistantMessage.summary,
+                preflight: ctx.contextManagement !== "external" && !ctx.assistantMessage.summary, // kilocode_change
               })
 
               yield* stream.pipe(

@@ -600,6 +600,63 @@ describe("KiloProvider sandbox status", () => {
   })
 })
 
+describe("KiloProvider Conversation Memory events", () => {
+  it("accepts only the tracked session directory", () => {
+    const client = createClient()
+    const { internal, sent } = makeProvider(client)
+    internal.sessionDirectories.set("s1", "/repo")
+    internal.trackedSessionIds.add("s1")
+    const status = {
+      sessionID: "s1",
+      sequence: 1,
+      mode: "raw",
+      health: "ok",
+      capacity: { known: false },
+      composition: {
+        rawTokens: 0,
+        summaryTokens: 0,
+        rawItems: 0,
+        summaryItems: 0,
+        eligibleRawTokens: 0,
+        eligibleRawItems: 0,
+        protectedRawTokens: 0,
+        protectedRawItems: 0,
+        recentConsumedRawTokens: 0,
+        recentConsumedRawItems: 0,
+        unconsumedRawTokens: 0,
+        unconsumedRawItems: 0,
+      },
+      background: { summarizing: false, phase: "idle" },
+      memoryWork: {
+        attempts: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        reasoningTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        cost: 0,
+      },
+    }
+
+    internal.handleEvent({ type: "session.lcm.status", properties: { sessionID: "s1", status } }, "/other")
+    expect(sent).toEqual([])
+
+    internal.handleEvent({ type: "session.lcm.status", properties: { sessionID: "s1", status } }, "/repo")
+    expect(sent).toContainEqual({ type: "lcmStatus", sessionID: "s1", status })
+
+    const activity = {
+      id: "activity_1",
+      sessionID: "s1",
+      sequence: 1,
+      kind: "intervention",
+      message: "Conversation Memory projected earlier context.",
+      createdAt: 1,
+    }
+    internal.handleEvent({ type: "session.lcm.activity", properties: { sessionID: "s1", activity } }, "/repo")
+    expect(sent).toContainEqual({ type: "lcmActivity", sessionID: "s1", items: [activity] })
+  })
+})
+
 describe("KiloProvider sandbox toggle", () => {
   it("remembers a blank composer toggle without creating a session", async () => {
     const notice = spyOn(vscode.window, "showInformationMessage").mockResolvedValue(undefined)

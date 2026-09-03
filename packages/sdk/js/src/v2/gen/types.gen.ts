@@ -97,6 +97,8 @@ export type Event =
   | EventGlobalConfigUpdated1
   | EventSessionDrained1
   | EventSessionDrainInterrupted1
+  | EventSessionLcmStatus1
+  | EventSessionLcmActivity1
   | EventServerInstanceDisposed
   | EventSessionTurnOpen
   | EventSessionTurnClose
@@ -218,6 +220,8 @@ export type Event =
   | EventGlobalConfigUpdated
   | EventSessionDrained
   | EventSessionDrainInterrupted
+  | EventSessionLcmStatus
+  | EventSessionLcmActivity
 
 export type QuestionReplied = {
   sessionID: string
@@ -1278,6 +1282,8 @@ export type GlobalEvent = {
     | EventGlobalConfigUpdated
     | EventSessionDrained
     | EventSessionDrainInterrupted
+    | EventSessionLcmStatus
+    | EventSessionLcmActivity
     | {
         id: string
         type: "models-dev.refreshed"
@@ -2178,6 +2184,88 @@ export type GlobalEvent = {
           sessionID: string
         }
       }
+    | {
+        id: string
+        type: "session.lcm.status"
+        properties: {
+          sessionID: string
+          status: {
+            sessionID: string
+            sequence: number
+            mode: "raw" | "preparing" | "summarized"
+            health: "ok" | "degraded"
+            capacity: {
+              known: boolean
+              usableInputTokens?: number
+              rawInputTokens?: number
+              activeInputTokens?: number
+              freeTokens?: number
+              pressureRatio?: number
+              thresholdRatio?: number
+              softThresholdTokens?: number
+              rawLaneTokens?: number
+              rawLaneRatio?: number
+              fixedInputTokens?: number
+            }
+            composition: {
+              revisionID?: string
+              rawTokens: number
+              summaryTokens: number
+              rawItems: number
+              summaryItems: number
+              eligibleRawTokens: number
+              eligibleRawItems: number
+              protectedRawTokens: number
+              protectedRawItems: number
+              recentConsumedRawTokens: number
+              recentConsumedRawItems: number
+              unconsumedRawTokens: number
+              unconsumedRawItems: number
+            }
+            background: {
+              summarizing: boolean
+              phase: "idle" | "soft_queued" | "soft_running" | "hard_running" | "manual_running" | "constrained"
+            }
+            memoryWork: {
+              attempts: number
+              inputTokens: number
+              outputTokens: number
+              reasoningTokens: number
+              cacheReadTokens: number
+              cacheWriteTokens: number
+              cost: number
+            }
+            lastInterventionAt?: number
+            issue?: {
+              code: string
+              message: string
+              since: number
+              lastAt: number
+              nextRetryAt?: number
+            }
+          }
+        }
+      }
+    | {
+        id: string
+        type: "session.lcm.activity"
+        properties: {
+          sessionID: string
+          activity: {
+            id: string
+            sessionID: string
+            sequence: number
+            kind: "frontier_advanced" | "intervention" | "fallback" | "rebuild"
+            pressureBefore?: number
+            pressureAfter?: number
+            rawTokens?: number
+            summaryTokens?: number
+            summaryIDs?: Array<string>
+            message: string
+            createdAt: number
+          }
+        }
+      }
     | SyncEventSessionCreated
     | SyncEventSessionUpdated
     | SyncEventSessionDeleted
@@ -2695,9 +2783,26 @@ export type Config = {
     preserve_recent_tokens?: number
     reserved?: number
   }
+  conversation_memory?: {
+    /**
+     * Raw conversation-lane pressure that starts Conversation Memory maintenance (default: 60%).
+     */
+    soft_threshold_percent?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    recovery?: {
+      max_queries_per_turn?: number
+      max_research_steps?: number
+      max_tool_calls?: number
+      max_semantic_inferences?: number
+      max_repair_attempts?: number
+      research_timeout_seconds?: number
+      finalizer_timeout_seconds?: number
+      cleanup_timeout_seconds?: number
+    }
+  }
   experimental?: {
     disable_paste_summary?: boolean
     batch_tool?: boolean
+    conversation_memory?: boolean
     image_generation?: boolean
     image_generation_model?: string
     native_notebook_tools?: boolean
@@ -3916,6 +4021,16 @@ export type CommitMessageFailedError = {
   message: string
 }
 
+export type ConflictError = {
+  _tag: "ConflictError"
+  message: string
+  resource?: string
+}
+
+export type EffectHttpApiErrorServiceUnavailable = {
+  _tag: "ServiceUnavailable"
+}
+
 export type ConfigOverlayResponse = {
   scope: "global" | "project"
   effective: Config
@@ -4117,12 +4232,6 @@ export type KiloEmbeddingModelCatalog = {
   }
 }
 
-export type ConflictError = {
-  _tag: "ConflictError"
-  message: string
-  resource?: string
-}
-
 export type InteractiveTerminalSnapshot = {
   info: InteractiveTerminalInfo
   output: string
@@ -4140,10 +4249,6 @@ export type InteractiveTerminalResizeInput = {
 
 export type EffectHttpApiErrorUnauthorized = {
   _tag: "Unauthorized"
-}
-
-export type EffectHttpApiErrorServiceUnavailable = {
-  _tag: "ServiceUnavailable"
 }
 
 export type CloudSessionImportError = {
@@ -4855,6 +4960,8 @@ export type V2Event =
   | GlobalConfigUpdated
   | SessionDrained
   | SessionDrainInterrupted
+  | SessionLcmStatus
+  | SessionLcmActivity
 
 export type V2EventStream = string
 
@@ -6359,6 +6466,90 @@ export type EventSessionDrainInterrupted = {
   type: "session.drain.interrupted"
   properties: {
     sessionID: string
+  }
+}
+
+export type EventSessionLcmStatus = {
+  id: string
+  type: "session.lcm.status"
+  properties: {
+    sessionID: string
+    status: {
+      sessionID: string
+      sequence: number
+      mode: "raw" | "preparing" | "summarized"
+      health: "ok" | "degraded"
+      capacity: {
+        known: boolean
+        usableInputTokens?: number
+        rawInputTokens?: number
+        activeInputTokens?: number
+        freeTokens?: number
+        pressureRatio?: number
+        thresholdRatio?: number
+        softThresholdTokens?: number
+        rawLaneTokens?: number
+        rawLaneRatio?: number
+        fixedInputTokens?: number
+      }
+      composition: {
+        revisionID?: string
+        rawTokens: number
+        summaryTokens: number
+        rawItems: number
+        summaryItems: number
+        eligibleRawTokens: number
+        eligibleRawItems: number
+        protectedRawTokens: number
+        protectedRawItems: number
+        recentConsumedRawTokens: number
+        recentConsumedRawItems: number
+        unconsumedRawTokens: number
+        unconsumedRawItems: number
+      }
+      background: {
+        summarizing: boolean
+        phase: "idle" | "soft_queued" | "soft_running" | "hard_running" | "manual_running" | "constrained"
+      }
+      memoryWork: {
+        attempts: number
+        inputTokens: number
+        outputTokens: number
+        reasoningTokens: number
+        cacheReadTokens: number
+        cacheWriteTokens: number
+        cost: number
+      }
+      lastInterventionAt?: number
+      issue?: {
+        code: string
+        message: string
+        since: number
+        lastAt: number
+        nextRetryAt?: number
+      }
+    }
+  }
+}
+
+export type EventSessionLcmActivity = {
+  id: string
+  type: "session.lcm.activity"
+  properties: {
+    sessionID: string
+    activity: {
+      id: string
+      sessionID: string
+      sequence: number
+      kind: "frontier_advanced" | "intervention" | "fallback" | "rebuild"
+      pressureBefore?: number
+      pressureAfter?: number
+      rawTokens?: number
+      summaryTokens?: number
+      summaryIDs?: Array<string>
+      message: string
+      createdAt: number
+    }
   }
 }
 
@@ -9371,6 +9562,108 @@ export type SessionDrainInterrupted = {
   }
 }
 
+export type SessionLcmStatus = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.lcm.status"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    status: {
+      sessionID: string
+      sequence: number
+      mode: "raw" | "preparing" | "summarized"
+      health: "ok" | "degraded"
+      capacity: {
+        known: boolean
+        usableInputTokens?: number
+        rawInputTokens?: number
+        activeInputTokens?: number
+        freeTokens?: number
+        pressureRatio?: number
+        thresholdRatio?: number
+        softThresholdTokens?: number
+        rawLaneTokens?: number
+        rawLaneRatio?: number
+        fixedInputTokens?: number
+      }
+      composition: {
+        revisionID?: string
+        rawTokens: number
+        summaryTokens: number
+        rawItems: number
+        summaryItems: number
+        eligibleRawTokens: number
+        eligibleRawItems: number
+        protectedRawTokens: number
+        protectedRawItems: number
+        recentConsumedRawTokens: number
+        recentConsumedRawItems: number
+        unconsumedRawTokens: number
+        unconsumedRawItems: number
+      }
+      background: {
+        summarizing: boolean
+        phase: "idle" | "soft_queued" | "soft_running" | "hard_running" | "manual_running" | "constrained"
+      }
+      memoryWork: {
+        attempts: number
+        inputTokens: number
+        outputTokens: number
+        reasoningTokens: number
+        cacheReadTokens: number
+        cacheWriteTokens: number
+        cost: number
+      }
+      lastInterventionAt?: number
+      issue?: {
+        code: string
+        message: string
+        since: number
+        lastAt: number
+        nextRetryAt?: number
+      }
+    }
+  }
+}
+
+export type SessionLcmActivity = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.lcm.activity"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    activity: {
+      id: string
+      sessionID: string
+      sequence: number
+      kind: "frontier_advanced" | "intervention" | "fallback" | "rebuild"
+      pressureBefore?: number
+      pressureAfter?: number
+      rawTokens?: number
+      summaryTokens?: number
+      summaryIDs?: Array<string>
+      message: string
+      createdAt: number
+    }
+  }
+}
+
 export type QuestionV2Request = {
   id: string
   sessionID: string
@@ -10406,6 +10699,90 @@ export type EventSessionDrainInterrupted1 = {
   type: "session.drain.interrupted"
   properties: {
     sessionID: string
+  }
+}
+
+export type EventSessionLcmStatus1 = {
+  id: string
+  type: "session.lcm.status"
+  properties: {
+    sessionID: string
+    status: {
+      sessionID: string
+      sequence: number
+      mode: "raw" | "preparing" | "summarized"
+      health: "ok" | "degraded"
+      capacity: {
+        known: boolean
+        usableInputTokens?: number
+        rawInputTokens?: number
+        activeInputTokens?: number
+        freeTokens?: number
+        pressureRatio?: number
+        thresholdRatio?: number
+        softThresholdTokens?: number
+        rawLaneTokens?: number
+        rawLaneRatio?: number
+        fixedInputTokens?: number
+      }
+      composition: {
+        revisionID?: string
+        rawTokens: number
+        summaryTokens: number
+        rawItems: number
+        summaryItems: number
+        eligibleRawTokens: number
+        eligibleRawItems: number
+        protectedRawTokens: number
+        protectedRawItems: number
+        recentConsumedRawTokens: number
+        recentConsumedRawItems: number
+        unconsumedRawTokens: number
+        unconsumedRawItems: number
+      }
+      background: {
+        summarizing: boolean
+        phase: "idle" | "soft_queued" | "soft_running" | "hard_running" | "manual_running" | "constrained"
+      }
+      memoryWork: {
+        attempts: number
+        inputTokens: number
+        outputTokens: number
+        reasoningTokens: number
+        cacheReadTokens: number
+        cacheWriteTokens: number
+        cost: number
+      }
+      lastInterventionAt?: number
+      issue?: {
+        code: string
+        message: string
+        since: number
+        lastAt: number
+        nextRetryAt?: number
+      }
+    }
+  }
+}
+
+export type EventSessionLcmActivity1 = {
+  id: string
+  type: "session.lcm.activity"
+  properties: {
+    sessionID: string
+    activity: {
+      id: string
+      sessionID: string
+      sequence: number
+      kind: "frontier_advanced" | "intervention" | "fallback" | "rebuild"
+      pressureBefore?: number
+      pressureAfter?: number
+      rawTokens?: number
+      summaryTokens?: number
+      summaryIDs?: Array<string>
+      message: string
+      createdAt: number
+    }
   }
 }
 
@@ -15427,6 +15804,198 @@ export type CommitMessageGenerateResponses = {
 }
 
 export type CommitMessageGenerateResponse = CommitMessageGenerateResponses[keyof CommitMessageGenerateResponses]
+
+export type ConversationMemoryStatusData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/status"
+}
+
+export type ConversationMemoryStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type ConversationMemoryStatusError = ConversationMemoryStatusErrors[keyof ConversationMemoryStatusErrors]
+
+export type ConversationMemoryStatusResponses = {
+  /**
+   * Conversation Memory status
+   */
+  200: {
+    sessionID: string
+    sequence: number
+    mode: "raw" | "preparing" | "summarized"
+    health: "ok" | "degraded"
+    capacity: {
+      known: boolean
+      usableInputTokens?: number
+      rawInputTokens?: number
+      activeInputTokens?: number
+      freeTokens?: number
+      pressureRatio?: number
+      thresholdRatio?: number
+      softThresholdTokens?: number
+      rawLaneTokens?: number
+      rawLaneRatio?: number
+      fixedInputTokens?: number
+    }
+    composition: {
+      revisionID?: string
+      rawTokens: number
+      summaryTokens: number
+      rawItems: number
+      summaryItems: number
+      eligibleRawTokens: number
+      eligibleRawItems: number
+      protectedRawTokens: number
+      protectedRawItems: number
+      recentConsumedRawTokens: number
+      recentConsumedRawItems: number
+      unconsumedRawTokens: number
+      unconsumedRawItems: number
+    }
+    background: {
+      summarizing: boolean
+      phase: "idle" | "soft_queued" | "soft_running" | "hard_running" | "manual_running" | "constrained"
+    }
+    memoryWork: {
+      attempts: number
+      inputTokens: number
+      outputTokens: number
+      reasoningTokens: number
+      cacheReadTokens: number
+      cacheWriteTokens: number
+      cost: number
+    }
+    lastInterventionAt?: number
+    issue?: {
+      code: string
+      message: string
+      since: number
+      lastAt: number
+      nextRetryAt?: number
+    }
+  }
+}
+
+export type ConversationMemoryStatusResponse =
+  ConversationMemoryStatusResponses[keyof ConversationMemoryStatusResponses]
+
+export type ConversationMemoryActivityData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+    cursor?: string
+    limit?: string
+  }
+  url: "/session/{sessionID}/lcm/activity"
+}
+
+export type ConversationMemoryActivityErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+}
+
+export type ConversationMemoryActivityError = ConversationMemoryActivityErrors[keyof ConversationMemoryActivityErrors]
+
+export type ConversationMemoryActivityResponses = {
+  /**
+   * Conversation Memory activity
+   */
+  200: {
+    items: Array<{
+      id: string
+      sessionID: string
+      sequence: number
+      kind: "frontier_advanced" | "intervention" | "fallback" | "rebuild"
+      pressureBefore?: number
+      pressureAfter?: number
+      rawTokens?: number
+      summaryTokens?: number
+      summaryIDs?: Array<string>
+      message: string
+      createdAt: number
+    }>
+    nextCursor?: string
+  }
+}
+
+export type ConversationMemoryActivityResponse =
+  ConversationMemoryActivityResponses[keyof ConversationMemoryActivityResponses]
+
+export type ConversationMemoryExportData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/lcm/context/export"
+}
+
+export type ConversationMemoryExportErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+  /**
+   * ConflictError
+   */
+  409: ConflictError
+  /**
+   * ServiceUnavailable
+   */
+  503: EffectHttpApiErrorServiceUnavailable
+}
+
+export type ConversationMemoryExportError = ConversationMemoryExportErrors[keyof ConversationMemoryExportErrors]
+
+export type ConversationMemoryExportResponses = {
+  /**
+   * Success
+   */
+  200: Blob | File
+}
+
+export type ConversationMemoryExportResponse =
+  ConversationMemoryExportResponses[keyof ConversationMemoryExportResponses]
 
 export type ConfigOverlayData = {
   body?: never

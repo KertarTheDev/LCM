@@ -1045,6 +1045,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
           client: this.client,
           connection: this.connectionService,
           dir: this.getWorkspaceDirectory(this.currentSession?.id),
+          resolveDir: (sessionID) => this.getWorkspaceDirectory(sessionID ?? this.currentSession?.id),
           post: (msg) => this.postMessage(msg),
           browserSettings: () => this.sendBrowserSettings(),
           exportTranscript: (sessionID) => this.handleExportSessionTranscript(sessionID),
@@ -4752,6 +4753,27 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       event.properties.info.projectID !== null &&
       event.properties.info.projectID !== this.projectID
     ) {
+      return
+    }
+
+    if (event.type === "session.lcm.status") {
+      const sid = event.properties.sessionID
+      if (!this.trackedSessionIds.has(sid)) return
+      const expectedDirectory =
+        this.sessionDirectories.get(sid) ?? this.getProjectDirectory(sid) ?? this.getWorkspaceDirectory(sid)
+      if (directory && directory !== "global" && expectedDirectory && !sameDirectory(directory, expectedDirectory))
+        return
+      this.postMessage({ type: "lcmStatus", sessionID: sid, status: event.properties.status })
+      return
+    }
+    if (event.type === "session.lcm.activity") {
+      const sid = event.properties.sessionID
+      if (!this.trackedSessionIds.has(sid)) return
+      const expectedDirectory =
+        this.sessionDirectories.get(sid) ?? this.getProjectDirectory(sid) ?? this.getWorkspaceDirectory(sid)
+      if (directory && directory !== "global" && expectedDirectory && !sameDirectory(directory, expectedDirectory))
+        return
+      this.postMessage({ type: "lcmActivity", sessionID: sid, items: [event.properties.activity] })
       return
     }
 
