@@ -121,21 +121,25 @@ try {
   for (const command of ["status", "timeline", "export"]) {
     if (!help.includes(command)) throw new Error(`Packaged CLI help is missing the LCM ${command} command`)
   }
-  const lcmTools = ["lcm_grep", "lcm_describe", "lcm_expand_query", "lcm_expand", "lcm_read"]
+  const publicLcmTools = ["lcm_query"]
+  const hiddenRecoveryTools = ["lcm_grep", "lcm_describe", "lcm_expand_query", "lcm_expand", "lcm_read"]
   const agents = ["ask", "plan", "explore", "orchestrator"]
   const enabledConfig = JSON.stringify(providerConfig(true))
   for (const agent of agents) {
     const output = await run(binary, ["debug", "agent", agent], temporary, { KILO_CONFIG_CONTENT: enabledConfig })
-    const parsed = JSON.parse(output.stdout) as { tools?: Record<string, boolean> }
-    for (const tool of lcmTools) {
-      if (parsed.tools?.[tool] !== true) throw new Error(`Packaged ${agent} agent does not expose ${tool}`)
+    const tools = (JSON.parse(output.stdout) as { tools?: Record<string, boolean> }).tools ?? {}
+    for (const tool of publicLcmTools) {
+      if (tools[tool] !== true) throw new Error(`Packaged ${agent} agent does not expose ${tool}`)
+    }
+    for (const tool of hiddenRecoveryTools) {
+      if (tool in tools) throw new Error(`Packaged ${agent} agent exposes hidden recovery primitive ${tool}`)
     }
   }
   const disabled = await run(binary, ["debug", "agent", "ask"], temporary, {
     KILO_CONFIG_CONTENT: JSON.stringify(providerConfig(false)),
   })
   const disabledTools = (JSON.parse(disabled.stdout) as { tools?: Record<string, boolean> }).tools ?? {}
-  for (const tool of lcmTools) {
+  for (const tool of [...publicLcmTools, ...hiddenRecoveryTools]) {
     if (tool in disabledTools) throw new Error(`Packaged disabled agent still exposes ${tool}`)
   }
   const cliBytes = new Uint8Array(await Bun.file(binary).arrayBuffer())
@@ -146,7 +150,8 @@ try {
         cliSha256: digest(cliBytes),
         ...(vsixDigest ? { vsixSha256: vsixDigest } : {}),
         lcmCommands: ["status", "timeline", "export"],
-        lcmTools,
+        publicLcmTools,
+        hiddenRecoveryToolsExcluded: hiddenRecoveryTools,
         verifiedAgents: agents,
         disabledToolsHidden: true,
       },
