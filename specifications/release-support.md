@@ -34,6 +34,12 @@ The 60% threshold and existing user-configurable recovery defaults remain unchan
 No new hosted-model quality result is claimed. The chronological research records below describe their exact older
 source revisions; superseded admission rules in those records are historical findings, not the current contract.
 
+The first v7.5.15 canonical candidate passed the LCM/adaptation and overlay gates but failed the opencode typecheck
+before version selection or draft creation. A semantic-query error branch inferred its reason as `string` instead
+of the existing `cancelled | provider_error` union. The correction explicitly binds that branch to the existing
+semantic result type without changing runtime behavior. Focused tool contracts pass; canonical typecheck and
+publication remain pending on the corrected candidate.
+
 The current public prerelease is `v7.5.9-lcm.1`. It was published on 2026-09-03 from candidate
 `58dfd2fa193b724f9dedc161bef10e122c1962c9`, containing verified product
 `5e7df6a67c55e5c43c2bbbb488df9c7eea2e7b0d`. Exact-SHA workflow run

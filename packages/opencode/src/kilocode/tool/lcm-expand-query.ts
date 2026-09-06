@@ -2598,7 +2598,7 @@ export const LcmExpandQueryTool = Tool.define(
               .pipe(
                 Effect.map((value) => ({ ok: true as const, value })),
                 Effect.catch((error) =>
-                  Effect.succeed({
+                  Effect.succeed<SemanticQueryResult>({
                     ok: false as const,
                     reason:
                       error instanceof DOMException && error.name === "AbortError" ? "cancelled" : "provider_error",
