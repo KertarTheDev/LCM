@@ -2103,12 +2103,22 @@ export function repeatedSemanticScopeGuidance() {
   }
 }
 
-export function querySuccessGuidance(completeCoverage: boolean, independentDisagreement = false) {
+export function querySuccessGuidance(
+  completeCoverage: boolean,
+  independentDisagreement = false,
+  unmatchedStructuralScope = false,
+) {
   const citationGuidance =
     " Host-verified candidateEvidence entries are exact source intervals and may be cited when their text is decisive. Source handles and scope ranges are retrieval provenance, not parent citation intervals. In isolated StructuredOutput, otherwise omit citations unless lcm_grep or lcm_read established a decisive interval of at most 512 UTF-8 bytes."
   const disagreementGuidance = independentDisagreement
     ? " The bounded independentCandidates disagree, so neither candidate is certified. Preserve both until the conflict is resolved. If a candidate violated the one-value contract by returning several chronological values, treat them only as a provisional ledger and verify the value nearest the requested edge before choosing an earlier or later value. For first/last work, candidateEvidence is host-prioritized from the requested edge. Each boundaryScope contains every remaining raw range beyond that candidate toward the requested edge; each inwardScope contains the exact gap from that candidate to the next candidate inward, or to the opposite unit edge when no next candidate is visible. When one exact search is useful, pass all sourceRanges from the chosen single scope unchanged in one lcm_grep call; never restrict the check to the candidate source or issue one call per range. A lexical miss does not exclude paraphrases, so report partial coverage when the bounded evidence cannot resolve the conflict."
     : ""
+  if (unmatchedStructuralScope)
+    return {
+      generatedAnswerAccepted: true,
+      completeCoverage: false,
+      instruction: `This synthesis covers only the retrieved range, not a complete host-matched structural unit. It does not satisfy an outstanding exact-unit coverage requirement, even if its coverage field is full. Reuse any completed exact-unit analysis already in this child transcript. For a still-unresolved unit, copy its hostStructuralScope contentScope.sourceOrdinalSpan unchanged, including both byte offsets, into lcm_expand_query; do not repeat this generic range or widen the unit boundaries. A narrower candidate check can support reconciliation but does not replace the required unit analysis. If that analysis remains incomplete or the budget cannot fund it, submit partial coverage and name the unit.${disagreementGuidance}${citationGuidance}`,
+    }
   if (completeCoverage)
     return {
       generatedAnswerAccepted: true,
@@ -2420,6 +2430,10 @@ export const LcmExpandQueryTool = Tool.define(
                   sourceRanges: requestedSourceRanges,
                 })
               : undefined
+          const unmatchedStructuralScope =
+            ctx.agent === LCM_RECOVERY_AGENT &&
+            !trustedStructuralUnit &&
+            Boolean(structuralRecoveryScope(view, query, maximumOrdinal))
           if (trustedStructuralUnit)
             semanticQuestion = trustedStructuralSemanticQuestion(semanticAuthority, trustedStructuralUnit.index)
           const sourceRanges = trustedStructuralUnit?.semanticRanges ?? requestedSourceRanges
@@ -3199,6 +3213,7 @@ export const LcmExpandQueryTool = Tool.define(
                     callGuidance: querySuccessGuidance(
                       !retrievalScopeIncomplete && (answer?.coverage === "full" || validatedNoAnswer),
                       hierarchicalCandidates.length > 0,
+                      unmatchedStructuralScope,
                     ),
                   }),
               ...result,

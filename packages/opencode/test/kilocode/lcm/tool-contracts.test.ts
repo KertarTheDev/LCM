@@ -1604,6 +1604,13 @@ describe("LCM tool contracts", () => {
     expect(querySuccessGuidance(true).instruction).toContain("Host-verified candidateEvidence")
     expect(querySuccessGuidance(true).instruction).toContain("not parent citation intervals")
     expect(querySuccessGuidance(true).instruction).toContain("at most 512 UTF-8 bytes")
+    const unmatched = querySuccessGuidance(true, false, true)
+    expect(unmatched.completeCoverage).toBe(false)
+    expect(unmatched.instruction).not.toContain("answer now")
+    expect(unmatched.instruction).toContain("including both byte offsets")
+    expect(unmatched.instruction).toContain("Reuse any completed exact-unit analysis")
+    expect(unmatched.instruction).toContain("submit partial coverage")
+    expect(querySuccessGuidance(false, true, true).instruction).toContain("independentCandidates disagree")
 
     expect(querySuccessGuidance(false)).toMatchObject({
       generatedAnswerAccepted: true,

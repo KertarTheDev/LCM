@@ -77,6 +77,10 @@ the original request cannot override the one-result contract of a host-decompose
 places nonce-bounded excerpts before a repeated post-boundary authoritative question. The result echoes
 `semanticUnitGuaranteed` and `hostStructuralUnitIndex`, preserving the
 association for ordered aggregation even when a fresh repair finalizer sees only the bounded cumulative ledger. For a
+generated range that does not match a complete trusted structural unit, child guidance distinguishes retrieved-range
+coverage from exact-unit coverage. It directs the child to reuse completed unit analysis or copy the existing
+host-matched content scope with both byte offsets for an unresolved unit; it never grants unit completion merely
+because a wider or narrower range reports full coverage. Final coverage validation remains unchanged. For a
 long complete unit and a first/last or bounded Nth-from-start/from-end request, the host may atomically reserve a
 complete
 hierarchical pass: enough chronological excerpt-only shard inferences to keep each shard near or below 20,000 UTF-8
