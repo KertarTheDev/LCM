@@ -20,6 +20,20 @@ Board tools and notifications remain unavailable to both hidden recovery phases;
 support. Upstream single-turn pruning remains available to ordinary sessions while hidden recovery keeps its exact
 transcript bypass. Release evidence and the new asset manifest remain pending.
 
+The subsequent v7.5.15 corrections restore general-purpose task decomposition. Exhausting memory queries no longer
+removes ordinary tools, forces a final answer, or ends the parent turn. The focused recovery question is the trusted
+assignment throughout retrieval, private inference, and finalization; the surrounding user task is context only.
+Independent questions, including prerequisite lookups, may use the configured allowance after full, partial, empty,
+or failed recovery and may reserve it in parallel. Normalized duplicates, actual child-start and attempted-call
+budgets, cancellation, and private evidence isolation remain enforced. Optional preceding bounded results are inert
+context rather than mandatory narrower-follow-up assignments. The obsolete lexical admission guards and answer-only
+parent controls have been removed.
+
+Focused recovery, tool-contract, prompt-seam, and live ordinary-tool-continuation tests verify these corrections.
+The 60% threshold and existing user-configurable recovery defaults remain unchanged pending further evidence.
+No new hosted-model quality result is claimed. The chronological research records below describe their exact older
+source revisions; superseded admission rules in those records are historical findings, not the current contract.
+
 The current public prerelease is `v7.5.9-lcm.1`. It was published on 2026-09-03 from candidate
 `58dfd2fa193b724f9dedc161bef10e122c1962c9`, containing verified product
 `5e7df6a67c55e5c43c2bbbb488df9c7eea2e7b0d`. Exact-SHA workflow run
