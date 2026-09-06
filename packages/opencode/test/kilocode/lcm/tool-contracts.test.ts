@@ -1773,6 +1773,29 @@ describe("LCM tool contracts", () => {
     expect(scoped.selected.some((item) => item.text.includes("amber"))).toBe(false)
     const prior = selectQueryExcerpts(view, question, root.id, 4_000, 0)
     expect(prior.selected.some((item) => item.id === sources[1]!.id || item.id === right.id)).toBe(false)
+    // Many exact matches must not erase the branch overview needed for a later focused descent.
+    const noisy = Array.from({ length: 40 }, (_, index) => ({
+      ...sources[0]!,
+      id: `src_noise_${index}`,
+      ordinal: index + 1,
+    }))
+    for (const source of noisy) {
+      view.sources.set(source.id, source)
+      view.content.set(source.id, { metadata: source, content: texts[0]! })
+      view.children.get(left.id)!.push({ summaryID: left.id, kind: "source", id: source.id, ordinal: source.ordinal })
+    }
+    left.lastOrdinal = noisy.at(-1)!.ordinal
+    sources[1]!.ordinal = left.lastOrdinal + 1
+    right.firstOrdinal = right.lastOrdinal = sources[1]!.ordinal
+    root.lastOrdinal = right.lastOrdinal
+    const overview = selectQueryExcerpts(view, question, root.id, 4_000)
+    expect(overview.selected.filter((item) => item.kind === "summary").map((item) => item.id)).toEqual([
+      root.id,
+      left.id,
+      right.id,
+    ])
+    expect(overview.selected.some((item) => item.kind === "source")).toBe(true)
+    expect(overview.truncated).toBe(true)
   })
 
   test("falls back to a fair active-frontier sample when no record has lexical overlap", () => {

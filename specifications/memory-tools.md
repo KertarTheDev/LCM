@@ -505,7 +505,10 @@ second equal-share pass.
 Every selected raw excerpt and deterministic fallback block is labeled with its persisted `sourceKind`; summary blocks
 remain distinctly labeled summaries. Semantic inference can therefore distinguish user requests, assistant claims,
 reasoning, tool results, media, and attachments instead of guessing provenance from nearby prose.
-Summary-scoped retrieval retains lexical ranking plus fair chronological fill within the same scaled bound. After the
+Summary-scoped retrieval first represents the selected summary and its immediate ordered children within the same
+scaled candidate bound, then adds lexical descendant matches and fair chronological fill. Intermediate branch
+summaries must not be crowded out by numerous overlapping raw matches when the overview fits. Summary omissions
+never exclude descendant raw matches, and a bounded overview is not proof of complete subtree coverage. After the
 wider host prefetch, an optional unscoped or summary-scoped `lcm_expand_query` result uses at most 20% of known usable
 input capped at 16,000 tokens.
 Exact range retrieval fairly represents every supplied range and uses up to two thirds of known usable input capped at

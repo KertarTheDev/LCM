@@ -1167,9 +1167,10 @@ export function selectQueryExcerpts(
   const semanticPool = summaryID
     ? [
         ...(byKey.get(summaryID) ? [byKey.get(summaryID)!] : []),
-        ...allMemoryCandidates
-          .filter((candidate) => candidate.key !== summaryID)
-          .toSorted((a, b) => a.ordinal - b.ordinal || a.key.localeCompare(b.key)),
+        ...(view.children.get(summaryID) ?? []).flatMap((child) => {
+          const candidate = byKey.get(child.id)
+          return candidate ? [candidate] : []
+        }),
       ]
     : view.revision
       ? view.revision.items.flatMap((item) => {
@@ -1190,9 +1191,9 @@ export function selectQueryExcerpts(
   }
   const remaining = () => Math.max(0, candidateLimit - memoryCandidates.length)
 
-  if (!summaryID && view.revision) {
-    // The active frontier is the model-visible index of the whole retained session. Represent it before allowing
-    // numerous overlapping raw descendants with generic lexical hits to crowd older semantic units out.
+  if (summaryID || view.revision) {
+    // Keep the session frontier or the selected subtree's immediate branch overview before overlapping raw hits.
+    // Descendant matches remain eligible even when their details were omitted from every summary above them.
     addAll(
       lexicalCandidates.filter((candidate) => handles.includes(candidate.id)),
       0,
@@ -1228,7 +1229,9 @@ export function selectQueryExcerpts(
   }
   const relevant = sourceRanges
     ? rangeCandidates
-    : [...new Map([...lexicalCandidates, ...semanticPool].map((candidate) => [candidate.key, candidate])).values()]
+    : summaryID
+      ? allMemoryCandidates
+      : [...new Map([...lexicalCandidates, ...semanticPool].map((candidate) => [candidate.key, candidate])).values()]
   const candidates = sourceRanges ? relevant : memoryCandidates
   const candidateLimitReached = candidates.length < (sourceRanges ? relevant.length : allMemoryCandidates.length)
 
