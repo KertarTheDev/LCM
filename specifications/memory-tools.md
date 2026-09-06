@@ -65,7 +65,10 @@ The child model synthesizes that evidence and may use scoped navigation or exact
 summary-scoped, or complete single-unit exact `lcm_expand_query` executed by a child may spend one atomically reserved
 semantic-inference allowance: the existing LCM query runtime gives the active provider/model only the trusted
 focused-question assignment and selected excerpts in a fresh tool-free context, then returns a
-concise cited synthesis to the child. Every private semantic refinement uses the trusted focused question to rank records and excerpts. When the exact scope equals one unit from the host structural map, the semantic
+concise cited synthesis to the child. Every private semantic refinement uses the trusted focused question to rank records and excerpts.
+Requested event rank is distinct from its ordering key: a second event ordered by first appearance remains rank two;
+standalone requests for the first occurrence remain rank one.
+When the exact scope equals one unit from the host structural map, the semantic
 assignment uses the focused question as semantic authority, states that trusted unit index, and explains that
 every supplied range is a transport fragment of that same unit. If the request asks for one answer per unit, the
 nested inference resolves exactly one answer after considering the complete unit rather than returning one candidate

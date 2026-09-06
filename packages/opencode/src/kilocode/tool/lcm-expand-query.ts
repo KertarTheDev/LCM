@@ -262,6 +262,10 @@ export function queryOrdinalRank(query: string) {
   ].filter((match) => {
     if (match.index === undefined) return false
     const tail = normalized.slice(match.index + match[0].length, match.index + match[0].length + 80)
+    // An ordering key describes how to sort events, not which event was requested.
+    // Keep standalone requests for a first occurrence as genuine rank-one queries.
+    const head = normalized.slice(0, match.index).trimEnd()
+    if (/\b(?:order\s+of|by)$/u.test(head) && /^\s+(?:appearance|occurrence|mention)\b/u.test(tail)) return false
     return !/^\s*(?:(?:of\s+(?:the|these|those)\s+)|(?:[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*\s+){0,2})(?:\[(?:start|begin)\b|episodes?\b|transcripts?\b|documents?\b|sections?\b|units?\b|windows?\b|records?\b|chapters?\b|files?\b|parts?\b|blocks?\b|runs?\b)/u.test(
       tail,
     )

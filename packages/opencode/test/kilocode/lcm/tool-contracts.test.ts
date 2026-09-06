@@ -219,6 +219,14 @@ describe("LCM tool contracts", () => {
     expect(queryOrdinalRank("What is the third action in the second of these episodes?")).toBe(3)
     expect(queryOrdinalRank("What is the 12th qualifying action?")).toBe(12)
     expect(queryOrdinalRank("What is the 13th qualifying action?")).toBeUndefined()
+    expect(queryOrdinalRank("What is the second event, in order of first appearance?")).toBe(2)
+    expect(queryOrdinalRank("Return the third distinct error, sorted by first occurrence.")).toBe(3)
+    expect(queryOrdinalRank("Return the fourth entity, ordered by first mention.")).toBe(4)
+    expect(queryOrdinalRank("What is the first appearance of this error?")).toBe(1)
+    expect(querySemanticOrder("What is the second event, in order of first appearance?")).toEqual({
+      direction: "first",
+      rank: 2,
+    })
     expect(querySemanticOrder("What is the third action in the last episode?")).toEqual({
       direction: "first",
       rank: 3,
