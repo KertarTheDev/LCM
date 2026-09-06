@@ -2247,6 +2247,17 @@ describe("LCM tool contracts", () => {
       resolveSourceOrdinalSpan(view, first!.index.units[0]!.contentScope!.sourceOrdinalSpan),
     )
     expect(firstEnvelopeUnit?.semanticRanges).not.toEqual(first!.sourceRanges)
+    // Omitting offsets admits bytes outside the unit, even when all transport records fit.
+    const broadRanges = resolveSourceOrdinalSpan(view, { startOrdinal: 0, endOrdinal: 2 })
+    const broadUnit = trustedStructuralSemanticUnit({
+      view,
+      query: question,
+      maxOrdinal: sources.at(-1)!.ordinal,
+      sourceRanges: broadRanges,
+    })
+    expect(broadUnit).toBeUndefined()
+    expect(querySuccessGuidance(true, false, !broadUnit && Boolean(scope)).completeCoverage).toBe(false)
+    expect(querySuccessGuidance(true, false, !firstEnvelopeUnit && Boolean(scope)).completeCoverage).toBe(true)
 
     const last = structuralRecoveryScope(
       view,
