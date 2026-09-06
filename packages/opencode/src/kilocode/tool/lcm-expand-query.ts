@@ -232,10 +232,20 @@ export function queryParts(query: string) {
 
 export function queryDirection(query: string): QueryDirection | undefined {
   const normalized = query.normalize("NFKC").toLocaleLowerCase()
-  const first = /\b(?:earliest|first|initial)\b/u.test(normalized)
-  const last = /\b(?:final|last|latest|most\s+recent)\b/u.test(normalized)
+  const directions = [...normalized.matchAll(/\b(earliest|first|initial|final|last|latest|most\s+recent)\b/gu)].filter(
+    (match) => !queryUnitQualifier(normalized.slice(match.index + match[0].length, match.index + match[0].length + 80)),
+  )
+  const first = directions.some((match) => /^(?:earliest|first|initial)$/u.test(match[1]!))
+  const last = directions.some((match) => /^(?:final|last|latest|most\s+recent)$/u.test(match[1]!))
   if (first && last) return "both"
   return first ? "first" : last ? "last" : undefined
+}
+
+function queryUnitQualifier(tail: string) {
+  // A unit selector is not the direction or rank of the event requested inside that unit.
+  return /^\s*(?:(?:of\s+(?:the|these|those)\s+)|(?:(?!in\b|from\b|within\b|before\b|after\b|and\b|or\b)[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*\s+){0,2})(?:\[(?:start|begin)\b|episodes?\b|transcripts?\b|documents?\b|sections?\b|units?\b|windows?\b|records?\b|chapters?\b|files?\b|parts?\b|blocks?\b|runs?\b)/u.test(
+    tail,
+  )
 }
 
 const QUERY_ORDINAL_RANKS = new Map<string, number>([
@@ -266,9 +276,7 @@ export function queryOrdinalRank(query: string) {
     // Keep standalone requests for a first occurrence as genuine rank-one queries.
     const head = normalized.slice(0, match.index).trimEnd()
     if (/\b(?:order\s+of|by)$/u.test(head) && /^\s+(?:appearance|occurrence|mention)\b/u.test(tail)) return false
-    return !/^\s*(?:(?:of\s+(?:the|these|those)\s+)|(?:[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*\s+){0,2})(?:\[(?:start|begin)\b|episodes?\b|transcripts?\b|documents?\b|sections?\b|units?\b|windows?\b|records?\b|chapters?\b|files?\b|parts?\b|blocks?\b|runs?\b)/u.test(
-      tail,
-    )
+    return !queryUnitQualifier(tail)
   })
   const word = matches.at(-1)?.[1]
   if (!word) return

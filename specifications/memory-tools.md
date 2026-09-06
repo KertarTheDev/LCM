@@ -210,6 +210,9 @@ aggregation needs a fresh private semantic inference. Initial unscoped selection
 adding overlapping lexical descendants, with a candidate cap that scales from eight to 32 as the private evidence
 budget grows. It then balances bounded passage depth between frontier items and relevant raw descendants, because the
 hidden child is recovering details that may be absent from the already-visible frontier.
+Event-direction detection excludes recognized unit selectors:
+the last event in the first document remains a last-event request, not a request for both event edges. This keeps
+large exact-unit semantic analysis eligible for its existing chronological shard and independent verification path.
 Summary excerpt labels carry host-recorded tree level, immediate child count, and source ordinal span; their bytes
 are charged to the existing evidence envelope. The child may expand a relevant summary into immediate ordered children
 and descend on later configured research steps, or synthesize within an already identified summary scope. Summaries

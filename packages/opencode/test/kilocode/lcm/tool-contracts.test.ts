@@ -232,6 +232,25 @@ describe("LCM tool contracts", () => {
       rank: 3,
     })
     expect(querySemanticOrder("What is the third-to-last action?")).toEqual({ direction: "last", rank: 3 })
+    for (const question of [
+      "What was the last action in the first document?",
+      "What happened last in the first document?",
+      "In the first [START DOCUMENT] section, what happened last?",
+      "What was the first action in the last chapter?",
+      "In the final marked unit, what happened first?",
+    ]) {
+      const direction = question.includes("happened first") || question.includes("first action") ? "first" : "last"
+      expect(querySemanticOrder(question)).toEqual({ direction, rank: 1 })
+      expect(
+        hierarchicalSemanticPlan({
+          trustedStructuralUnit: true,
+          direction: querySemanticOrder(question)?.direction,
+          sourceRanges: [dynamicRange],
+          selected: clippedSelection,
+        })?.shards.length,
+      ).toBeGreaterThan(1)
+    }
+    expect(queryDirection("What were the first and last actions?")).toBe("both")
     expect(
       trustedStructuralShardQuestion({
         question: "What happened last?",
