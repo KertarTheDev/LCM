@@ -576,15 +576,20 @@ export class SummaryTree {
     if (input.maxEligibleOrdinal < 0 || sources.length === 0) return
     const active = await this.store.activeRevision(input.sessionID, input.lineage.digest)
     const items = await this.items(input.sessionID, active, sources)
-    const rawChanged = await this.summarizeRaw({
-      sessionID: input.sessionID,
-      items,
-      maxEligibleOrdinal: input.maxEligibleOrdinal,
-      usableInputTokens: input.usableInputTokens,
-      one: input.mode === "soft",
-      maintenanceMode: input.mode,
-      signal: input.signal,
-    })
+    // Continuous raw arrivals must not starve branch construction. Spend this soft
+    // quantum on overdue roots; the next pressure checkpoint can resume leaf work.
+    const promotionDue = input.mode === "soft" && items.filter((item) => item.kind === "summary").length > MAX_ROOTS
+    const rawChanged = promotionDue
+      ? false
+      : await this.summarizeRaw({
+          sessionID: input.sessionID,
+          items,
+          maxEligibleOrdinal: input.maxEligibleOrdinal,
+          usableInputTokens: input.usableInputTokens,
+          one: input.mode === "soft",
+          maintenanceMode: input.mode,
+          signal: input.signal,
+        })
     const promoted =
       input.mode === "soft" && rawChanged
         ? false

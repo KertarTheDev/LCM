@@ -12,7 +12,10 @@ the sidecar is quarantined and rebuilt without modifying the Kilo transcript.
 Soft maintenance summarizes at most one eligible raw window per quantum. Leaf windows target 30% of usable input and
 never exceed 20,000 estimated tokens. Existing roots remain stable. When more than eight roots exist, the oldest four
 adjacent roots may be promoted as one complete group. Projection always uses the stable active roots; it never expands
-children opportunistically to spend spare context. A soft quantum with a configured summary model makes exactly one
+children opportunistically to spend spare context. At a pressure-triggered soft checkpoint, an overdue root promotion
+takes the quantum before further leaf generation, so continuing eligible raw arrivals cannot starve branch construction.
+It does not schedule paid work below the existing raw-pressure threshold or perform both transformations in one quantum.
+A soft quantum with a configured summary model makes exactly one
 normal generation attempt. A rejected, unavailable, or failed attempt leaves the frontier unchanged so a later
 checkpoint can retry the exact raw history; transient model trouble is never materialized as an immutable fallback
 summary. Failed soft generation also starts a bounded internal retry delay so rapid tool checkpoints do not repeatedly

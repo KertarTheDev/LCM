@@ -94,6 +94,59 @@ describe("LCM summary tree", () => {
     store.close()
   })
 
+  test("promotes overdue roots in one soft quantum despite a continuing raw backlog", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    try {
+      const sources = Array.from({ length: 60 }, (_, ordinal) => makeSource(ordinal))
+      const lineage = {
+        sessionID: "ses_tree",
+        digest: lineageDigest(sources),
+        sourceCount: sources.length,
+        lastSourceID: sources.at(-1)?.id,
+      }
+      await store.replaceSources({ sessionID: "ses_tree", lineage, sources })
+      const tree = new SummaryTree(store)
+      const input = {
+        sessionID: "ses_tree",
+        lineage,
+        usableInputTokens: 8_000,
+        maxEligibleOrdinal: 57,
+        targetTokens: 4_800,
+        mode: "soft" as const,
+      }
+      for (let quantum = 0; quantum < 9; quantum++) await tree.maintain(input)
+      const before = await store.activeRevision("ses_tree", lineage.digest)
+      expect(before!.items.filter((item) => item.kind === "summary")).toHaveLength(9)
+      const rawBefore = before!.items.filter((item) => item.kind === "source")
+      expect(rawBefore.length).toBeGreaterThan(2)
+      const summariesBefore = await store.listSummaries("ses_tree")
+
+      let rejectedCalls = 0
+      const rejected = await new SummaryTree(store, {
+        generate: async (request) => {
+          rejectedCalls++
+          expect(request.children).toHaveLength(4)
+          expect(request.children.every((child) => "level" in child)).toBeTrue()
+          return undefined
+        },
+      }).maintain(input)
+      expect(rejectedCalls).toBe(1)
+      expect(rejected).toEqual(before)
+
+      const after = await tree.maintain(input)
+      expect(after!.items.filter((item) => item.kind === "summary")).toHaveLength(6)
+      expect(after!.items.filter((item) => item.kind === "source")).toEqual(rawBefore)
+      const summariesAfter = await store.listSummaries("ses_tree")
+      expect(summariesAfter).toHaveLength(summariesBefore.length + 1)
+      expect(summariesAfter.filter((summary) => summary.level === 1)).toHaveLength(1)
+      expect(after!.items.slice(-2).map((item) => item.id)).toEqual(sources.slice(-2).map((item) => item.id))
+      const resumed = await tree.maintain(input)
+      expect(resumed!.items.filter((item) => item.kind === "source").length).toBeLessThan(rawBefore.length)
+    } finally {
+      store.close()
+    }
+  })
+
   test("does not commit an ineffective summary", async () => {
     const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
     const sources = [makeSource(0, 1)]
