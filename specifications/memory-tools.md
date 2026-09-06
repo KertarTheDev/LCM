@@ -7,53 +7,21 @@ When `experimental.conversation_memory` is absent or `true`, the ordinary model-
 agents may ask one focused question; ordinary permission precedence still applies, so an explicit deny removes
 `lcm_query`. Raw recovery primitives are never advertised to those agents.
 
-By default, one parent user turn may start at most two isolated child sessions: the focused question and, only when a
-returned `partial` or `none` result names a blocking gap, one materially narrower follow-up. The advanced
-`conversation_memory.recovery.max_queries_per_turn` setting changes that hard allowance; zero removes `lcm_query`
-without changing other ordinary-agent tools. Every later question must still be materially narrower than a reported
-gap rather than an attempt to page raw history. Parallel parent calls reserve the shared limit synchronously, but only
-the first sibling may start: another sibling cannot be a result-informed follow-up before that bounded result exists,
-so it receives a non-terminal pending receipt and leaves the follow-up allowance available. A later admitted follow-up
-receives the preceding bounded parent-visible result inside its inert evidence block as provisional research handoff
-and investigates only the newly focused unresolved gap. Trusted child metadata marks this result-informed phase. The
-host admits the first focused question independently of the current task's vocabulary or criteria: it may ask for a
-prerequisite needed to carry out that task. The existing follow-up guard compares later questions with the initial
-focused question. A restriction word used only to refer to the requested output or its evidence, such as `values explicitly
-requested`, `final answer`, or `exact source cue`, does not authorize reusing that word as a new event criterion such
-as `explicitly cast`, `final spell`, or `exact action`; the admission guard distinguishes those contexts. Asking for
-optional exact evidence does not itself change the event definition.
-Requested name/identifier precision, such as `what exact package name`, is output wording rather than an added
-event criterion. It does not authorize a later `exact` event restriction, an `exactly` matching condition, or another
-status qualifier such as `approved`. Wording in a standalone
-final-answer/output/response formatting heading does not make a factual question
-completeness-sensitive; prose questions about the final historical answer retain their boundary requirement.
-Equivalent `last` and `final` event-boundary
-wording is normalized, so a focused question may preserve a user-requested last-event boundary without a false
-rejection; an unrestricted event list still does not authorize adding that boundary. An invalid refinement does not
-spend a child allowance, so the parent may retry with scope-only narrowing while preserving the original event
-definition. Partial answers and other candidates remain hypotheses to verify rather than facts a follow-up may assume.
-A result-informed
-follow-up must also name a distinctive term from the preceding bounded answer or named unresolved gap, or an explicit
-gap, conflict, omission, or earlier/later boundary relation. Repeating the broad aggregation without either link is
-rejected before child creation and does not spend the allowance. The new child has a distinct locked semantic
-assignment, so it may interpret the same exact host-paired unit when the
-narrower question requires it; equal raw bytes do not imply equal semantic work across different questions. The parent
-never starts another child for an identical normalized question, the result-informed workflow forbids restarting the
-broad plan, and the per-child semantic-scope reservation still suppresses duplicate work under one locked assignment.
-When a non-full first result leaves a child slot available, the first identical retry receives one non-terminal
-correction receipt directing the next parent step to ask a materially narrower question. A second identical retry is
-terminal. Separately, every completed or errored parent `lcm_query` call counts toward a hard attempt ceiling equal to
-twice the configured child-start allowance. This leaves one correction opportunity per intended child while bounding
-distinct invalid criteria rewrites, unanchored follow-ups, parallel siblings, and malformed provider calls that do not
-spend a child slot. A rejected final attempt returns a no-child exhaustion sentinel instead of inviting another
-retry. A
-preceding `full` result admits no follow-up. Invalid provider arguments and host-suppressed duplicates do not consume
-an actual-child slot. After the configured number of started child calls complete or fail, further queries cannot
-create another child. A stale query still receives a normal bounded exhaustion result. Recovery budgets govern memory
-work only: they never remove ordinary tools, force a final answer, override upstream tool choice, or terminate the
-parent turn. The parent can continue implementing, inspecting, and testing with its existing context and bounded
-recovery results. Upstream turn completion, cancellation, and agent step limits remain authoritative. Exhaustion
-does not widen raw-memory access or reset the current user turn's allowance.
+By default, a parent user turn may start at most two hidden queries. The advanced
+`conversation_memory.recovery.max_queries_per_turn` setting changes this allowance; zero hides `lcm_query`.
+Each question is an independent focused assignment. Full, partial, empty, or failed earlier recovery does not
+invalidate a different question, and independent parallel calls reserve the shared allowance synchronously.
+The parent owns task decomposition; no lexical guard compares question criteria with the task or with another query.
+An identical normalized question never starts another child or consumes another child slot. Every settled query
+invocation, including invalid arguments and duplicate receipts, counts toward an attempt ceiling of twice the
+configured child allowance. Exhaustion returns a bounded no-child result and never removes ordinary tools, changes
+upstream tool choice, terminates the parent turn, or widens raw-memory access.
+
+A subsequent child may receive the preceding bounded parent-visible result as inert provisional context, never its
+private transcript. That result supplies neither semantic authority nor coverage for the new question. Each child
+researches its own assignment; an earlier exact scope may be used again when a distinct question needs it, while
+equivalent semantic scopes remain single-flight within one child. A narrower question is useful for an unresolved
+gap, but is not a mandatory host admission rule.
 
 `lcm_query` creates a hidden read-only child session on the active Kilo provider/model. Only trusted session metadata
 binds that child to the calling parent session; neither the parent model nor the child can select another session. Its
@@ -403,19 +371,12 @@ the optional host-owned `candidateAnswerWithheld` state, and compact isolation m
 transcript or primitive outputs. That bounded result supplements rather
 than replaces the parent's projected active context. Parent guidance requires the final answer to retain independently
 supported facts already visible there even when a partial or empty recovery result omits them. When evidence conflicts,
-it prefers exact claims supported by host-verified excerpts over unsupported inference. A full result directs the
-parent to answer immediately. A completeness-sensitive partial result withholds the unsafe candidate mechanically, so
-the parent cannot mistake polished provisional prose for a complete answer; it must use independently supported active
-context, a materially narrower follow-up, or an explicit unresolved gap. Other partial results remain direct supported
-details. A partial result permits one materially narrower `lcm_query` only when the named gap blocks the user answer.
-Numeric structural-unit indices in a named gap match their equivalent first-through-twelfth ordinal words in the
-follow-up, so an empty withheld answer does not remove the copy-ready narrowing anchor. The follow-up cannot start in
-the same provider batch as the initial child. Its hidden session
-receives the preceding bounded result, but never the preceding child's private transcript or primitive outputs, so it
-can preserve supported facts and target the named gap without restarting the same broad recovery plan. Clipped
-structural evidence alone does not command a repeat of the preceding whole-unit semantic pass: exact named candidates
-or boundaries use bounded evidence, grep, or read first, and another semantic pass must represent genuinely new
-interpretation over a narrower trusted unit or range. Provider cost
+it prefers supported claims over unsupported inference without treating byte verification as proof of meaning.
+Full coverage answers only the focused question, not necessarily the whole user task. Incomplete completeness-sensitive
+candidates remain withheld; ordinary partial facts remain useful with their limits stated. A different question or
+narrower gap may use remaining query allowance, including after a full result. Only the preceding bounded
+parent-visible result may accompany a later child as optional inert context; no private transcript or primitive
+output crosses between children or into the parent. Provider cost
 incurred by the child is propagated to the calling parent assistant message.
 Parent cancellation cancels the child.
 After a process restart, an idle parent session terminalizes any persisted pending or running tool part as interrupted
@@ -572,10 +533,9 @@ transcript turn. Inside the hidden recovery agent, an unscoped, summary-scoped, 
 excerpt-only runtime, capped at 2,000 output tokens. It returns only the concise cited synthesis to the child's private
 transcript. An exact scope that matches one host-paired structural unit is labeled with its trusted unit index in both
 the semantic assignment and result, so the nested model answers only that unit and later aggregation retains its
-identity. In a trusted result-informed follow-up, the host compares the original and focused structural scopes before
-prefetching evidence and directs the child to investigate only the narrower named gap. Because the follow-up has a new
-locked semantic question, a complete unit used by the first child remains eligible for inference when that question
-needs it. Exact duplicate normalized parent questions cannot start another child, and an equivalent scope cannot run
+identity. Each focused query has a distinct locked semantic assignment, so a complete unit used by another child
+remains eligible when the new question needs it. Identical normalized parent questions cannot start another child,
+and an equivalent semantic scope cannot run
 twice inside one child. When that complete unit exceeds 64,000 UTF-8 bytes and the original request asks for its first,
 last, or a bounded Nth-from-start/from-end qualifying event, a sufficiently large configured allowance permits a
 host-driven dynamic chronological shard map plus one bounded reduction and a final exact-unit audit. Edge shards return

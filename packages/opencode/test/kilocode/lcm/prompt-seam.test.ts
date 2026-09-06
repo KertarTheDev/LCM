@@ -77,7 +77,7 @@ describe("LCM prompt seam", () => {
     const expandQuery = await Bun.file(expandQueryPath).text()
 
     expect(query.match(/\[LCM_RECOVERY_PARENT_REQUEST_METADATA\]: parentContext/g)?.length).toBe(2)
-    expect(query).toContain("[LCM_RECOVERY_RESULT_INFORMED_METADATA]: true")
+    expect(query).not.toContain("[LCM_RECOVERY_RESULT_INFORMED_METADATA]: true")
     expect(query).toContain("const semanticAssignment = lcmRecoverySemanticAssignment(question, parentContext)")
     expect(query).not.toContain("lcmRecoveryNeedsSemanticAuthorityReview")
     expect(query).not.toContain("const reviewEvidence =")
@@ -94,7 +94,7 @@ describe("LCM prompt seam", () => {
     expect(expandQuery).toContain("const sourceRanges = trustedStructuralUnit?.semanticRanges ?? requestedSourceRanges")
     expect(expandQuery).not.toContain("resultInformed = lcmRecoveryResultInformed")
     expect(expandQuery).not.toContain("resultInformedScopeReplay")
-    expect(expandQuery).toContain("if (resultInformed)")
+    expect(expandQuery).not.toContain("if (resultInformed)")
     expect(expandQuery).toContain("trustedStructuralSemanticQuestion(semanticAuthority")
     expect(expandQuery).toMatch(/generated = yield\* runSemantic\(\s*semanticQuestion,/)
     expect(expandQuery).toContain("trustedStructuralReductionQuestion({")

@@ -185,8 +185,8 @@ citation ranges. The requested value, entity, or list comes first rather than be
 host accepts at most six prior-turn raw-source citations of at most 512 bytes each, reloads the current lineage, and
 copies only validated exact bytes. An invalid optional citation is omitted and downgrades full coverage to partial; it
 never enters the parent context. A tool-free plain correction is always partial and uncited. No internal search result,
-read page, reasoning, or nested semantic-query output enters the parent context. A full result tells the parent to answer
-immediately; a partial result permits a narrower `lcm_query` only when its named gap blocks the user answer. The host
+read page, reasoning, or nested semantic-query output enters the parent context. Full coverage applies only to the
+focused question. Independent questions and narrower gaps may use remaining query allowance. The host
 instructs the parent to combine bounded recovery with its projected active context; recovery supplements rather than
 replaces independently supported visible facts, including when a partial or empty child answer omits them. The host
 enforces the configured actual-child allowance per parent user turn, defaulting to two, including synchronous

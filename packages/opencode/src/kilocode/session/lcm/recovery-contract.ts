@@ -6,7 +6,6 @@ export const LCM_RECOVERY_FINALIZER_AGENT = "lcm-recovery-finalizer"
 export const LCM_RECOVERY_SOURCE_METADATA = "lcmRecoverySourceSessionID"
 export const LCM_RECOVERY_QUESTION_METADATA = "lcmRecoveryQuestion"
 export const LCM_RECOVERY_PARENT_REQUEST_METADATA = "lcmRecoveryParentRequest"
-export const LCM_RECOVERY_RESULT_INFORMED_METADATA = "lcmRecoveryResultInformed"
 export const LCM_RECOVERY_STRUCTURED_TOOL = "StructuredOutput"
 export const LCM_RECOVERY_INVALID_TOOL_INPUT_METADATA = "lcmRecoveryInvalidToolInput"
 export const LCM_RECOVERY_INVALID_TOOL_INPUT_LIMIT = 2
@@ -138,8 +137,6 @@ export const LCM_RECOVERY_CANDIDATE_LEDGER_CHARS = 65_536
 export const LCM_RECOVERY_INITIAL_LEDGER_CHARS = 32_768
 export const LCM_RECOVERY_MAX_CITATIONS = 6
 export const LCM_RECOVERY_CITATION_BYTES = 512
-export const LCM_QUERY_ANSWER_ONLY_PROMPT =
-  "Conversation Memory recovery for this user turn is complete. Answer the user now by combining the original active context with each bounded lcm_query answer to its focused question. Recovery results supplement rather than replace the active context: a partial or empty result does not erase independently supported facts already visible there, and you must not omit such facts merely because a recovery answer lacks them. A candidateAnswerWithheld result means the isolated candidate was not safe to expose as a complete first/last, count, exhaustive-list, or other completeness-sensitive answer; do not reconstruct or guess it from the gap text. If evidence conflicts, prefer exact claims supported by host-verified citations over unsupported inference. State any unresolved uncertainty. Do not call another tool."
 const internal = new Set<string>(LCM_INTERNAL_RECOVERY_TOOLS)
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -233,18 +230,6 @@ export function lcmRecoveryParentRequest(input: {
   const normalized = request.trim()
   if (!normalized || normalized.length > LCM_RECOVERY_PARENT_REQUEST_CHARS) return
   return normalized
-}
-
-export function lcmRecoveryResultInformed(input: {
-  agent: string
-  session: {
-    parentID?: string
-    metadata?: Record<string, unknown>
-  }
-}) {
-  return Boolean(
-    lcmRecoverySourceSession(input) && input.session.metadata?.[LCM_RECOVERY_RESULT_INFORMED_METADATA] === true,
-  )
 }
 
 export function lcmRecoverySemanticAssignment(question: string, parentRequest?: string) {
@@ -409,67 +394,6 @@ function completedLcmQueryAttempts(messages: readonly SessionV1.WithParts[]) {
   return attempts
 }
 
-export function lcmQueryBudgetSentinelCompleted(messages: readonly SessionV1.WithParts[]) {
-  const currentUser = messages.findLastIndex((message) => message.info.role === "user")
-  if (currentUser < 0) return false
-  return messages
-    .slice(currentUser + 1)
-    .some(
-      (message) =>
-        message.info.role === "assistant" &&
-        message.parts.some(
-          (part) =>
-            part.type === "tool" &&
-            part.tool === LCM_QUERY_TOOL &&
-            part.state.status === "completed" &&
-            part.state.metadata?.lcmQueryBudgetExhausted === true,
-        ),
-    )
-}
-
-function completedLcmQueryRetryReceipts(messages: readonly SessionV1.WithParts[]) {
-  const currentUser = messages.findLastIndex((message) => message.info.role === "user")
-  if (currentUser < 0) return 0
-  return messages.slice(currentUser + 1).reduce(
-    (total, message) =>
-      total +
-      (message.info.role === "assistant"
-        ? message.parts.filter(
-            (part) =>
-              part.type === "tool" &&
-              part.tool === LCM_QUERY_TOOL &&
-              part.state.status === "completed" &&
-              part.state.metadata?.lcmQueryRetryAllowed === true,
-          ).length
-        : 0),
-    0,
-  )
-}
-
-export function lcmQueryAnswerOnlyRequired(
-  messages: readonly SessionV1.WithParts[],
-  limits: LcmRecoveryLimits = lcmRecoveryLimits(),
-) {
-  const attemptLimit = saturatedAdd(limits.queryTurnLimit, limits.queryTurnLimit)
-  return (
-    (limits.queryTurnLimit > 0 &&
-      (completedLcmQueryCalls(messages) >= limits.queryTurnLimit ||
-        completedLcmQueryAttempts(messages) >= attemptLimit)) ||
-    lcmQueryBudgetSentinelCompleted(messages)
-  )
-}
-
-export function lcmQuerySettlementFallbackRequired(
-  messages: readonly SessionV1.WithParts[],
-  limits: LcmRecoveryLimits = lcmRecoveryLimits(),
-) {
-  return (
-    limits.queryTurnLimit > 0 &&
-    lcmQueryAnswerOnlyRequired(messages, limits) &&
-    !lcmQueryBudgetSentinelCompleted(messages)
-  )
-}
-
 export function lcmToolAvailableInTurn(
   tool: string,
   agent: string,
@@ -527,365 +451,6 @@ function normalizedQuestion(value: unknown) {
   return question || undefined
 }
 
-const recoveryEventRestrictionFamilies = [
-  { name: "explicit", words: ["explicit", "explicitly"] },
-  { name: "actual", words: ["actual", "actually"] },
-  { name: "successful", words: ["successful", "successfully"] },
-  { name: "exact", words: ["exact", "exactly"] },
-  { name: "final", words: ["final", "finally", "last"] },
-  { name: "approved", words: ["approve", "approved", "approval"] },
-  { name: "confirmed", words: ["confirm", "confirmed", "verified"] },
-] as const
-
-const recoveryRestrictionRequestReferenceWords = new Set([
-  "ask",
-  "asked",
-  "asking",
-  "asks",
-  "request",
-  "requested",
-  "requesting",
-  "requests",
-])
-
-const recoveryRestrictionOutputReferenceWords = new Set([
-  "answer",
-  "answers",
-  "format",
-  "formatting",
-  "output",
-  "outputs",
-  "response",
-  "responses",
-  "tag",
-  "tags",
-  "value",
-  "values",
-])
-
-const recoveryRestrictionEvidenceReferenceWords = new Set([
-  "byte",
-  "bytes",
-  "citation",
-  "citations",
-  "cue",
-  "cues",
-  "evidence",
-  "excerpt",
-  "excerpts",
-  "line",
-  "lines",
-  "offset",
-  "offsets",
-  "passage",
-  "passages",
-  "quotation",
-  "quotations",
-  "quote",
-  "quotes",
-  "source",
-  "sources",
-  "text",
-  "wording",
-])
-
-function recoveryQuestionWordList(value: string) {
-  return value.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []
-}
-
-function recoveryQuestionWords(value: string) {
-  return new Set(recoveryQuestionWordList(value))
-}
-
-function recoveryEventRestrictionContexts(
-  words: readonly string[],
-  family: (typeof recoveryEventRestrictionFamilies)[number],
-) {
-  const contexts = new Set<"criterion" | "request_reference" | "output_reference" | "evidence_reference">()
-  for (const [index, word] of words.entries()) {
-    if (!family.words.some((candidate) => candidate === word)) continue
-    const nearby = words.slice(Math.max(0, index - 2), index + 3)
-    const following = words.slice(index + 1, index + 3)
-    // "What exact package name" requests an identifier, not a stricter historical event.
-    // Do not extend this to "exactly", other status qualifiers, or name-matching conditions.
-    const requestedName =
-      word === "exact" &&
-      words.slice(Math.max(0, index - 2), index).some((value) =>
-        ["what", "which", "give", "provide", "return", "state"].includes(value),
-      ) &&
-      following.some((value) => ["name", "names", "identifier", "identifiers", "label", "labels"].includes(value))
-    if (requestedName) {
-      contexts.add("output_reference")
-      continue
-    }
-    if (nearby.some((candidate) => recoveryRestrictionOutputReferenceWords.has(candidate))) {
-      contexts.add("output_reference")
-      continue
-    }
-    if (following.some((candidate) => recoveryRestrictionEvidenceReferenceWords.has(candidate))) {
-      contexts.add("evidence_reference")
-      continue
-    }
-    const requestReference =
-      family.name === "explicit" &&
-      (recoveryRestrictionRequestReferenceWords.has(words[index - 1] ?? "") ||
-        recoveryRestrictionRequestReferenceWords.has(words[index + 1] ?? ""))
-    contexts.add(requestReference ? "request_reference" : "criterion")
-  }
-  return contexts
-}
-
-export function lcmQueryAddedEventRestrictions(previousQuestion: string, nextQuestion: string) {
-  const previous = recoveryQuestionWordList(previousQuestion)
-  const next = recoveryQuestionWordList(nextQuestion)
-  return recoveryEventRestrictionFamilies.flatMap((family) => {
-    const previousContexts = recoveryEventRestrictionContexts(previous, family)
-    const nextContexts = recoveryEventRestrictionContexts(next, family)
-    const added =
-      (nextContexts.has("criterion") && !previousContexts.has("criterion")) ||
-      (nextContexts.has("request_reference") &&
-        !previousContexts.has("criterion") &&
-        !previousContexts.has("request_reference"))
-    return added ? [family.name] : []
-  })
-}
-
-const recoveryExclusionOperators = new Set([
-  "except",
-  "excepting",
-  "exclude",
-  "excluded",
-  "excludes",
-  "excluding",
-  "ignore",
-  "ignored",
-  "ignores",
-  "ignoring",
-  "omit",
-  "omits",
-  "omitted",
-  "omitting",
-  "without",
-])
-
-const recoveryExclusiveVerbs = new Set([
-  "accept",
-  "accepting",
-  "consider",
-  "considering",
-  "count",
-  "counting",
-  "include",
-  "including",
-  "treat",
-  "treating",
-  "use",
-  "using",
-])
-
-const recoveryRestrictionScopeBoundaries = new Set([
-  "after",
-  "before",
-  "by",
-  "during",
-  "from",
-  "in",
-  "inside",
-  "when",
-  "where",
-  "while",
-  "within",
-])
-
-const recoveryRestrictionTargetStopWords = new Set([
-  "a",
-  "all",
-  "an",
-  "and",
-  "any",
-  "be",
-  "being",
-  "for",
-  "of",
-  "only",
-  "or",
-  "the",
-  "those",
-  "to",
-])
-
-function recoveryRestrictionTarget(words: readonly string[], start: number) {
-  const result: string[] = []
-  for (let index = start; index < words.length && result.length < 4; index++) {
-    const word = words[index]!
-    if (result.length > 0 && recoveryRestrictionScopeBoundaries.has(word)) break
-    if (result.length > 0 && (recoveryExclusionOperators.has(word) || word === "non")) break
-    if (!recoveryRestrictionTargetStopWords.has(word)) result.push(word)
-  }
-  return result
-}
-
-function recoveryQuestionHasWord(words: ReadonlySet<string>, word: string) {
-  if (words.has(word)) return true
-  if (words.has(`${word}s`) || words.has(`${word}es`)) return true
-  if (word.endsWith("ies") && words.has(`${word.slice(0, -3)}y`)) return true
-  if (word.endsWith("es") && words.has(word.slice(0, -2))) return true
-  if (word.endsWith("s") && words.has(word.slice(0, -1))) return true
-  return false
-}
-
-export function lcmQueryAddedExclusionRestrictions(previousQuestion: string, nextQuestion: string) {
-  const previous = recoveryQuestionWords(previousQuestion)
-  const next = recoveryQuestionWordList(nextQuestion)
-  const result = new Set<string>()
-  const retainAddedTarget = (operator: string, start: number) => {
-    const target = recoveryRestrictionTarget(next, start)
-    const added = target.filter((word) => !recoveryQuestionHasWord(previous, word))
-    if (added.length > 0) result.add(`${operator} ${added.join(" ")}`)
-  }
-  for (let index = 0; index < next.length; index++) {
-    const word = next[index]!
-    if (recoveryExclusionOperators.has(word)) retainAddedTarget(word, index + 1)
-    if (word === "non") retainAddedTarget(word, index + 1)
-    if (word === "not" && recoveryExclusiveVerbs.has(next[index + 1] ?? "")) {
-      retainAddedTarget(`not ${next[index + 1]}`, index + 2)
-    }
-    if (recoveryExclusiveVerbs.has(word) && next[index + 1] === "only") {
-      retainAddedTarget(`${word} only`, index + 2)
-    }
-    if (word === "only" && recoveryExclusiveVerbs.has(next[index + 1] ?? "")) {
-      retainAddedTarget(`only ${next[index + 1]}`, index + 2)
-    }
-  }
-  return [...result]
-}
-
-const recoveryConditionalPremisePatterns = [
-  { name: "if", pattern: /\bif\b/iu },
-  { name: "assuming", pattern: /\b(?:assume|assuming|presume|presuming|suppose|supposing)\b/iu },
-  { name: "given that", pattern: /\bgiven(?:\s+|-)+that\b/iu },
-  { name: "provided that", pattern: /\bprovided(?:\s+|-)+that\b/iu },
-] as const
-
-function recoveryConditionalPremiseText(question: string) {
-  // "Check if X happened" verifies a candidate. Other newly introduced conditionals make X an answer premise.
-  return question
-    .normalize("NFKC")
-    .replace(/\b(?:check|confirm|determine|find\s+out|see|test|verify)\s+if\b/giu, "")
-}
-
-export function lcmQueryAddedConditionalPremises(previousQuestion: string, nextQuestion: string) {
-  const previous = recoveryConditionalPremiseText(previousQuestion)
-  const next = recoveryConditionalPremiseText(nextQuestion)
-  return recoveryConditionalPremisePatterns.flatMap((premise) => {
-    const added = premise.pattern.test(next) && !premise.pattern.test(previous)
-    return added ? [premise.name] : []
-  })
-}
-
-const recoveryAnswerAnchorStopWords = new Set([
-  "and",
-  "answer",
-  "but",
-  "candidate",
-  "complete",
-  "coverage",
-  "determine",
-  "for",
-  "from",
-  "incomplete",
-  "missing",
-  "not",
-  "partial",
-  "result",
-  "the",
-  "this",
-  "that",
-  "unable",
-  "unknown",
-  "unresolved",
-  "value",
-  "with",
-])
-
-function boundedLcmQueryResultText(output: string) {
-  const separator = output.indexOf("\n\n")
-  if (separator < 0) return
-  try {
-    const value: unknown = JSON.parse(output.slice(separator + 2))
-    if (!record(value) || typeof value.answer !== "string") return
-    const unresolved = Array.isArray(value.unresolved)
-      ? value.unresolved.filter((item): item is string => typeof item === "string")
-      : []
-    const text = [value.answer, ...unresolved].join("\n").trim()
-    return text || undefined
-  } catch {
-    return
-  }
-}
-
-const recoveryOrdinalWords = [
-  "first",
-  "second",
-  "third",
-  "fourth",
-  "fifth",
-  "sixth",
-  "seventh",
-  "eighth",
-  "ninth",
-  "tenth",
-  "eleventh",
-  "twelfth",
-] as const
-
-function recoveryFollowupAnchorMatches(anchor: string, next: ReadonlySet<string>) {
-  if (next.has(anchor)) return true
-  if (/^\d+$/u.test(anchor)) {
-    const ordinal = recoveryOrdinalWords[Number.parseInt(anchor, 10) - 1]
-    return ordinal !== undefined && next.has(ordinal)
-  }
-  const ordinal = recoveryOrdinalWords.indexOf(anchor as (typeof recoveryOrdinalWords)[number])
-  return ordinal >= 0 && next.has(String(ordinal + 1))
-}
-
-export function lcmQueryFollowupReferencesResult(
-  initialQuestion: string,
-  previousOutput: string,
-  nextQuestion: string,
-) {
-  const result = boundedLcmQueryResultText(previousOutput)
-  if (!result) return true
-  const initial = recoveryQuestionWords(initialQuestion)
-  const next = recoveryQuestionWords(nextQuestion)
-  const anchors = [...recoveryQuestionWords(result)].filter(
-    (word) =>
-      !initial.has(word) &&
-      !recoveryAnswerAnchorStopWords.has(word) &&
-      (word.length >= 3 || /^\d+$/u.test(word)),
-  )
-  if (anchors.some((word) => recoveryFollowupAnchorMatches(word, next))) return true
-  const boundaryWords = new Set([
-    "after",
-    "ambiguous",
-    "ambiguity",
-    "before",
-    "boundary",
-    "cited",
-    "conflict",
-    "earlier",
-    "gap",
-    "later",
-    "omission",
-    "omitted",
-    "previous",
-    "prior",
-    "reported",
-    "returned",
-  ])
-  return [...next].some((word) => boundaryWords.has(word))
-}
-
 function completedLcmQuestions(messages: readonly SessionV1.WithParts[]) {
   const currentUser = messages.findLastIndex((message) => message.info.role === "user")
   if (currentUser < 0) return []
@@ -933,27 +498,6 @@ export function completedLcmQueryOutputs(messages: readonly SessionV1.WithParts[
   return outputs
 }
 
-function completedLcmQueryCoverage(messages: readonly SessionV1.WithParts[]) {
-  const currentUser = messages.findLastIndex((message) => message.info.role === "user")
-  if (currentUser < 0) return []
-  const coverage: Array<"full" | "partial" | "none" | undefined> = []
-  for (const message of messages.slice(currentUser + 1)) {
-    if (message.info.role !== "assistant") continue
-    for (const part of message.parts) {
-      if (
-        part.type !== "tool" ||
-        part.tool !== LCM_QUERY_TOOL ||
-        (part.state.status !== "completed" && part.state.status !== "error") ||
-        typeof part.state.metadata?.isolatedSessionID !== "string"
-      )
-        continue
-      const value = part.state.metadata.coverage
-      coverage.push(value === "full" || value === "partial" || value === "none" ? value : undefined)
-    }
-  }
-  return coverage
-}
-
 export function reserveLcmQueryCall(
   messages: readonly SessionV1.WithParts[],
   tool: string,
@@ -997,82 +541,14 @@ export function reserveLcmQueryCall(
         attemptLimit,
       }
     : {}
-  const initialQuestion = completedLcmQuestions(messages)[0]
-  const priorFocusedQuestion = batch.historical > 0 ? initialQuestion : undefined
-  const addedEventRestrictions =
-    question && priorFocusedQuestion ? lcmQueryAddedEventRestrictions(priorFocusedQuestion, question) : []
-  const addedExclusionRestrictions =
-    question && priorFocusedQuestion ? lcmQueryAddedExclusionRestrictions(priorFocusedQuestion, question) : []
-  const addedConditionalPremises =
-    question && priorFocusedQuestion ? lcmQueryAddedConditionalPremises(priorFocusedQuestion, question) : []
-  if (
-    addedEventRestrictions.length > 0 ||
-    addedExclusionRestrictions.length > 0 ||
-    addedConditionalPremises.length > 0
-  ) {
-    return {
-      allowed: false,
-      completed: Math.min(position, limits.queryTurnLimit),
-      limit: limits.queryTurnLimit,
-      repeated: false,
-      originalCriteriaChanged: false,
-      ...(addedEventRestrictions.length ? { addedEventRestrictions } : {}),
-      ...(addedExclusionRestrictions.length ? { addedExclusionRestrictions } : {}),
-      ...(addedConditionalPremises.length ? { addedConditionalPremises } : {}),
-      ...finalAttempt,
-    }
-  }
-  // A sibling selected in the same provider response cannot be a result-informed next query. Start only one child
-  // per batch, then leave any unused allowance available after its bounded result has actually returned.
-  if (batch.reserved > 0 && position < limits.queryTurnLimit) {
-    return {
-      allowed: false,
-      completed: Math.min(batch.historical, limits.queryTurnLimit),
-      limit: limits.queryTurnLimit,
-      repeated: false,
-      followupPending: true,
-      ...finalAttempt,
-    }
-  }
-  const latestCoverage = completedLcmQueryCoverage(messages).at(-1)
-  if (batch.historical > 0 && latestCoverage === "full") {
-    return {
-      allowed: false,
-      completed: Math.min(position, limits.queryTurnLimit),
-      limit: limits.queryTurnLimit,
-      repeated: false,
-      alreadyResolved: true,
-      ...finalAttempt,
-    }
-  }
+  // The parent owns task decomposition. Independent questions may run in the same batch or after a full result;
+  // synchronous reservations, not lexical similarity or result coverage, bound actual child starts.
   if (repeated) {
     return {
       allowed: false,
       completed: Math.min(position, limits.queryTurnLimit),
       limit: limits.queryTurnLimit,
       repeated: true,
-      retryAllowed:
-        batch.historical > 0 &&
-        position < limits.queryTurnLimit &&
-        completedLcmQueryRetryReceipts(messages) === 0 &&
-        !attemptLimitReached,
-      ...finalAttempt,
-    }
-  }
-  const previousOutput = completedLcmQueryOutputs(messages).at(-1)
-  if (
-    batch.historical > 0 &&
-    initialQuestion &&
-    question &&
-    previousOutput &&
-    !lcmQueryFollowupReferencesResult(initialQuestion, previousOutput, question)
-  ) {
-    return {
-      allowed: false,
-      completed: Math.min(position, limits.queryTurnLimit),
-      limit: limits.queryTurnLimit,
-      repeated: false,
-      followupUnanchored: true,
       ...finalAttempt,
     }
   }
@@ -1206,103 +682,25 @@ export function lcmQueryBudgetResult(input: {
   completed: number
   limit: number
   repeated?: boolean
-  followupPending?: boolean
-  alreadyResolved?: boolean
-  originalCriteriaChanged?: boolean
-  addedEventRestrictions?: readonly string[]
-  addedExclusionRestrictions?: readonly string[]
-  addedConditionalPremises?: readonly string[]
-  followupUnanchored?: boolean
-  retryAllowed?: boolean
   attemptLimitReached?: boolean
   attempts?: number
   attemptLimit?: number
 }) {
-  if (input.attemptLimitReached)
-    return {
-      title: "LCM query correction limit reached",
-      metadata: {
-        lcmQueryBudgetExhausted: true,
-        lcmQueryAttemptLimitReached: true,
-        completed: input.completed,
-        limit: input.limit,
-        attempts: input.attempts,
-        attemptLimit: input.attemptLimit,
-      },
-      output:
-        "No isolated recovery was started because the bounded parent recovery-attempt allowance is exhausted. Do not call lcm_query again or substitute cross-session recall for this current-session recovery in this turn. Continue the task using the active context and bounded results already returned. Ordinary tools remain available; state any remaining uncertainty when relevant.",
-    }
-  if (input.followupPending)
-    return {
-      title: "LCM query follow-up pending",
-      metadata: {
-        lcmQueryFollowupPending: true,
-        completed: input.completed,
-        limit: input.limit,
-      },
-      output:
-        "No second isolated recovery was started in parallel. A follow-up must use the first child's returned bounded answer and named unresolved gap. After that result arrives, ask one materially narrower question only if the gap still blocks the answer.",
-    }
-  const criteriaChanges = [
-    ...(input.addedEventRestrictions?.map((value) => `event-status ${value}`) ?? []),
-    ...(input.addedExclusionRestrictions?.map((value) => `inclusion/exclusion ${value}`) ?? []),
-    ...(input.addedConditionalPremises?.map((value) => `conditional premise ${value}`) ?? []),
-  ]
-  if (criteriaChanges.length)
-    return {
-      title: "LCM query criteria changed",
-      metadata: {
-        lcmQueryCriteriaChanged: true,
-        lcmQueryOriginalCriteriaChanged: Boolean(input.originalCriteriaChanged),
-        completed: input.completed,
-        limit: input.limit,
-        addedEventRestrictions: input.addedEventRestrictions,
-        addedExclusionRestrictions: input.addedExclusionRestrictions,
-        addedConditionalPremises: input.addedConditionalPremises,
-      },
-      output: `No isolated recovery was started because this focused question changed semantic criteria absent from ${input.originalCriteriaChanged ? "the current user request" : "the initial focused question"}: ${criteriaChanges.join(", ")}. This invalid narrowing did not spend ${input.completed > 0 ? "another " : "a "}child allowance. Preserve the original verb, qualifiers, inclusion and exclusion rules, event definition, and evidence standard, then retry with scope-only narrowing. Do not turn a partial answer or another candidate into an assumed premise.`,
-    }
-  if (input.followupUnanchored)
-    return {
-      title: "LCM query follow-up not narrowed",
-      metadata: {
-        lcmQueryFollowupUnanchored: true,
-        completed: input.completed,
-        limit: input.limit,
-      },
-      output:
-        "No isolated recovery was started because this follow-up did not identify the preceding bounded answer or a named gap, candidate, conflict, unit, or earlier/later boundary. Repeating the broad aggregation is not a result-informed narrowing and did not spend another child allowance. Ask again about the specific prior candidate or unresolved boundary while preserving the original semantic criteria.",
-    }
-  if (input.repeated && input.retryAllowed)
-    return {
-      title: "LCM query must be narrowed",
-      metadata: {
-        lcmQueryRetryAllowed: true,
-        completed: input.completed,
-        limit: input.limit,
-        repeated: true,
-      },
-      output:
-        "No new isolated recovery was started because this same question was already attempted in this turn. The remaining child allowance is still available. On the next step, ask one materially narrower question tied to the preceding bounded answer or a named unresolved gap, candidate, conflict, unit, or earlier/later boundary. Do not repeat this question again or substitute cross-session recall.",
-    }
+  const exhausted = input.completed >= input.limit || Boolean(input.attemptLimitReached)
   return {
-    title: input.repeated
-      ? "LCM query already attempted"
-      : input.alreadyResolved
-        ? "LCM query already resolved"
-        : "LCM query limit reached",
+    title: exhausted ? "LCM query limit reached" : "LCM query already attempted",
     metadata: {
-      lcmQueryBudgetExhausted: true,
+      lcmQueryBudgetExhausted: exhausted,
       completed: input.completed,
       limit: input.limit,
       repeated: Boolean(input.repeated),
-      alreadyResolved: Boolean(input.alreadyResolved),
+      ...(input.attemptLimitReached
+        ? { lcmQueryAttemptLimitReached: true, attempts: input.attempts, attemptLimit: input.attemptLimit }
+        : {}),
     },
-    output: input.repeated
-      ? "No new isolated recovery was started because this same question was already attempted in this turn. Use that bounded result and state any remaining uncertainty; only a materially narrower question can justify the remaining query allowance. Do not substitute cross-session recall for this current-session recovery."
-      : input.alreadyResolved
-        ? "No new isolated recovery was started because the preceding bounded result reported full coverage. Use that result with the active context and answer now instead of starting another child."
-      : "No new isolated recovery was started because the current-session query allowance is exhausted. Do not call lcm_query again or substitute cross-session recall for this current-session recovery in this turn. Continue the task using the active context and bounded results already returned. Ordinary tools remain available; state any remaining uncertainty when relevant.",
+    output: exhausted
+      ? "No isolated recovery was started because the current-turn recovery allowance is exhausted. Do not call lcm_query again or substitute cross-session recall for current-session recovery in this turn. Continue the task using the active context and bounded results already returned. Ordinary tools remain available; state any remaining uncertainty when relevant."
+      : "No isolated recovery was started because this normalized question was already attempted in this turn. Use its bounded result. An unused child slot may answer a different focused question, including a narrower unresolved gap. Do not repeat this question or substitute cross-session recall for current-session recovery.",
   }
 }
 

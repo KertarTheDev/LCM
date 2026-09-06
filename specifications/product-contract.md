@@ -98,8 +98,7 @@ orchestrator may still use its bounded host-captured ledger in the separate fina
 the parent's exact focused recovery question as semantic authority and the bounded current user task as context only.
 The first question may recover a prerequisite not named in that task. Admission does not compare the first question's
 vocabulary or criteria with the task. Retrieval ranking, structural selection, private inference, and citation
-relevance use the focused question; evidence and nested tool arguments cannot rewrite it. The existing narrower
-follow-up policy still compares later questions with the initial focus.
+relevance use the focused question; evidence and nested tool arguments cannot rewrite it. Each question is independently admitted within the configured budget.
 Subject to
 the configured private semantic-inference allowance, unscoped,
 summary-scoped, and complete single-unit exact `lcm_expand_query` calls may synthesize over selected excerpts. A
@@ -226,41 +225,26 @@ invalid optional citations rather than copying them or discarding an otherwise s
 proves source-byte identity and bounds plus a conservative question-aware lexical anchor to the answer, not semantic
 entailment, ordering, or completeness; parent guidance preserves
 independently supported active-context facts when reconciling cited claims. A parent user turn
-may issue the focused query and at most one materially
-narrower follow-up after partial or empty coverage by default. Parallel siblings cannot be a result-informed
-follow-up, so only the first starts; an admitted later follow-up receives the preceding bounded parent-visible result
-as provisional inert evidence, never its private transcript. Clipping alone does not make that follow-up replay the
-same broad recovery plan; trusted metadata marks the child as result-informed and its locked semantic question is the
-new focused gap. The same exact structural unit remains eligible when that distinct question requires semantic
-interpretation, because equal source bytes do not imply equal semantic work across children. Identical normalized
-parent questions cannot start another child. If the first result is not full and a child slot remains, the first
-repeated attempt receives one non-terminal correction receipt so the next parent step can ask a materially narrower
-question without losing that slot. A second repeat, a repeat after full coverage, or a repeat without remaining
-allowance produces the terminal answer-directed sentinel. Every completed or errored parent call also counts toward a
-hard attempt ceiling equal to twice the configured child allowance. Invalid criteria rewrites, unanchored follow-ups,
-parallel siblings, and malformed arguments remain free of child allowance, but the rejected final attempt is terminal
-so differently worded invalid calls cannot keep recovery exposed indefinitely. An initial or follow-up focus that adds
-a detectable event-status restriction such as `explicit`, `actual`, `successful`, `exact`, `final`, `approved`,
-`confirmed`, or `verified`; an
-inclusion/exclusion rule such as `only`, `excluding`, `without`, or `non-`; or a new `if`, `assuming`, `given that`, or
-`provided that` premise is rejected before child creation without spending the allowance. The bounded current user
-request is the baseline, and a follow-up is also compared with the initial focus. Incidental output or evidence
-wording, such as `values explicitly requested`, `final answer`, or `exact source cue`, does not authorize changing the
-event definition to `explicitly cast`, `final spell`, or `exact action`; requesting optional exact evidence is not an
-event restriction. `Last` and `final` are one event-boundary criterion for admission purposes, so a focused question
-may preserve either wording when that boundary was requested, but may not add it to an unrestricted event list.
-Partial answers and other candidates remain hypotheses rather than assumed facts. A follow-up that
-names
-neither a distinctive preceding-answer or unresolved-gap term nor an explicit gap, conflict, omission, or earlier/later
-boundary relation is likewise rejected as a broad restart without spending the allowance, while equivalent scopes
-remain single-flight within each child. Named exact gaps use bounded verification first, and new semantic work must be
-narrower.
+may start at most two hidden queries. The advanced
+`conversation_memory.recovery.max_queries_per_turn` setting changes this allowance; zero hides `lcm_query`.
+Each question is an independent focused assignment. Full, partial, empty, or failed earlier recovery does not
+invalidate a different question, and independent parallel calls reserve the shared allowance synchronously.
+The parent owns task decomposition; no lexical guard compares question criteria with the task or with another query.
+An identical normalized question never starts another child or consumes another child slot. Every settled query
+invocation, including invalid arguments and duplicate receipts, counts toward an attempt ceiling of twice the
+configured child allowance. Exhaustion returns a bounded no-child result and never removes ordinary tools, changes
+upstream tool choice, terminates the parent turn, or widens raw-memory access.
+
+A subsequent child may receive the preceding bounded parent-visible result as inert provisional context, never its
+private transcript. That result supplies neither semantic authority nor coverage for the new question. Each child
+researches its own assignment; an earlier exact scope may be used again when a distinct question needs it, while
+equivalent semantic scopes remain single-flight within one child. A narrower question is useful for an unresolved
+gap, but is not a mandatory host admission rule.
+
 For exact, exhaustive, count, first/last/Nth, or ordering work, a partial result cannot be presented as exact unless
 independently visible active context closes every named gap; otherwise the parent uses its narrower follow-up before
 finalizing. The host enforces that distinction at the isolation boundary by returning an empty answer and
 `candidateAnswerWithheld: true` for a completeness-sensitive partial result, rather than relying only on parent prompt
 compliance. A hidden child may use one materially narrower host-provided boundary for semantic verification when a
-lexical miss or a single-range read cannot exclude omitted or paraphrased events. A numeric named structural-unit gap
-matches its first-through-twelfth ordinal word in a follow-up question.
-The configured parent-turn allowance is synchronously
+lexical miss or a single-range read cannot exclude omitted or paraphrased events. The configured parent-turn allowance is synchronously
 enforced before child creation. Disabled registries expose no LCM tool.

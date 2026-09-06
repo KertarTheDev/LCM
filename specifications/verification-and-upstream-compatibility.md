@@ -43,9 +43,8 @@ Acceptance must prove:
   summary when enabled and the upstream legacy cycle when disabled;
 - one ordinary model-facing `lcm_query`, five hidden child-only primitive handlers, parent cancellation and child-cost
   propagation, trusted parent-session and focused-question semantic authority, current-task context-only binding,
-  cross-domain first-question prerequisite admission without lexical task matching, and follow-up criteria checks
-  against the initial focus, with invalid follow-up rewrites consuming no child allowance, and a parent-attempt ceiling of twice the configured child
-  allowance terminalizing differently worded invalid, unanchored, parallel, or malformed call loops,
+  cross-domain prerequisite and independent-query admission without lexical task matching, and a parent-attempt ceiling of twice the configured child
+  allowance bounding repeated invalid or malformed attempts without taking over parent turn completion,
   current-lineage/prior-turn isolation, exact hidden-session transcript retention without child-owned LCM
   capture/projection/summary work, stale-tool payload pruning, or legacy overflow compaction, with a provider-limit
   failure remaining available to bounded repair finalization, and two consecutive schema-invalid private primitive
@@ -126,30 +125,14 @@ Acceptance must prove:
   fresh-finalizer ledger aggregation; no workspace snapshot scan in either read-only recovery phase while ordinary
   snapshot/undo behavior is retained; supplemental parent synthesis that preserves independently supported projected-context facts when a
   bounded child result is partial or empty; a configurable parent-turn cap including deterministic parallel
-  reservations that start only the first sibling, leave a non-terminal pending receipt for a result-informed
-  follow-up, admit that follow-up only after the first bounded result is available, carry the preceding bounded result
-  but no private child transcript into its inert evidence, avoid whole-unit semantic replay based only on clipping when
-  a result-informed gap identifies exact candidates or boundaries, trust the result-informed marker only on a valid
-  bound recovery child, reject an identical normalized parent question without starting another child, return at most
-  one non-terminal narrowing receipt for a first repeat after non-full coverage while allowance remains, make a second
-  repeat terminal, reject a newly added event-status restriction
-  or conditional premise before starting or charging a follow-up child, distinguish incidental output/evidence
-  wording such as `values explicitly requested`, `final answer`, or `exact source cue` from a newly restricted event
-  definition such as `explicitly cast`, `final spell`, or `exact action`, normalize `last` and `final` as the same
-  event-boundary criterion without authorizing that boundary from output-only wording,
-  keep partial candidates as hypotheses rather
-  than assumed facts, reject an unanchored broad restart that names neither the preceding
-  answer or unresolved-gap terms nor a gap/boundary relation, permit a distinct locked follow-up question to
-  interpret the same exact unit when necessary, keep equivalent semantic scopes single-flight within each child,
-  require a narrower follow-up before treating an exact/count/ordered result with an unresolved coverage gap as exact,
-  mechanically withhold a polished partial candidate from the parent for first/last, ordinal, count, exhaustive-list,
-  and other completeness-sensitive requests while retaining named gaps and bounded citations, preserve ordinary
-  non-exhaustive partial answers, and admit a narrowing that names a numeric structural-unit gap with its equivalent
-  first-through-twelfth ordinal word,
-  allow one materially narrower semantic boundary check when lexical or single-range evidence cannot exclude an
-  omitted event, reject another child after full coverage, a no-child completed exhaustion sentinel for stale or
-  repeated provider calls, continued ordinary tool use after the configured number of real queries,
-  unchanged upstream tool choice and turn completion, and no additional hidden child after budget exhaustion;
+  reservations that admit distinct independent questions in parallel and after full, partial, empty, or failed
+  recovery, reject normalized duplicates without spending a child slot, bound malformed/duplicate attempts, and reset
+  allowances only at a new parent user turn; no lexical admission gate may reject a prerequisite or independent
+  question based on another request's vocabulary. Optional preceding bounded results are inert context, not coverage
+  or scope authority for the new question. Distinct child assignments may interpret the same exact unit when needed,
+  while equivalent semantic scopes remain single-flight within a child. Incomplete completeness-sensitive answers
+  remain withheld, ordinary partial facts remain available, and exhausted memory work never removes ordinary tools
+  or takes over upstream turn completion;
   no raw primitive result or finalizer transcript may enter the parent transcript;
 - structured hierarchical event proposals bind every scalar value to one cited exact quote, reject missing or
   unverifiable event records, sort surviving records by exact source position, and select bounded first/last/Nth

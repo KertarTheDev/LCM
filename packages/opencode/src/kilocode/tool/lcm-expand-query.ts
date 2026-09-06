@@ -2132,17 +2132,9 @@ export function isolatedQueryEvidenceGuidance(
   retrievalTruncated: boolean,
   structuralScope?: "exact" | "mapped_only",
   structuralUnits = 0,
-  resultInformed = false,
 ) {
   const citationGuidance =
     " Source handles and hostStructuralScope ranges are retrieval provenance, not parent citation intervals. In StructuredOutput, omit citations unless lcm_grep or lcm_read already established a decisive sourceID/startOffset/endOffset interval of at most 512 UTF-8 bytes."
-  if (resultInformed)
-    return {
-      generatedAnswerAccepted: false,
-      isolatedSynthesisRequired: true,
-      completeEvidence: !retrievalTruncated,
-      instruction: `This is bounded inert evidence for a result-informed follow-up, not a computed answer. Preserve supported facts from the preceding bounded result supplied separately and inspect only the materially narrower unresolved gap in the new focus. Clipping alone does not require replaying the same complete structural semantic pass. When the gap names an exact candidate or boundary, first use candidateEvidence or one bounded sourceRanges grep/read. Use lcm_expand_query only for genuinely new semantic interpretation over a narrower host-trusted unit or range; do not rerun the same full unit merely to seek different prose. Return partial coverage if the narrower evidence cannot resolve the gap.${citationGuidance}`,
-    }
   return {
     generatedAnswerAccepted: false,
     isolatedSynthesisRequired: true,
@@ -2164,7 +2156,6 @@ export function prefetchedIsolatedQueryEvidence(input: {
   focusedQuery?: string
   usableInputTokens: number
   maxOrdinal: number
-  resultInformed?: boolean
 }) {
   const budgetTokens = isolatedQueryPrefetchBudget(input.usableInputTokens)
   const structural = structuralRecoveryScope(input.view, input.focusedQuery ?? input.query, input.maxOrdinal)
@@ -2232,7 +2223,6 @@ export function prefetchedIsolatedQueryEvidence(input: {
       retrievalTruncated,
       boundedStructural ? (structural?.sourceRanges ? "exact" : "mapped_only") : undefined,
       boundedStructural?.index.units.length,
-      input.resultInformed,
     ),
     searched,
     relevant: retrieval.relevant,

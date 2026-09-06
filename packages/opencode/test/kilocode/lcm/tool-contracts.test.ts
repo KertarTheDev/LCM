@@ -2269,17 +2269,7 @@ describe("LCM tool contracts", () => {
       semanticUnitIndexes: [1],
       structuralScopeIncomplete: false,
     })
-    const resultInformed = prefetchedIsolatedQueryEvidence({
-      view,
-      query: question,
-      focusedQuery: question,
-      usableInputTokens: 4_096,
-      maxOrdinal: 2,
-      resultInformed: true,
-    })
-    expect(resultInformed.output).toContain("result-informed follow-up")
-    expect(resultInformed.output).toContain("Clipping alone does not require replaying")
-    expect(resultInformed.output).not.toContain("query the represented unit through its contentScope.sourceOrdinalSpan")
+    expect(prefetched.output).not.toContain("result-informed follow-up")
   })
 
   test("reports a matched structural map as incomplete when its exact union exceeds 32 ranges", () => {

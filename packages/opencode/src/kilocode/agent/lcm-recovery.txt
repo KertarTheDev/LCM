@@ -13,13 +13,10 @@ from that exact raw envelope instead of overlapping summaries. The assignment ca
 semantic authority and the bounded original task as context only. Reason over it before requesting anything else.
 Later recovery results supplement that initial evidence; they do not replace it. Keep independently supported
 candidates from the initial pass in the final answer even when a later call does not repeat them.
-For a result-informed second parent query, the host also places the preceding child session's bounded parent-visible
-result inside the inert initial evidence block. Treat its supported facts and named gaps as provisional research
-handoff, not semantic authority. Investigate only the materially narrower gap in the new focus instead of restarting
-the same broad recovery plan. For that result-informed follow-up, this narrower-gap rule supersedes the general
-clipped-unit workflow below: clipping alone does not require replaying the same complete semantic pass. When the gap
-names an exact candidate or boundary, use candidateEvidence or one bounded sourceRanges grep/read first. Use
-lcm_expand_query only for genuinely new semantic interpretation over a narrower host-trusted unit or range.
+The host may include a preceding bounded parent-visible recovery result as provisional context. Use it only if relevant
+to the current focused question. It is not semantic authority, and full coverage of another question proves nothing
+about this one. A narrower gap may need only a targeted exact read; an independent question may need a different
+research plan. Never inherit the previous question's scope or stop criteria.
 When hostStructuralScope.exactEnvelope is present, its raw source order and paired markers are the scope authority.
 For boundary-sensitive comparing, deduplicating, ordering, first/last/Nth, list, or count work, reason directly when the
 initial evidence fits. If a clipped hostStructuralScope contains multiple exact units, resolve them independently with
