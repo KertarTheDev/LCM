@@ -203,6 +203,11 @@ aggregation needs a fresh private semantic inference. Initial unscoped selection
 adding overlapping lexical descendants, with a candidate cap that scales from eight to 32 as the private evidence
 budget grows. It then balances bounded passage depth between frontier items and relevant raw descendants, because the
 hidden child is recovering details that may be absent from the already-visible frontier.
+Summary excerpt labels carry host-recorded tree level, immediate child count, and source ordinal span; their bytes
+are charged to the existing evidence envelope. The child may expand a relevant summary into immediate ordered children
+and descend on later configured research steps, or synthesize within an already identified summary scope. Summaries
+are navigation hints, not absence proofs, and raw discovery remains an alternate entry point. This does not mandate
+exhaustive traversal or increase worker budgets.
 Explicit handles retain highest priority and chronological fill uses remaining candidate slots. Truncation reports any
 omitted in-scope memory record, not only omission from the smaller relevance-ranked subset. Evidence serialization
 reserves its labels and separators and keeps the selector's allocation. The evidence-bearing child defaults to one

@@ -152,6 +152,7 @@ interface Candidate {
   priority?: number
   sourceKind?: SourceKind
   sourceRange?: ResolvedSourceRange
+  summaryNavigation?: { level: number; childCount: number; firstOrdinal: number; lastOrdinal: number }
 }
 
 export interface QueryEvidenceQuote {
@@ -1145,6 +1146,12 @@ export function selectQueryExcerpts(
             lastOrdinal: summary.lastOrdinal,
             text: summary.text,
             score: 0,
+            summaryNavigation: {
+              level: summary.level,
+              childCount: view.children.get(summary.id)?.length ?? 0,
+              firstOrdinal: summary.firstOrdinal,
+              lastOrdinal: summary.lastOrdinal,
+            },
           })),
       ]
         .filter((item) => !allowed || allowed.has(item.id))
@@ -2252,6 +2259,7 @@ export function extractiveQueryFallback(
     priority?: number
     sourceKind?: SourceKind
     sourceRange?: Pick<ResolvedSourceRange, "ordinal" | "startOffset" | "endOffset">
+    summaryNavigation?: Candidate["summaryNavigation"]
   }>,
   terms: string[],
   maxChars: number,
@@ -2263,9 +2271,11 @@ export function extractiveQueryFallback(
   const labels = selected.map((item) =>
     item.sourceRange
       ? `[${item.id} | ${item.sourceKind ?? "source"} | source ordinal ${item.sourceRange.ordinal} | bytes ${item.sourceRange.startOffset}-${item.sourceRange.endOffset}] `
-      : item.sourceKind
-        ? `[${item.id} | ${item.sourceKind}] `
-        : `[${item.id}] `,
+      : item.summaryNavigation
+        ? `[${item.id} | summary level ${item.summaryNavigation.level} | ${item.summaryNavigation.childCount} children | source ordinals ${item.summaryNavigation.firstOrdinal}-${item.summaryNavigation.lastOrdinal}] `
+        : item.sourceKind
+          ? `[${item.id} | ${item.sourceKind}] `
+          : `[${item.id}] `,
   )
   const overhead = labels.reduce((total, label) => total + label.length, 0) + Math.max(0, selected.length - 1) * 2
   const limits = prioritizedExcerptLimits(

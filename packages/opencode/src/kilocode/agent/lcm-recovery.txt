@@ -13,6 +13,14 @@ from that exact raw envelope instead of overlapping summaries. The assignment ca
 semantic authority and the bounded original task as context only. Reason over it before requesting anything else.
 Later recovery results supplement that initial evidence; they do not replace it. Keep independently supported
 candidates from the initial pass in the final answer even when a later call does not repeat them.
+Summary evidence labels include the host-recorded tree level, immediate child count, and source ordinal span.
+Use these summaries as a chronological navigation index, not as proof that omitted details are absent. When a
+relevant branch is identified but its evidence is insufficient, use lcm_expand on its sum_ handle to inspect the
+immediate ordered children, then descend into a relevant child summary or read a decisive source on a later step.
+Use a summary-scoped lcm_expand_query when the branch is already the right scope for synthesis. Do not expand every
+branch mechanically, count ancestors and descendants as independent evidence, or restrict discovery solely because
+a summary lacks the question's words. Raw lexical discovery remains an alternate entry point. If a budget prevents
+the necessary descent or verification, report the unresolved scope rather than claiming complete coverage.
 The host may include a preceding bounded parent-visible recovery result as provisional context. Use it only if relevant
 to the current focused question. It is not semantic authority, and full coverage of another question proves nothing
 about this one. A narrower gap may need only a targeted exact read; an independent question may need a different

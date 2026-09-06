@@ -1747,6 +1747,14 @@ describe("LCM tool contracts", () => {
     const right = summary("sum_right", 0, 1, 1)
     const root = summary("sum_root", 1, 0, 1)
     const view = {
+      revision: {
+        id: "rev_tree_scope",
+        sessionID: "ses_tree_scope",
+        lineageDigest: "tree_scope",
+        reason: "append" as const,
+        items: [{ kind: "summary" as const, id: root.id, ordinal: 0 }],
+        createdAt: 1,
+      },
       sources: new Map(sources.map((source) => [source.id, source])),
       summaries: new Map([root, left, right].map((node) => [node.id, node])),
       children: new Map<string, SummaryChild[]>([
@@ -1796,6 +1804,16 @@ describe("LCM tool contracts", () => {
     ])
     expect(overview.selected.some((item) => item.kind === "source")).toBe(true)
     expect(overview.truncated).toBe(true)
+    const evidence = extractiveQueryFallback(overview.selected, [], 1_000)
+    expect(evidence.answer).toContain(`[${root.id} | summary level 1 | 2 children | source ordinals 0-41]`)
+    expect(evidence.answer.length).toBeLessThanOrEqual(1_000)
+    const initial = prefetchedIsolatedQueryEvidence({
+      view,
+      query: question,
+      usableInputTokens: 32_000,
+      maxOrdinal: root.lastOrdinal,
+    })
+    expect(initial.output).toContain("summary level 1 | 2 children | source ordinals 0-41")
   })
 
   test("falls back to a fair active-frontier sample when no record has lexical overlap", () => {
