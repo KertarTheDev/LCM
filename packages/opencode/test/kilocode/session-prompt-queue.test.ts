@@ -29,7 +29,8 @@ import { remove as cleanup } from "./cleanup"
 import { pollWithTimeout } from "../lib/effect"
 
 Log.init({ print: false })
-setDefaultTimeout(15_000)
+// Effect-backed queue integration cases include cold database and snapshot initialization.
+setDefaultTimeout(30_000)
 
 const previous = Flag.KILO_DB
 const dbfile = path.join(os.tmpdir(), `kilo-prompt-queue-${process.pid}-${crypto.randomUUID()}.db`)

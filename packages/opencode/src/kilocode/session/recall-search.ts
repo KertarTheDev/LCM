@@ -156,7 +156,9 @@ export namespace RecallSearch {
     limit?: number
     signal?: AbortSignal
     excludeSessionID?: SessionID
+    excludeSessionIDs?: readonly SessionID[]
     excludeFromMessageID?: MessageID
+    excludeAgents?: readonly string[]
   }) {
     const parsed = parse(input.query)
     const limit = input.limit ?? 20
@@ -176,13 +178,18 @@ export namespace RecallSearch {
         title: SessionTable.title,
         directory: SessionTable.directory,
         updated: SessionTable.time_updated,
+        agent: SessionTable.agent,
       })
       .from(SessionTable)
       .where(inArray(SessionTable.project_id, projects))
       .all()
       .pipe(Effect.orDie)
     const items = new Map<SessionID, Item>()
+    const excludedAgents = new Set(input.excludeAgents ?? [])
+    const excludedSessions = new Set(input.excludeSessionIDs ?? [])
     for (const row of rows) {
+      if (row.agent && excludedAgents.has(row.agent)) continue
+      if (excludedSessions.has(row.id)) continue
       const directory = Filesystem.resolve(row.directory)
       if (!roots.some((root) => Filesystem.contains(root, directory))) continue
 

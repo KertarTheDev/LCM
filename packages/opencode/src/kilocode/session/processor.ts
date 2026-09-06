@@ -14,6 +14,7 @@ import type { LLMEvent, ProviderMetadata, Usage } from "@opencode-ai/llm"
 import type { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionRetry } from "@/session/retry"
 import { computeMetrics as computeMetricsHelper, type TokenRates } from "@/kilocode/session/metrics"
+import { InvalidToolInputError, ToolCallRepairError } from "ai"
 
 export type ReviewTelemetry = {
   mode: "review"
@@ -236,6 +237,12 @@ export namespace KiloSessionProcessor {
 
   export function attempt(): Attempt {
     return { text: false, reasoning: false, tool: false, usage: false, finished: false }
+  }
+
+  export function invalidToolInput(error: unknown) {
+    if (InvalidToolInputError.isInstance(error)) return true
+    if (ToolCallRepairError.isInstance(error) && InvalidToolInputError.isInstance(error.originalError)) return true
+    return /^Invalid (?:input for tool\b|tool input\b)/i.test(error instanceof Error ? error.message : String(error))
   }
 
   export function observe(attempt: Attempt, event: LLMEvent) {

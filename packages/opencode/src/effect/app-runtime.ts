@@ -57,6 +57,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Notebook } from "@/kilocode/notebook/service"
 import { SessionDrain } from "@/kilocode/session/drain"
 import { AgentManager } from "@/kilocode/agent-manager/service"
+import { ConversationMemory } from "@/kilocode/session/lcm/service"
 // kilocode_change end
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -77,6 +78,7 @@ const kilo = LayerNode.group([
   AgentManager.node,
   Notebook.node,
   SessionDrain.node,
+  ConversationMemory.node,
   memory,
 ])
 // kilocode_change end

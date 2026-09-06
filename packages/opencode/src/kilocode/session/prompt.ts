@@ -205,7 +205,7 @@ export namespace KiloSessionPrompt {
   export const recoverDanglingAssistant = Effect.fn("KiloSessionPrompt.recoverDanglingAssistant")(function* (input: {
     sessionID: SessionID
     status: Pick<SessionStatus.Interface, "get">
-    sessions: Pick<Session.Interface, "messages" | "removeMessage">
+    sessions: Pick<Session.Interface, "messages" | "removeMessage" | "updateMessage" | "updatePart">
   }) {
     const state = yield* input.status.get(input.sessionID)
     if (state.type !== "idle") return
@@ -213,6 +213,35 @@ export namespace KiloSessionPrompt {
     const msgs = yield* input.sessions.messages({ sessionID: input.sessionID, limit: 2 })
     const tail = msgs.at(-1)
     if (!tail || tail.info.role !== "assistant") return
+    const interrupted = tail.parts.filter(
+      (part): part is MessageV2.ToolPart =>
+        part.type === "tool" && (part.state.status === "pending" || part.state.status === "running"),
+    )
+    if (interrupted.length > 0) {
+      const end = Date.now()
+      yield* Effect.forEach(
+        interrupted,
+        (part) => {
+          const metadata = "metadata" in part.state && part.state.metadata ? part.state.metadata : {}
+          return input.sessions.updatePart({
+            ...part,
+            state: {
+              ...part.state,
+              status: "error",
+              error: "Tool execution was interrupted by a prior process exit",
+              metadata: { ...metadata, interrupted: true },
+              time: { start: "time" in part.state ? part.state.time.start : end, end },
+            },
+          })
+        },
+        { concurrency: "unbounded", discard: true },
+      )
+      yield* input.sessions.updateMessage({
+        ...tail.info,
+        time: { ...tail.info.time, completed: tail.info.time.completed ?? end },
+      })
+      return
+    }
     if (tail.parts.length > 0 || tail.info.finish || tail.info.error) return
 
     const prev = msgs.at(-2)
@@ -370,7 +399,6 @@ export namespace KiloSessionPrompt {
       origins: input.origins,
     })
     const outcome = yield* input.permission.ask({ ...input.request, ruleset, hardRuleset })
-
     if (outcome.manual) return { source: "manual" } satisfies PermissionProvenance.Approval
     return PermissionProvenance.classify({ rule: outcome.rule, agent: agent.name, origins: input.origins })
   })

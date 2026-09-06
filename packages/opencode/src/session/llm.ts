@@ -33,6 +33,7 @@ import { KiloToolSchema } from "@/kilocode/session/tool-schema"
 import { SessionExport } from "@/kilocode/session-export"
 import { getActiveOrg } from "@/kilocode/session-export/eligibility"
 import { normalizeUsageForExport, observeFullStreamForExport } from "@/kilocode/session-export/llm"
+import { LCM_QUERY_TOOL, repairLcmQueryInput } from "@/kilocode/session/lcm/recovery-contract"
 // kilocode_change end
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -376,9 +377,12 @@ const live: Layer.Layer<
         includeRawChunks: input.model.providerID.includes("github-copilot"),
         async experimental_repairToolCall(failed) {
           const lower = failed.toolCall.toolName.trim().toLowerCase() // kilocode_change
-          if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
-            l.info("repairing tool call", { tool: failed.toolCall.toolName, repaired: lower }) // kilocode_change
-            return { ...failed.toolCall, toolName: lower }
+          const toolName =
+            lower !== failed.toolCall.toolName && prepared.tools[lower] ? lower : failed.toolCall.toolName // kilocode_change
+          const repairedInput = toolName === LCM_QUERY_TOOL ? repairLcmQueryInput(failed.toolCall.input) : undefined // kilocode_change
+          if (toolName !== failed.toolCall.toolName || repairedInput) {
+            l.info("repairing tool call", { tool: failed.toolCall.toolName, repaired: toolName }) // kilocode_change
+            return { ...failed.toolCall, toolName, input: repairedInput ?? failed.toolCall.input }
           }
           // kilocode_change start - surface the original tool-name error instead of a
           // repaired call to the hidden "invalid" tool, which activeTools excludes and

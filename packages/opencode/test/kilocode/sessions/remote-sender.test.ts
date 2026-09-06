@@ -2805,7 +2805,7 @@ describe("RemoteSender slash commands", () => {
       agent: { default: async () => "unexpected-agent" },
       provider: { default: async () => ({ providerID: "unexpected", modelID: "unexpected" }) },
       revert: { cleanup: async () => {} },
-      compaction: { create: async () => {} },
+      compaction: { create: async () => "external" as const },
       prompt: { loop: async () => {} },
     })
     const sender = RemoteSender.create({

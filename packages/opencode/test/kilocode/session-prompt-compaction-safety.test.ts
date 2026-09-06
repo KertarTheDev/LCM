@@ -4,7 +4,7 @@
 
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { describe, expect } from "bun:test"
+import { describe, expect, spyOn } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { Agent as AgentSvc } from "../../src/agent/agent"
@@ -48,6 +48,7 @@ import { Snapshot } from "../../src/snapshot"
 import { ToolRegistry } from "../../src/tool/registry"
 import { Truncate } from "../../src/tool/truncate"
 import { KiloSessions } from "../../src/kilo-sessions/kilo-sessions"
+import { LCM_RECOVERY_AGENT } from "../../src/kilocode/session/lcm/recovery-contract"
 import * as Log from "@opencode-ai/core/util/log"
 import { MemoryService } from "@kilocode/kilo-memory/effect/service"
 import { provideTmpdirServer } from "../fixture/fixture"
@@ -211,6 +212,10 @@ const cfg = {
 function providerCfg(url: string) {
   return {
     ...cfg,
+    // This upstream-owned suite verifies legacy compaction behavior. LCM is
+    // enabled by default, so opt out explicitly instead of accidentally
+    // exercising the LCM overflow path with legacy call-count assertions.
+    experimental: { conversation_memory: false },
     provider: {
       ...cfg.provider,
       test: {
@@ -319,6 +324,77 @@ const file = Effect.fn("prompt-safety.file")(function* (
 })
 
 describe("SessionPrompt compaction safety", () => {
+  it.live("preserves single-turn hidden recovery evidence with normal pruning enabled", () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const root = yield* sessions.create({ title: "Parent" })
+        const chat = yield* sessions.create({ parentID: root.id, title: "Private recovery" })
+        const request = yield* user(chat.id, "Recover the earlier detail")
+        yield* sessions.updateMessage({ ...request, agent: LCM_RECOVERY_AGENT })
+        const outputs = ["exact-private-evidence".repeat(120_000), "recent-one", "recent-two"]
+        for (const output of outputs) {
+          const response = yield* assistant(chat.id, request.id, { finish: "tool-calls" })
+          yield* sessions.updateMessage({
+            ...response,
+            agent: LCM_RECOVERY_AGENT,
+            time: { ...response.time, completed: Date.now() },
+          })
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            sessionID: chat.id,
+            messageID: response.id,
+            type: "tool",
+            callID: crypto.randomUUID(),
+            tool: "lcm_read",
+            state: {
+              status: "completed",
+              input: {},
+              output,
+              title: "Private evidence",
+              metadata: {},
+              time: { start: Date.now(), end: Date.now() },
+            },
+          })
+        }
+        yield* llm.text("Recovered detail")
+        const compaction = yield* SessionCompaction.Service
+        const prune = spyOn(compaction, "prune")
+        let pruneCalls = 0
+        const result = yield* prompt.loop({ sessionID: chat.id }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              pruneCalls = prune.mock.calls.length
+              prune.mockRestore()
+            }),
+          ),
+        )
+        expect(pruneCalls).toBe(0)
+        expect(result.parts.some((part) => part.type === "text" && part.text === "Recovered detail")).toBe(true)
+        expect(yield* llm.calls).toBe(1)
+        const body = JSON.stringify((yield* llm.inputs).at(-1)?.messages)
+        expect(body).toContain(outputs[0])
+        expect(body).not.toContain("[Old tool result content cleared]")
+        const messages = yield* sessions.messages({ sessionID: chat.id })
+        expect(
+          messages
+            .flatMap((message) => message.parts)
+            .filter((part) => part.type === "tool")
+            .map((part) => part.state.status === "completed" && !!part.state.time.compacted),
+        ).toEqual([false, false, false])
+      }),
+      {
+        git: true,
+        config: (url) => ({
+          ...providerCfg(url),
+          experimental: { conversation_memory: true },
+          compaction: { auto: false, prune: true },
+        }),
+      },
+    ),
+  )
+
   it.live("prunes a single-turn subagent payload before the provider request", () =>
     provideTmpdirServer(
       Effect.fnUntraced(function* ({ llm }) {
@@ -670,6 +746,55 @@ describe("SessionPrompt recovery", () => {
         )
         expect(empty).toHaveLength(0)
         expect(msgs.some((msg) => msg.info.id === stale.id)).toBe(false)
+      }),
+      { git: true, config: providerCfg },
+    ),
+  )
+
+  it.live("terminalizes a persisted running recovery tool before replying", () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Prompt tool recovery" })
+        const first = yield* user(chat.id, "Before the interrupted recovery")
+        const stale = yield* dangling(chat.id, first.id)
+        const tool = yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: stale.id,
+          sessionID: chat.id,
+          type: "tool",
+          callID: "call_interrupted_recovery",
+          tool: "lcm_query",
+          state: {
+            status: "running",
+            input: { question: "What was decided earlier?" },
+            time: { start: Date.now() - 1_000 },
+            metadata: { isolatedSessionID: "ses_interrupted_recovery" },
+          },
+        } satisfies MessageV2.ToolPart)
+
+        yield* llm.text("recovered after restart")
+        const result = yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          parts: [{ type: "text", text: "Continue after the interrupted recovery" }],
+        })
+
+        expect(result.parts.some((part) => part.type === "text" && part.text === "recovered after restart")).toBe(true)
+        const msgs = yield* sessions.messages({ sessionID: chat.id })
+        const recovered = msgs
+          .find((message) => message.info.id === stale.id)
+          ?.parts.find((part) => part.id === tool.id)
+        expect(recovered?.type).toBe("tool")
+        if (recovered?.type !== "tool") throw new Error("expected recovered tool part")
+        expect(recovered.state.status).toBe("error")
+        if (recovered.state.status !== "error") throw new Error("expected interrupted error state")
+        expect(recovered.state.metadata?.interrupted).toBe(true)
+        const recoveredMessage = msgs.find((message) => message.info.id === stale.id)
+        expect(recoveredMessage?.info.role).toBe("assistant")
+        if (recoveredMessage?.info.role !== "assistant") throw new Error("expected recovered assistant message")
+        expect(recoveredMessage.info.time.completed).toBeNumber()
       }),
       { git: true, config: providerCfg },
     ),

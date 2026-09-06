@@ -28,6 +28,11 @@ import { KiloSessionOverflow } from "@/kilocode/session/overflow"
 import { KiloRoutedModel } from "@/kilocode/session/routed-model"
 import { KiloResponseMetadata } from "@/kilocode/session/response-metadata"
 import { Suggestion } from "@/kilocode/suggestion"
+import {
+  isLcmInternalRecoveryTool,
+  isLcmRecoveryAgent,
+  LCM_RECOVERY_INVALID_TOOL_INPUT_METADATA,
+} from "@/kilocode/session/lcm/recovery-contract"
 // kilocode_change end
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
@@ -70,6 +75,8 @@ type Input = {
   // kilocode_change start
   telemetry?: ReviewTelemetry
   snapshotInitialization?: "wait"
+  /** Selects who owns automatic context maintenance around the provider request. */
+  contextManagement?: "upstream" | "external"
   // kilocode_change end
 }
 
@@ -127,12 +134,16 @@ const layer = Layer.effect(
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
       // may execute tools internally before emitting start-step events,
       // so capturing inside the event handler can be too late.
-      // kilocode_change start - pass turn context for slow-snapshot UI/policy handling
-      const initialSnapshot = yield* snapshot.track({
-        sessionID: input.sessionID,
-        messageID: input.assistantMessage.id,
-        snapshotInitialization: input.snapshotInitialization,
-      })
+      // kilocode_change start - pass turn context for slow-snapshot UI/policy handling; read-only LCM workers
+      // cannot mutate the workspace, so scanning it adds no undo state and can evict useful provider/runtime pages.
+      const trackWorkspace = !isLcmRecoveryAgent(input.assistantMessage.agent)
+      const initialSnapshot = trackWorkspace
+        ? yield* snapshot.track({
+            sessionID: input.sessionID,
+            messageID: input.assistantMessage.id,
+            snapshotInitialization: input.snapshotInitialization,
+          })
+        : undefined
       // kilocode_change end
       const ctx: ProcessorContext = {
         assistantMessage: input.assistantMessage,
@@ -149,6 +160,7 @@ const layer = Layer.effect(
         reasoningMap: {},
         // kilocode_change start
         telemetry: input.telemetry,
+        contextManagement: input.contextManagement,
         stepStart: 0,
         stepStartDate: undefined,
         step: { reasoning: false, text: false, tool: false },
@@ -294,6 +306,13 @@ const layer = Layer.effect(
       const failToolCall = Effect.fn("SessionProcessor.failToolCall")(function* (toolCallID: string, error: unknown) {
         const match = yield* readToolCall(toolCallID)
         if (!match || match.part.state.status !== "running") return false
+        // kilocode_change start - identify private schema failures at the typed processor boundary so recovery can
+        // stop a malformed-call loop without parsing error prose from persisted history
+        const invalidRecoveryInput =
+          isLcmRecoveryAgent(ctx.assistantMessage.agent) &&
+          isLcmInternalRecoveryTool(match.part.tool) &&
+          KiloSessionProcessor.invalidToolInput(error)
+        // kilocode_change end
         yield* session.updatePart({
           ...match.part,
           state: {
@@ -301,7 +320,11 @@ const layer = Layer.effect(
             input: match.part.state.input,
             error: errorMessage(error),
             // Keep metadata streamed while running so failures retain progress detail (e.g. execute's child calls).
-            metadata: match.part.state.metadata,
+            // kilocode_change start
+            metadata: invalidRecoveryInput
+              ? { ...match.part.state.metadata, [LCM_RECOVERY_INVALID_TOOL_INPUT_METADATA]: true }
+              : match.part.state.metadata,
+            // kilocode_change end
             time: { start: match.part.state.time.start, end: Date.now() },
           },
         })
@@ -568,7 +591,7 @@ const layer = Layer.effect(
             ctx.stepStart = performance.now()
             ctx.stepStartDate = Date.now()
             ctx.step = { reasoning: false, text: false, tool: false }
-            if (!ctx.snapshot)
+            if (trackWorkspace && !ctx.snapshot)
               ctx.snapshot = yield* snapshot.track({
                 sessionID: ctx.sessionID,
                 messageID: ctx.assistantMessage.id,
@@ -601,11 +624,13 @@ const layer = Layer.effect(
               )
             // kilocode_change end
             // kilocode_change start - pass turn context for slow-snapshot UI/policy handling
-            const completedSnapshot = yield* snapshot.track({
-              sessionID: ctx.sessionID,
-              messageID: ctx.assistantMessage.id,
-              snapshotInitialization: input.snapshotInitialization,
-            })
+            const completedSnapshot = trackWorkspace
+              ? yield* snapshot.track({
+                  sessionID: ctx.sessionID,
+                  messageID: ctx.assistantMessage.id,
+                  snapshotInitialization: input.snapshotInitialization,
+                })
+              : undefined
             // kilocode_change end
             yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
             const usage = Session.getUsage({
@@ -706,6 +731,7 @@ const layer = Layer.effect(
               })
               .pipe(Effect.ignore, Effect.forkIn(scope))
             if (
+              ctx.contextManagement !== "external" && // kilocode_change - LCM owns post-response pressure checks
               !ctx.assistantMessage.summary &&
               // kilocode_change start
               isOverflow({
@@ -873,6 +899,12 @@ const layer = Layer.effect(
         ctx.compactionError = MessageV2.ContextOverflowError.isInstance(error) ? error : ctx.compactionError
         // kilocode_change end
         if (MessageV2.ContextOverflowError.isInstance(error)) {
+          // kilocode_change start - external context management still needs the processor's ordinary overflow signal
+          if (ctx.contextManagement === "external" && !ctx.assistantMessage.summary) {
+            ctx.needsCompaction = true
+            return
+          }
+          // kilocode_change end
           // respect compaction.auto === false by surfacing overflow as a hard error instead of auto-compacting
           if ((yield* config.get()).compaction?.auto === false && !ctx.assistantMessage.summary) {
             ctx.assistantMessage.error = error
@@ -941,7 +973,7 @@ const layer = Layer.effect(
               ctx.step = { reasoning: false, text: false, tool: false }
               const stream = llm.stream({
                 ...streamInput,
-                preflight: !ctx.assistantMessage.summary,
+                preflight: ctx.contextManagement !== "external" && !ctx.assistantMessage.summary, // kilocode_change
               })
 
               yield* stream.pipe(

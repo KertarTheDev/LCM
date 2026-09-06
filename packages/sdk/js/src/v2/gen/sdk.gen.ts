@@ -71,6 +71,12 @@ import type {
   ConfigUpdateResponses,
   ConfigWarningsErrors,
   ConfigWarningsResponses,
+  ConversationMemoryActivityErrors,
+  ConversationMemoryActivityResponses,
+  ConversationMemoryExportErrors,
+  ConversationMemoryExportResponses,
+  ConversationMemoryStatusErrors,
+  ConversationMemoryStatusResponses,
   EnhancePromptEnhanceErrors,
   EnhancePromptEnhanceResponses,
   EventSubscribeResponse,
@@ -6557,6 +6563,120 @@ export class CommitMessage extends HeyApiClient {
   }
 }
 
+export class ConversationMemory extends HeyApiClient {
+  /**
+   * Get conversation context status
+   *
+   * Return current context pressure, composition, background work, and memory-work usage.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ConversationMemoryStatusResponses,
+      ConversationMemoryStatusErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/lcm/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List conversation context activity
+   *
+   * Return a cursor-paged timeline of context preparation and projection activity.
+   */
+  public activity<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      cursor?: string
+      limit?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ConversationMemoryActivityResponses,
+      ConversationMemoryActivityErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/lcm/activity",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Export normalized conversation context
+   *
+   * Download a redacted ZIP containing intervention frames and the latest active model input.
+   */
+  public export<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ConversationMemoryExportResponses,
+      ConversationMemoryExportErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/lcm/context/export",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class EnhancePrompt extends HeyApiClient {
   /**
    * Enhance prompt
@@ -11978,6 +12098,11 @@ export class KiloClient extends HeyApiClient {
   private _commitMessage?: CommitMessage
   get commitMessage(): CommitMessage {
     return (this._commitMessage ??= new CommitMessage({ client: this.client }))
+  }
+
+  private _conversationMemory?: ConversationMemory
+  get conversationMemory(): ConversationMemory {
+    return (this._conversationMemory ??= new ConversationMemory({ client: this.client }))
   }
 
   private _enhancePrompt?: EnhancePrompt

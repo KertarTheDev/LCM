@@ -19,6 +19,17 @@ import { MessageID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as SandboxNetwork from "@/kilocode/sandbox/network" // kilocode_change
 import { run as runSandbox, type Profile } from "@kilocode/sandbox" // kilocode_change
+// kilocode_change start
+import {
+  LCM_INTERNAL_RECOVERY_TOOLS,
+  LCM_QUERY_TOOL,
+  LCM_RECOVERY_AGENT,
+  LCM_RECOVERY_FINALIZER_AGENT,
+} from "@/kilocode/session/lcm/recovery-contract"
+import { BoardContext } from "@/kilocode/board/context"
+import { Permission } from "@/permission"
+import type { MessageV2 } from "@/session/message-v2"
+// kilocode_change end
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
@@ -88,6 +99,9 @@ const websearch = testEffect(
   }),
 )
 const sandboxed = testEffect(registryLayer({ flags: { experimentalLspTool: true } }))
+const withBoard = testEffect(
+  registryLayer({ config: { get: () => Effect.succeed({ experimental: { shared_agent_board: true } }) } }),
+)
 // kilocode_change end
 const withCodeMode = testEffect(
   registryLayer({
@@ -158,8 +172,69 @@ function sandboxProfile(): Profile {
 }
 // kilocode_change end
 
-describe("tool.registry", () => {
+describe("tool.registry", () => { // kilocode_change
   // kilocode_change start
+  it.instance("Conversation Memory isolates parent and recovery-child tool surfaces", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const build = yield* agents.get("build")
+      const recovery = yield* agents.get(LCM_RECOVERY_AGENT)
+      const finalizer = yield* agents.get(LCM_RECOVERY_FINALIZER_AGENT)
+      if (!build || !recovery || !finalizer)
+        return yield* Effect.die(new Error("expected Conversation Memory agents are missing"))
+      const input = {
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+      }
+      const parentTools = yield* registry.tools({ ...input, agent: build })
+      const recoveryTools = yield* registry.tools({ ...input, agent: recovery })
+      const finalizerTools = yield* registry.tools({ ...input, agent: finalizer })
+
+      expect(parentTools.map((tool) => tool.id).filter((id) => id.startsWith("lcm_"))).toEqual([LCM_QUERY_TOOL])
+      expect(recoveryTools.map((tool) => tool.id).filter((id) => id.startsWith("lcm_"))).toEqual([
+        ...LCM_INTERNAL_RECOVERY_TOOLS,
+      ])
+      expect(finalizerTools.map((tool) => tool.id).filter((id) => id.startsWith("lcm_"))).toEqual([])
+    }),
+  )
+
+  withBoard.instance("shared board registration and notices respect hidden recovery isolation", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const input = { providerID: ProviderV2.ID.opencode, modelID: ModelV2.ID.make("test") }
+      for (const name of ["ask", LCM_RECOVERY_AGENT, LCM_RECOVERY_FINALIZER_AGENT]) {
+        const agent = yield* agents.get(name)
+        if (!agent) return yield* Effect.die(new Error(`missing agent ${name}`))
+        const tools = yield* registry.tools({ ...input, agent })
+        const disabled = Permission.disabled(tools.map((tool) => tool.id), agent.permission)
+        const visible = tools.map((tool) => tool.id).filter((id) => !disabled.has(id))
+        const session = { id: SessionID.make("ses_lcm_board_isolation"), permission: [] }
+        const user: MessageV2.User = {
+          id: MessageID.ascending(),
+          sessionID: session.id,
+          role: "user",
+          agent: name,
+          time: { created: Date.now() },
+          model: input,
+        }
+        expect(BoardContext.allowed({ session, agent, user })).toBe(name === "ask")
+        if (name === "ask") {
+          expect(visible).toContain("board_read")
+          expect(visible).toContain("board_post")
+          expect(visible).toContain(LCM_QUERY_TOOL)
+        } else {
+          expect(visible).not.toContain("board_read")
+          expect(visible).not.toContain("board_post")
+          expect(visible.filter((id) => id.startsWith("lcm_"))).toEqual(
+            name === LCM_RECOVERY_AGENT ? [...LCM_INTERNAL_RECOVERY_TOOLS] : [],
+          )
+        }
+      }
+    }),
+  )
+
   it.instance("hides websearch for a third-party provider by default", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service

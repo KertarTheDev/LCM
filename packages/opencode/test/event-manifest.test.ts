@@ -4,13 +4,17 @@ import { EventManifest as SchemaEventManifest } from "@opencode-ai/schema/event-
 import { Todo } from "@/session/todo"
 import { EventManifest } from "@/event-manifest"
 import { Drained, Interrupted } from "@opencode-ai/schema/kilocode/session-drain" // kilocode_change
+import { Event as ConversationMemoryEvent } from "@/kilocode/session/lcm/events"
 
 describe("public event manifest", () => {
   test("contains every latest public wire type once", () => {
-    expect(EventManifest.Definitions).toBe(SchemaEventManifest.Definitions)
-    expect(EventManifest.Latest).toBe(SchemaEventManifest.Latest)
+    // kilocode_change start - the application manifest extends the upstream schema with LCM's two live events
+    expect(EventManifest.Definitions.length).toBe(SchemaEventManifest.Definitions.length + 2)
+    expect(EventManifest.Latest.size).toBe(SchemaEventManifest.Latest.size + 2)
+    expect(EventManifest.Latest.get("session.lcm.status")).toBe(ConversationMemoryEvent.Status)
+    expect(EventManifest.Latest.get("session.lcm.activity")).toBe(ConversationMemoryEvent.Activity)
+    // kilocode_change end
     expect(EventManifest.Durable).toBe(SchemaEventManifest.Durable)
-    expect(EventManifest.Latest.size).toBe(92) // kilocode_change - include session drain events
     expect(EventManifest.Latest.get("session.drained")).toBe(Drained) // kilocode_change
     expect(EventManifest.Latest.get("session.drain.interrupted")).toBe(Interrupted) // kilocode_change
     expect(EventManifest.Latest.get("session.next.step.ended")).toBe(SessionEvent.Step.Ended)

@@ -8,12 +8,14 @@ import { buildChatSettingsMessage } from "./chat-settings"
 import { buildThroughputSettingMessage } from "./throughput-settings"
 import { buildAutoApprovalReasonSettingMessage } from "./auto-approval-reason-settings"
 import { handleModelUsageMessage, type ModelUsageMessage } from "./model-usage"
+import { routeConversationMemoryMessage } from "./conversation-memory"
 
 type Ctx = {
   question: SuggestionContext
   client: KiloClient | null
   connection: KiloConnectionService
   dir: string
+  resolveDir: (sessionID?: string) => string
   post: (msg: unknown) => void
   browserSettings: () => void
   exportTranscript: (sessionID: string) => Promise<void>
@@ -67,6 +69,45 @@ function isResume(input: { sessionID?: unknown; messageID?: unknown; requestID?:
   )
 }
 
+async function routeRemainingMessage(
+  message: { type: string; id?: unknown; text?: unknown; state?: unknown },
+  ctx: Ctx,
+): Promise<boolean> {
+  if (await routeConversationMemoryMessage(message, ctx)) return true
+  if (message.type === "sidebar.openSessions") {
+    const input = message as { sessionIDs?: unknown }
+    const ids = Array.isArray(input.sessionIDs)
+      ? input.sessionIDs.filter((id): id is string => typeof id === "string")
+      : []
+    ctx.openSessions(ids)
+    return true
+  }
+  if (message.type === "requestChatSettings") {
+    ctx.post(buildChatSettingsMessage())
+    return true
+  }
+  if (message.type === "requestThroughputSetting") {
+    ctx.post(buildThroughputSettingMessage())
+    return true
+  }
+  if (message.type === "requestAutoApprovalReasonSetting") {
+    ctx.post(buildAutoApprovalReasonSettingMessage())
+    return true
+  }
+  if (message.type === "requestSpeechToTextModels") {
+    await ctx.speechToTextModels()
+    return true
+  }
+  if (message.type === "requestBrowserSettings") {
+    ctx.browserSettings()
+    return true
+  }
+  const background = await routeBackgroundMessage(message, ctx)
+  return (
+    background ?? (await routeInputToolMessage(message, { connection: ctx.connection, dir: ctx.dir, post: ctx.post }))
+  )
+}
+
 export async function routeEarlyMessage(
   message: { type: string; id?: unknown; text?: unknown; state?: unknown },
   ctx: Ctx,
@@ -111,36 +152,5 @@ export async function routeEarlyMessage(
     ctx.activity(message.state)
     return true
   }
-  if (message.type === "sidebar.openSessions") {
-    const input = message as { sessionIDs?: unknown }
-    const ids = Array.isArray(input.sessionIDs)
-      ? input.sessionIDs.filter((id): id is string => typeof id === "string")
-      : []
-    ctx.openSessions(ids)
-    return true
-  }
-  if (message.type === "requestChatSettings") {
-    ctx.post(buildChatSettingsMessage())
-    return true
-  }
-  if (message.type === "requestThroughputSetting") {
-    ctx.post(buildThroughputSettingMessage())
-    return true
-  }
-  if (message.type === "requestAutoApprovalReasonSetting") {
-    ctx.post(buildAutoApprovalReasonSettingMessage())
-    return true
-  }
-  if (message.type === "requestSpeechToTextModels") {
-    await ctx.speechToTextModels()
-    return true
-  }
-  if (message.type === "requestBrowserSettings") {
-    ctx.browserSettings()
-    return true
-  }
-  const background = await routeBackgroundMessage(message, ctx)
-  return (
-    background ?? (await routeInputToolMessage(message, { connection: ctx.connection, dir: ctx.dir, post: ctx.post }))
-  )
+  return routeRemainingMessage(message, ctx)
 }

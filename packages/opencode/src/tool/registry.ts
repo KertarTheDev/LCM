@@ -78,6 +78,7 @@ import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
 import { InstanceRef } from "@/effect/instance-ref" // kilocode_change
+import { ConversationMemory } from "@/kilocode/session/lcm/service" // kilocode_change
 
 export function webSearchEnabled(
   providerID: ProviderV2.ID,
@@ -541,6 +542,7 @@ export const node = LayerNode.suspend(() =>
       Notebook.node,
       RepositoryCache.node,
       KiloSessions.node,
+      ConversationMemory.node,
     ],
   }),
 )

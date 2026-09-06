@@ -1,6 +1,9 @@
 // Kilo-specific translations and overrides
 // Keys here will override any matching keys from upstream translations
+import { conversationMemory } from "./conversation-memory"
+
 export const dict = {
+  ...conversationMemory,
   // Kilo Gateway provider translations
   "provider.connect.kiloGateway.byok.prefix": "For more usage stats, ",
   "provider.connect.kiloGateway.byok.link": "BYOK via Kilo's Gateway",

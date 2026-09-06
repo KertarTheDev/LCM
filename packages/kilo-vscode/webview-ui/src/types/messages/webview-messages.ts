@@ -13,6 +13,7 @@ import type { AnacondaDesktopWebviewMessage } from "../../../../src/shared/anaco
 import type { RequestMigrationDataMessage, StartMigrationMessage } from "./migration"
 import type { MemoryShowMessage, MemoryOperationMessage, RequestMemoryMessage } from "./memory"
 import type { Activity } from "../../utils/session-activity"
+import type { LcmRequest } from "./lcm"
 
 // ============================================
 // Messages FROM webview TO extension
@@ -1596,6 +1597,7 @@ export type WebviewMessage =
   | DeleteSessionRequest
   | RenameSessionRequest
   | ExportSessionTranscriptRequest
+  | LcmRequest
   | RequestAutocompleteSettingsMessage
   | RequestChatCompletionMessage
   | SpeechToTextPrewarmMessage

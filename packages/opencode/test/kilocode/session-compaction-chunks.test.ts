@@ -215,6 +215,14 @@ function fakeRuntime(outputTokenMax?: number, error?: MessageV2.Assistant["error
                     type: "text",
                     text,
                   })
+                input.assistantMessage.cost = 0.25
+                input.assistantMessage.tokens = {
+                  total: 30,
+                  input: 10,
+                  output: 5,
+                  reasoning: 1,
+                  cache: { read: 12, write: 2 },
+                }
                 input.assistantMessage.finish = "stop"
                 return "continue" as const
               }),
@@ -461,6 +469,17 @@ describe("KiloCompactionChunks", () => {
           expect(calls.at(-1)).toContain("Create a new anchored summary")
           expect(summaries).toHaveLength(1)
           expect(parts.map((part) => part.text)).toEqual(["final summary"])
+          const expected = calls.length
+          expect(summaries[0].info).toMatchObject({
+            cost: expected * 0.25,
+            tokens: {
+              total: expected * 30,
+              input: expected * 10,
+              output: expected * 5,
+              reasoning: expected,
+              cache: { read: expected * 12, write: expected * 2 },
+            },
+          })
         } finally {
           await rt.dispose()
         }
@@ -698,6 +717,7 @@ describe("KiloCompactionChunks", () => {
 
           const all = await svc.messages({ sessionID: session.id })
           const replay = all.findLast((msg) => msg.info.role === "user" && msg.info.id !== large.id)
+          const summary = all.find((msg) => msg.info.role === "assistant" && msg.info.summary)
           const part = replay?.parts.find((part): part is MessageV2.TextPart => part.type === "text")
 
           expect(result).toBe("continue")
@@ -705,6 +725,10 @@ describe("KiloCompactionChunks", () => {
           expect(calls[0]).toContain("Summarize conversation chunk 1 of 1")
           expect(part?.text).toContain("compacted representation")
           expect(part?.text).toContain("replay summary")
+          expect(summary?.info).toMatchObject({
+            cost: 0,
+            tokens: { total: 4, input: 2, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+          })
         } finally {
           await rt.dispose()
         }

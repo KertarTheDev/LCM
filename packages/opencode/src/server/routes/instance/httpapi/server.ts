@@ -34,6 +34,7 @@ import { Question } from "@/question"
 import { Notebook } from "@/kilocode/notebook/service"
 import { AgentManager } from "@/kilocode/agent-manager/service"
 import { KiloViewers } from "@/kilocode/presence/service"
+import { ConversationMemory } from "@/kilocode/session/lcm/service" // kilocode_change
 // kilocode_change end
 import { SessionCompaction } from "@/session/compaction"
 import { Instruction } from "@/session/instruction"
@@ -271,6 +272,7 @@ const app = LayerNode.group([
   SessionRevert.node,
   SessionSummary.node,
   SessionPrompt.node,
+  ConversationMemory.node, // kilocode_change - expose LCM status and export to typed route handlers
   Instruction.node,
   LLM.node,
   LSP.node,
