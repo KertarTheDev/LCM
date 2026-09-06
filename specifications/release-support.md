@@ -2,9 +2,9 @@
 
 Status: normative v7.5.15 release policy.
 
-## Unpublished reliability changes since v7.5.15-lcm.1
+## Reliability changes in v7.5.15-lcm.2
 
-The next candidate keeps the 60% soft threshold and all recovery defaults unchanged. It is a reliability update,
+This release keeps the 60% soft threshold and all recovery defaults unchanged. It is a reliability update,
 not a claim that those settings are optimal. Its implementation delta adds:
 
 - Summary-scoped recovery preserves the selected summary and immediate branch overview before overlapping lexical
@@ -17,7 +17,7 @@ not a claim that those settings are optimal. Its implementation delta adds:
   full retrieval of a transport range from verified completion of a semantic unit.
 
 Focused regression tests cover these changes. Canonical exact-candidate typechecks, packaging, and publication
-verification remain required before this candidate can replace the recommended download.
+verification passed before this release became the recommended download.
 
 A focused long-session diagnostic improved its four-part answer from two returned entries to four, with three
 matching the audited target instead of one. This is not proof of reliable complete recovery: all six isolated
@@ -29,6 +29,18 @@ remains unresolved. Deep-tree recovery effectiveness and optimal resource settin
 
 No raw-storage schema or derived-cache version changes are introduced by this delta. Kilo SQLite conversations,
 the isolated recovery boundary, answer/citation bounds, and ordinary upstream tools remain unchanged.
+
+The current public prerelease is [v7.5.15-lcm.2](https://github.com/KertarTheDev/LCM/releases/tag/v7.5.15-lcm.2),
+release ID `383604105`, published on 2026-09-06 from candidate
+`a1e7a2aee8f69c6e7512fbe3eb456de8a0ec632c`, containing product
+`8172e9be16ddbcbfebdca32b17eef013ad6a61be` plus its exact 27-path release overlay.
+[Exact-SHA workflow 34037093165](https://github.com/KertarTheDev/LCM/actions/runs/34037093165) succeeded:
+exact product ancestry and overlay validation, focused/adaptation suites, affected-package typechecks, stable
+contract generation, all 12 CLI and eight VSIX builds, and extracted Linux x64 Conversation Memory smoke passed.
+Only the LCM prerelease job ran; unrelated upstream publication jobs were skipped. Independent REST verification
+confirmed the non-draft prerelease, resolved tag/candidate SHA, byte-identical reviewed changelog headed
+`What changed since v7.5.15-lcm.1`, and the exact nonempty 20-asset profile with GitHub SHA-256 digests. Healthy
+older releases were retained; no release or tag was deleted.
 
 ## Published release policy and evidence
 
@@ -70,7 +82,7 @@ of the existing `cancelled | provider_error` union. The correction explicitly bi
 semantic result type without changing runtime behavior. Focused tool contracts and the corrected canonical
 typecheck pass.
 
-The current public prerelease is [v7.5.15-lcm.1](https://github.com/KertarTheDev/LCM/releases/tag/v7.5.15-lcm.1),
+The retained preceding public prerelease is [v7.5.15-lcm.1](https://github.com/KertarTheDev/LCM/releases/tag/v7.5.15-lcm.1),
 release ID `383480404`, published on 2026-09-06 from candidate `db58dc86efafe939c6f0dad26e797c87824c9e0e`
 containing product `88c4db6b45d649e52533b58b2c948541cfdd1669`.
 [Exact-SHA workflow 34014557476](https://github.com/KertarTheDev/LCM/actions/runs/34014557476) succeeded:
