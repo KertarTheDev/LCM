@@ -92,7 +92,7 @@ import {
   trustedStructuralSemanticUnit,
   trustedStructuralVerificationQuestion,
 } from "@/kilocode/tool/lcm-expand-query"
-import type { FinalSource, SummaryNode } from "@/kilocode/session/lcm/types"
+import type { FinalSource, SummaryChild, SummaryNode } from "@/kilocode/session/lcm/types"
 import { Schema } from "effect"
 
 describe("LCM tool contracts", () => {
@@ -1710,6 +1710,69 @@ describe("LCM tool contracts", () => {
     expect(larger).toContain("retained-decisive-passage")
     expect(excerpt.length).toBe(8_000)
     expect(larger.length).toBe(16_000)
+  })
+
+  test("recovers omitted details through summary descendants without admitting a matching sibling branch", () => {
+    const texts = ["The deployment rollback password is cobalt.", "The deployment rollback password is amber."]
+    const sources = texts.map(
+      (text, ordinal): FinalSource => ({
+        id: `src_branch_${ordinal}`,
+        sessionID: "ses_tree_scope",
+        messageID: `msg_${ordinal}`,
+        partID: `part_${ordinal}`,
+        ordinal,
+        kind: "user_text",
+        digest: `digest_${ordinal}`,
+        tokens: 20,
+        bytes: Buffer.byteLength(text),
+        excerpt: text,
+      }),
+    )
+    const summary = (id: string, level: number, firstOrdinal: number, lastOrdinal: number): SummaryNode => ({
+      id,
+      nodeKey: id,
+      sessionID: "ses_tree_scope",
+      level,
+      text: "Earlier operational discussion; specific credentials omitted.",
+      digest: id,
+      sourceDigest: id,
+      tokens: 20,
+      bytes: 80,
+      firstOrdinal,
+      lastOrdinal,
+      generationMode: "normal",
+      createdAt: 1,
+    })
+    const left = summary("sum_left", 0, 0, 0)
+    const right = summary("sum_right", 0, 1, 1)
+    const root = summary("sum_root", 1, 0, 1)
+    const view = {
+      sources: new Map(sources.map((source) => [source.id, source])),
+      summaries: new Map([root, left, right].map((node) => [node.id, node])),
+      children: new Map<string, SummaryChild[]>([
+        [
+          root.id,
+          [
+            { summaryID: root.id, kind: "summary", id: left.id, ordinal: 0 },
+            { summaryID: root.id, kind: "summary", id: right.id, ordinal: 1 },
+          ],
+        ],
+        [left.id, [{ summaryID: left.id, kind: "source" as const, id: sources[0]!.id, ordinal: 0 }]],
+        [right.id, [{ summaryID: right.id, kind: "source" as const, id: sources[1]!.id, ordinal: 0 }]],
+      ]),
+      content: new Map(sources.map((source, index) => [source.id, { metadata: source, content: texts[index]! }])),
+    }
+    const question = "deployment rollback password"
+    const whole = selectQueryExcerpts(view, question, root.id, 4_000)
+    expect(whole.selected.filter((item) => item.kind === "source").map((item) => item.id).sort()).toEqual(
+      sources.map((source) => source.id),
+    )
+    const scoped = selectQueryExcerpts(view, question, left.id, 4_000)
+    expect(scoped.selected.map((item) => item.id).sort()).toEqual([sources[0]!.id, left.id].sort())
+    expect(scoped.selected.some((item) => item.text.includes("cobalt"))).toBe(true)
+    expect(scoped.selected.some((item) => item.text.includes("amber"))).toBe(false)
+    const prior = selectQueryExcerpts(view, question, root.id, 4_000, 0)
+    expect(prior.selected.some((item) => item.id === sources[1]!.id || item.id === right.id)).toBe(false)
   })
 
   test("falls back to a fair active-frontier sample when no record has lexical overlap", () => {
