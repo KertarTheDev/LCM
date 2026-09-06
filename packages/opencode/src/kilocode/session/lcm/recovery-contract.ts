@@ -1252,7 +1252,7 @@ export function lcmQueryBudgetResult(input: {
         attemptLimit: input.attemptLimit,
       },
       output:
-        "No isolated recovery was started because the bounded parent recovery-attempt allowance is exhausted. Do not call lcm_query again or substitute cross-session recall for this current-session recovery in this turn. Answer now from the active context and bounded results already returned, and state any remaining uncertainty.",
+        "No isolated recovery was started because the bounded parent recovery-attempt allowance is exhausted. Do not call lcm_query again or substitute cross-session recall for this current-session recovery in this turn. Continue the task using the active context and bounded results already returned. Ordinary tools remain available; state any remaining uncertainty when relevant.",
     }
   if (input.followupPending)
     return {
@@ -1324,7 +1324,7 @@ export function lcmQueryBudgetResult(input: {
       ? "No new isolated recovery was started because this same question was already attempted in this turn. Use that bounded result and state any remaining uncertainty; only a materially narrower question can justify the remaining query allowance. Do not substitute cross-session recall for this current-session recovery."
       : input.alreadyResolved
         ? "No new isolated recovery was started because the preceding bounded result reported full coverage. Use that result with the active context and answer now instead of starting another child."
-      : "No new isolated recovery was started because the current-session query allowance is exhausted. Do not call lcm_query again or substitute cross-session recall for this current-session recovery in this turn. Answer now from the bounded results already returned and state any remaining uncertainty.",
+      : "No new isolated recovery was started because the current-session query allowance is exhausted. Do not call lcm_query again or substitute cross-session recall for this current-session recovery in this turn. Continue the task using the active context and bounded results already returned. Ordinary tools remain available; state any remaining uncertainty when relevant.",
   }
 }
 

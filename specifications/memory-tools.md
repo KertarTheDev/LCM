@@ -47,21 +47,15 @@ correction receipt directing the next parent step to ask a materially narrower q
 terminal. Separately, every completed or errored parent `lcm_query` call counts toward a hard attempt ceiling equal to
 twice the configured child-start allowance. This leaves one correction opportunity per intended child while bounding
 distinct invalid criteria rewrites, unanchored follow-ups, parallel siblings, and malformed provider calls that do not
-spend a child slot. A rejected final attempt returns the terminal answer-directed sentinel instead of inviting another
+spend a child slot. A rejected final attempt returns a no-child exhaustion sentinel instead of inviting another
 retry. A
 preceding `full` result admits no follow-up. Invalid provider arguments and host-suppressed duplicates do not consume
-an actual-child slot. After the configured number of started child calls complete or fail, the next parent provider
-step is answer-directed: ordinary tools are
-absent and text responses use `toolChoice: none`, but `lcm_query` remains executable as a one-step settlement fallback
-for a provider that ignores that choice and emits a stale call from the prior schema. The fallback returns the no-child
-exhaustion sentinel as a normal completed tool result instead of an unavailable-tool error; synchronous reservation
-prevents another child session. The host then runs one genuinely tool-free answer step. Providers that honor the choice
-answer immediately without the sentinel step. A requested structured response also retains its required final-output
-tool. After the one correction receipt described above, an identical question returns the terminal sentinel without
-spending the narrower-follow-up slot. The sentinel directs the parent to use the prior bounded result and not
-substitute cross-session recall for its current-session query. Thus a tool-seeking model cannot reset the allowance
-through an external continuation, repeat the settlement fallback even with malformed arguments, or transfer the loop
-to another recovery tool.
+an actual-child slot. After the configured number of started child calls complete or fail, further queries cannot
+create another child. A stale query still receives a normal bounded exhaustion result. Recovery budgets govern memory
+work only: they never remove ordinary tools, force a final answer, override upstream tool choice, or terminate the
+parent turn. The parent can continue implementing, inspecting, and testing with its existing context and bounded
+recovery results. Upstream turn completion, cancellation, and agent step limits remain authoritative. Exhaustion
+does not widen raw-memory access or reset the current user turn's allowance.
 
 `lcm_query` creates a hidden read-only child session on the active Kilo provider/model. Only trusted session metadata
 binds that child to the calling parent session; neither the parent model nor the child can select another session. Its

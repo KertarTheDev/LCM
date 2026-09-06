@@ -1755,7 +1755,7 @@ describe("LCM isolated recovery contract", () => {
         attempts: 4,
         attemptLimit: 4,
       },
-      output: expect.stringContaining("Answer now from the active context and bounded results already returned"),
+      output: expect.stringContaining("Continue the task using the active context and bounded results already returned"),
     })
 
     const exhausted = messages([
@@ -1816,7 +1816,7 @@ describe("LCM isolated recovery contract", () => {
         completed: LCM_QUERY_TURN_LIMIT,
         limit: LCM_QUERY_TURN_LIMIT,
       },
-      output: expect.stringContaining("Answer now from the bounded results already returned"),
+      output: expect.stringContaining("Ordinary tools remain available"),
     })
     expect(lcmQueryBudgetResult({ completed: 1, limit: LCM_QUERY_TURN_LIMIT, repeated: true }).output).toContain(
       "Do not substitute cross-session recall",

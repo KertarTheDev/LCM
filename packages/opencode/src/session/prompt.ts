@@ -99,13 +99,8 @@ import * as ConversationMemoryFeature from "@/kilocode/session/lcm/feature" // k
 import * as ConversationMemoryPromptHost from "@/kilocode/session/lcm/prompt-host" // kilocode_change
 import {
   isLcmRecoveryAgent,
-  lcmQueryAnswerOnlyRequired,
-  lcmQuerySettlementFallbackRequired,
-  LCM_QUERY_ANSWER_ONLY_PROMPT,
-  LCM_QUERY_TOOL,
   lcmRecoveryHardStepExceeded,
   lcmRecoveryInvalidToolInputLimitReached, // kilocode_change
-  lcmRecoveryLimits,
   lcmSessionContextManagementEnabled, // kilocode_change
 } from "@/kilocode/session/lcm/recovery-contract" // kilocode_change
 
@@ -1531,7 +1526,6 @@ export const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       let structured: unknown
       let step = 0
-      let lcmQuerySettlementAttempted = false // kilocode_change - bound ignored toolChoice:none recovery to one step
       const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
       while (true) {
@@ -1787,48 +1781,31 @@ export const layer = Layer.effect(
               )
             : undefined
           // kilocode_change end
-          const recoveryLimits = lcmRecoveryLimits(iterationConfig) // kilocode_change
-          // kilocode_change - settle a stale third query before the final tool-free answer when a provider ignores none
-          const lcmQueryAnswerOnly = conversationMemoryEnabled && lcmQueryAnswerOnlyRequired(msgs, recoveryLimits) // kilocode_change
-          const lcmQuerySettlementFallback =
-            conversationMemoryEnabled &&
-            !lcmQuerySettlementAttempted &&
-            lcmQuerySettlementFallbackRequired(msgs, recoveryLimits) // kilocode_change
-          const tools =
-            lcmQueryAnswerOnly && !lcmQuerySettlementFallback // kilocode_change
-              ? {}
-              : yield* SessionTools.resolve({
-                  agent,
-                  session,
-                  model,
-                  processor: handle,
-                  bypassAgentCheck,
-                  messages: msgs,
-                  promptOps,
-                  memoryCache, // kilocode_change
-                  notify, // kilocode_change
-                }).pipe(
-                  Effect.provideService(Plugin.Service, plugin),
-                  Effect.provideService(Permission.Service, permission),
-                  Effect.provideService(Agent.Service, agents), // kilocode_change
-                  Effect.provideService(Session.Service, sessions), // kilocode_change
-                  Effect.provideService(ToolRegistry.Service, registry),
-                  Effect.provideService(MCP.Service, mcp),
-                  Effect.provideService(Truncate.Service, truncate),
-                  // kilocode_change start - provide services used by session tool resolution
-                  Effect.provideService(Config.Service, config),
-                  Effect.provideService(Provider.Service, provider),
-                  Effect.provideService(Database.Service, database),
-                  Effect.provideService(RuntimeFlags.Service, flags),
-                  // kilocode_change end
-                )
-          // kilocode_change start - a provider that ignores toolChoice:none may emit the already-advertised query;
-          // keep only that tool for one settlement step so its host budget sentinel cannot become an unavailable-tool
-          // error that ends the turn and resets the allowance through an external continuation.
-          if (lcmQuerySettlementFallback) {
-            for (const name of Object.keys(tools)) if (name !== LCM_QUERY_TOOL) delete tools[name]
-          }
-          // kilocode_change end
+          const tools = yield* SessionTools.resolve({
+            agent,
+            session,
+            model,
+            processor: handle,
+            bypassAgentCheck,
+            messages: msgs,
+            promptOps,
+            memoryCache, // kilocode_change
+            notify, // kilocode_change
+          }).pipe(
+            Effect.provideService(Plugin.Service, plugin),
+            Effect.provideService(Permission.Service, permission),
+            Effect.provideService(Agent.Service, agents), // kilocode_change
+            Effect.provideService(Session.Service, sessions), // kilocode_change
+            Effect.provideService(ToolRegistry.Service, registry),
+            Effect.provideService(MCP.Service, mcp),
+            Effect.provideService(Truncate.Service, truncate),
+            // kilocode_change start - provide services used by session tool resolution
+            Effect.provideService(Config.Service, config),
+            Effect.provideService(Provider.Service, provider),
+            Effect.provideService(Database.Service, database),
+            Effect.provideService(RuntimeFlags.Service, flags),
+            // kilocode_change end
+          )
 
           if (lastUser.format?.type === "json_schema") {
             tools["StructuredOutput"] = createStructuredOutputTool({
@@ -1899,7 +1876,6 @@ export const layer = Layer.effect(
           // kilocode_change start - LCM projects only after upstream has finalized every protected prompt lane
           const finalStepMessages = [
             ...KiloSessionContinuation.context(!!input.resume && step === 1),
-            ...(lcmQueryAnswerOnly ? [{ role: "assistant" as const, content: LCM_QUERY_ANSWER_ONLY_PROMPT }] : []),
             ...(isLastStep ? [{ role: "user" as const, content: MAX_STEPS_PROMPT }] : []),
           ]
           const requestMessages = [...modelMsgs, ...finalStepMessages]
@@ -1944,9 +1920,7 @@ export const layer = Layer.effect(
             messages: preparedRequest.messages, // kilocode_change - unchanged upstream input or an exact-lineage LCM frontier
             tools,
             model,
-            // kilocode_change start - require structured output when requested and keep the parent answer gate tool-free
-            toolChoice: format.type === "json_schema" ? "required" : lcmQueryAnswerOnly ? "none" : undefined,
-            // kilocode_change end
+            toolChoice: format.type === "json_schema" ? "required" : undefined,
             // kilocode_change start - feed the provider-reported context size from the last finished
             // turn into the output-token cap, so image/vision input is measured by the provider
             // rather than by encoded payload bytes (see KiloLLM.capOutputTokens). Summary messages
@@ -2072,23 +2046,6 @@ export const layer = Layer.effect(
           }
           conversationMemoryState.overflowRetry = undefined // kilocode_change
           yield* preparedRequest.complete(true) // kilocode_change - successful provider settlement proves consumption
-          // kilocode_change start - detect the actual fallback call rather than trusting finish_reason: some providers
-          // report stop even when they emitted a tool call. Continue at most once so the next step is genuinely
-          // tool-free; malformed calls also remain bounded by the request-local attempted flag.
-          if (lcmQueryAnswerOnly) {
-            const lcmQuerySettlementToolCalled =
-              lcmQuerySettlementFallback &&
-              (yield* MessageV2.parts(msg.id).pipe(
-                Effect.provideService(Database.Service, database),
-                Effect.orDie,
-              )).some((part) => part.type === "tool" && part.tool === LCM_QUERY_TOOL)
-            if (lcmQuerySettlementToolCalled) {
-              lcmQuerySettlementAttempted = true
-              return "continue" as const
-            }
-            return "break" as const
-          }
-          // kilocode_change end
           // kilocode_change start — break out so a newer queued prompt can take over
           // instead of starting another LLM step for the now-superseded turn. The
           // current handle.process has fully drained (tokens + inline tool calls) by

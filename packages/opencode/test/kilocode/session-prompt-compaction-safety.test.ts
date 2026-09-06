@@ -324,6 +324,50 @@ const file = Effect.fn("prompt-safety.file")(function* (
 })
 
 describe("SessionPrompt compaction safety", () => {
+  it.live("continues ordinary tool work after exhausting the memory query budget", () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ permission: [{ permission: "*", pattern: "*", action: "allow" }] })
+        const request = yield* user(chat.id, "Find the implementation files using the recovered requirements")
+        for (const question of ["What retry policy was agreed?", "What logging format was agreed?"]) {
+          const response = yield* assistant(chat.id, request.id, { finish: "tool-calls" })
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            sessionID: chat.id,
+            messageID: response.id,
+            type: "tool",
+            callID: crypto.randomUUID(),
+            tool: "lcm_query",
+            state: {
+              status: "completed",
+              input: { question },
+              output: "Recovered the relevant requirement.",
+              title: "Recovered requirement",
+              metadata: { isolatedSessionID: SessionID.make(`ses_${crypto.randomUUID()}`), coverage: "full" },
+              time: { start: Date.now(), end: Date.now() },
+            },
+          })
+        }
+        yield* llm.push(reply().tool("glob", { pattern: "*.ts" }).finish("tool_calls"))
+        yield* llm.text("File inspection complete")
+        const result = yield* prompt.loop({ sessionID: chat.id })
+        expect(yield* llm.calls).toBe(2)
+        expect(result.parts.some((part) => part.type === "text" && part.text === "File inspection complete")).toBe(true)
+        const parts = (yield* sessions.messages({ sessionID: chat.id })).flatMap((message) => message.parts)
+        expect(
+          parts.some((part) => part.type === "tool" && part.tool === "glob" && part.state.status === "completed"),
+        ).toBe(true)
+        expect(parts.filter((part) => part.type === "tool" && part.tool === "lcm_query")).toHaveLength(2)
+      }),
+      {
+        git: true,
+        config: (url) => ({ ...providerCfg(url), experimental: { conversation_memory: true } }),
+      },
+    ),
+  )
+
   it.live("preserves single-turn hidden recovery evidence with normal pruning enabled", () =>
     provideTmpdirServer(
       Effect.fnUntraced(function* ({ llm }) {

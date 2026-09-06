@@ -150,10 +150,8 @@ Acceptance must prove:
   first-through-twelfth ordinal word,
   allow one materially narrower semantic boundary check when lexical or single-range evidence cannot exclude an
   omitted event, reject another child after full coverage, a no-child completed exhaustion sentinel for stale or
-  repeated provider calls, an answer-directed
-  transition after the configured number of real queries, one executable sentinel fallback when a provider ignores
-  `toolChoice: none`, and exactly one subsequent genuinely tool-free answer
-  step when that fallback is used, including a hard one-attempt bound for malformed fallback calls;
+  repeated provider calls, continued ordinary tool use after the configured number of real queries,
+  unchanged upstream tool choice and turn completion, and no additional hidden child after budget exhaustion;
   no raw primitive result or finalizer transcript may enter the parent transcript;
 - structured hierarchical event proposals bind every scalar value to one cited exact quote, reject missing or
   unverifiable event records, sort surviving records by exact source position, and select bounded first/last/Nth

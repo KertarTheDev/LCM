@@ -193,17 +193,11 @@ immediately; a partial result permits a narrower `lcm_query` only when its named
 instructs the parent to combine bounded recovery with its projected active context; recovery supplements rather than
 replaces independently supported visible facts, including when a partial or empty child answer omits them. The host
 enforces the configured actual-child allowance per parent user turn, defaulting to two, including synchronous
-reservation across parallel calls. After that many started calls, the next parent provider step is answer-directed
-with `toolChoice: none`; ordinary tools are removed, but `lcm_query` remains executable as a one-step settlement
-fallback for providers that ignore the choice and emit a
-stale call from the prior schema. Such a call returns the no-child exhaustion sentinel with answer-now guidance instead
-of an unavailable-tool error, never creates another child, and is followed by one genuinely tool-free answer step.
-Providers that honor the choice answer immediately without that sentinel step. Structured output also retains its
-required final-output tool. A repeated normalized question returns the same sentinel without spending the
-narrower-follow-up slot and says not to substitute cross-session recall. The host ends the completed answer step, so
-the settlement fallback itself runs at most once even if its arguments are malformed; neither path can loop or reset
-the allowance through an external continuation. Invalid provider arguments do not spend an
-actual-child slot. Hidden research and repair-finalizer sessions and the active parent session are excluded from upstream recall
+reservation across parallel calls. After that many started calls, further queries return a no-child exhaustion result.
+Memory-budget exhaustion must not remove ordinary tools, force an answer-only provider step, or end the parent turn.
+The parent continues its task under upstream tool-choice and turn-completion behavior, using visible context and the
+bounded recovery results already obtained. Invalid provider arguments do not spend an actual-child slot.
+Hidden research and repair-finalizer sessions and the active parent session are excluded from upstream recall
 search and direct reads while LCM is enabled, so only the bounded host-validated result crosses back to the parent.
 Disabled mode retains upstream active-session recall.
 
