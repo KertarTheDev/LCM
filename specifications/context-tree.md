@@ -110,8 +110,9 @@ verification. A lexical hit remains a candidate and a miss excludes only that sp
 remain overlapping evidence. Every hidden primitive preserves raw source-kind provenance so the child can distinguish
 user text, assistant text, reasoning, and tool results while interpreting otherwise similar excerpts.
 
-Explicit non-XML opening/closing markers with the same normalized label are paired into bounded chronological units
-when the complete unit spans at most 32 transport sources. Range-scoped internal query and grep cannot cross those
+Explicit non-XML opening/closing markers with the same normalized label are paired into bounded chronological units.
+Paired navigation lists use opening-source and opening-byte order, including nested units whose closing order differs.
+Each complete unit is represented when it spans at most 32 transport sources. Range-scoped internal query and grep cannot cross those
 half-open bounds. Repeated deterministic internal grep/read calls suppress duplicate payloads, and parallel primitive
 calls share synchronous reservations keyed to the trusted hidden child session rather than transient message-array
 identity or provider-supplied tool-call IDs. Every optional host execution consumes one reservation. Before the first

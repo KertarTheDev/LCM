@@ -112,6 +112,23 @@ describe("LCM projector", () => {
     ])
   })
 
+  test("orders nested structural units by their openings rather than their closing order", () => {
+    const content = "[START SECTION]\nouter\n[START SECTION]\ninner\n[END SECTION]\nouter end\n[END SECTION]"
+    const anchors = exactStructuralAnchorOccurrences(content).map((anchor) => ({
+      ...anchor,
+      sourceID: "src_nested",
+      ordinal: 4,
+    }))
+    const paired = pairedStructuralUnits({
+      anchors,
+      total: anchors.length,
+      sources: [{ sourceID: "src_nested", ordinal: 4 }],
+    })
+    expect(paired.total).toBe(2)
+    expect(paired.units.map((unit) => unit.opening.byteStart)).toEqual([anchors[0]!.byteStart, anchors[1]!.byteStart])
+    expect(paired.units.map((unit) => unit.closing.byteStart)).toEqual([anchors[3]!.byteStart, anchors[2]!.byteStart])
+  })
+
   test("replaces only the eligible prefix and pins a continuation revision", async () => {
     const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
     const sources = Array.from({ length: 12 }, (_, ordinal) => makeSource(ordinal))

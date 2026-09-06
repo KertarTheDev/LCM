@@ -125,6 +125,14 @@ export function pairedStructuralUnits(structural: StructuralAnchorIndex) {
       })),
     })
   }
+  // Pairing completes inner units first; navigation must retain opening chronology for nested units too.
+  units.sort(
+    (left, right) =>
+      left.opening.ordinal - right.opening.ordinal ||
+      left.opening.byteStart - right.opening.byteStart ||
+      left.closing.ordinal - right.closing.ordinal ||
+      left.closing.byteEnd - right.closing.byteEnd,
+  )
   return { units, total }
 }
 
