@@ -42,10 +42,9 @@ Acceptance must prove:
 - VS Code, `/compact`, TUI, remote, HTTP, and SDK manual affordances invoke exactly one LCM cycle without a transcript
   summary when enabled and the upstream legacy cycle when disabled;
 - one ordinary model-facing `lcm_query`, five hidden child-only primitive handlers, parent cancellation and child-cost
-  propagation, trusted parent-session, original-request semantic authority, and focused-scope binding,
-  deterministic pre-child rejection of detectable initial or follow-up event-status, inclusion/exclusion, and
-  conditional criteria absent from the bounded current user request, with follow-ups also checked against the initial
-  focus, invalid rewrites consuming no child allowance, and a parent-attempt ceiling of twice the configured child
+  propagation, trusted parent-session and focused-question semantic authority, current-task context-only binding,
+  cross-domain first-question prerequisite admission without lexical task matching, and follow-up criteria checks
+  against the initial focus, with invalid follow-up rewrites consuming no child allowance, and a parent-attempt ceiling of twice the configured child
   allowance terminalizing differently worded invalid, unanchored, parallel, or malformed call loops,
   current-lineage/prior-turn isolation, exact hidden-session transcript retention without child-owned LCM
   capture/projection/summary work, stale-tool payload pruning, or legacy overflow compaction, with a provider-limit
@@ -53,8 +52,7 @@ Acceptance must prove:
   calls short-circuiting to bounded tool-free synthesis without consuming the remaining configured research steps or
   guessing repaired semantic arguments, exact
   structured-output capture, host-prefetched frontier-first candidate admission with recovery-balanced byte depth in a
-  one-third/32,000-token initial envelope, focused-scope passage placement distinct from combined original-request
-  candidate ranking, direct acceptance of the evidence-bearing child's valid terminal structured answer even when its
+  one-third/32,000-token initial envelope, focused-question passage placement and candidate ranking, direct acceptance of the evidence-bearing child's valid terminal structured answer even when its
   trusted focused scope differs textually from the original request, nonce-bounded initial and nested historical
   evidence with the trusted assignment after the matching close, honest truncation whenever any
   in-scope record is omitted, up to 64 diverse per-record windows with
@@ -105,8 +103,8 @@ Acceptance must prove:
   65,536-character
   cumulative ledger fairly retaining a 32,768-character initial selected-evidence digest and completed primitive
   outputs without silently losing supported list items, with tool and host-tracked structural-unit labels preserved
-  outside fairly excerpted result bodies, bounded original-request semantic authority that remains
-  separate from the parent-proposed focus and is enforced at initial-query admission as well as inside the child,
+  outside fairly excerpted result bodies, focused-question semantic authority retained across research, private inference, and repair, with the original
+  task remaining context only,
   configurable host-enforced evidence-acquisition step,
   primitive-call, semantic-inference, repair, and phase-time budgets with unchanged conservative defaults, a separately
   timed tool-free synthesis step in the same hidden transcript with structured output required instead of uninterpreted tool
@@ -123,7 +121,7 @@ Acceptance must prove:
   phase-specific deadline observability with the legacy aggregate signal, and zero to six
   host-verified 512-byte UTF-8
   citations; multi-unit exact-scope decomposition, complete single-unit semantic recovery within a
-  two-thirds-of-usable-input 64,000-token preliminary evidence cap, and first/last/both-edge excerpt retention, including original-request semantic authority, explicit
+  two-thirds-of-usable-input 64,000-token preliminary evidence cap, and first/last/both-edge excerpt retention, including focused-question semantic authority, explicit
   single-unit transport-fragment identity, a trusted system-level one-resolved-value contract per requested unit, and result identity through
   fresh-finalizer ledger aggregation; no workspace snapshot scan in either read-only recovery phase while ordinary
   snapshot/undo behavior is retained; supplemental parent synthesis that preserves independently supported projected-context facts when a

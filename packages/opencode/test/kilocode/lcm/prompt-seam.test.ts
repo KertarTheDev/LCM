@@ -72,7 +72,7 @@ describe("LCM prompt seam", () => {
     expect(repair).toBeGreaterThan(locked)
   })
 
-  test("keeps original semantics authoritative across isolated query phases", async () => {
+  test("keeps the focused question authoritative across isolated query phases", async () => {
     const query = await Bun.file(queryPath).text()
     const expandQuery = await Bun.file(expandQueryPath).text()
 
@@ -90,7 +90,7 @@ describe("LCM prompt seam", () => {
     expect(query).toContain("fullCoverageGaps,")
     expect(expandQuery).toContain("semanticQuestion = lcmRecoverySemanticQuestion")
     expect(expandQuery).toContain("query = lcmRecoveryRetrievalQuestion(bound, parentRequest)")
-    expect(expandQuery).toContain("semanticAuthority = parentRequest ?? bound")
+    expect(expandQuery).toContain("semanticAuthority = bound")
     expect(expandQuery).toContain("const sourceRanges = trustedStructuralUnit?.semanticRanges ?? requestedSourceRanges")
     expect(expandQuery).not.toContain("resultInformed = lcmRecoveryResultInformed")
     expect(expandQuery).not.toContain("resultInformedScopeReplay")

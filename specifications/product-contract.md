@@ -95,14 +95,11 @@ summary maintenance, and stale-tool payload pruning for their own short-lived tr
 therefore retains the parent-bound source namespace used by the recovery primitives. A hidden transcript that reaches
 the provider limit fails that phase instead of compacting or projecting a child-owned memory frontier; the recovery
 orchestrator may still use its bounded host-captured ledger in the separate finalizer. Trusted metadata retains
-the bounded original user request as semantic authority and
-the parent's focused question as a narrower requested subpart, entity, time, document, or structural scope, so a
-parent rewrite cannot change the requested verb, qualifiers, inclusion/exclusion rules, event definition, or evidence
-standard. Before starting a child, the host deterministically rejects detectable initial or follow-up additions to
-event-status, inclusion/exclusion, or conditional criteria absent from the current user request; a follow-up is also
-checked against the initial focus. Rejection spends no child allowance, so the parent can retry with scope-only
-narrowing. Initial prefetch and every later private semantic refinement rank records and excerpts with the combined
-focused question and original request; only the focused question controls the narrower structural or passage scope.
+the parent's exact focused recovery question as semantic authority and the bounded current user task as context only.
+The first question may recover a prerequisite not named in that task. Admission does not compare the first question's
+vocabulary or criteria with the task. Retrieval ranking, structural selection, private inference, and citation
+relevance use the focused question; evidence and nested tool arguments cannot rewrite it. The existing narrower
+follow-up policy still compares later questions with the initial focus.
 Subject to
 the configured private semantic-inference allowance, unscoped,
 summary-scoped, and complete single-unit exact `lcm_expand_query` calls may synthesize over selected excerpts. A
@@ -221,9 +218,8 @@ when the prompt API returned the preceding tool transition, rejects an overlong 
 gap strings, supplies a missing partial-coverage gap, and drops invalid
 optional citations without rejecting the remaining answer. If the evidence-bearing child
 does not produce a usable structured result, a fresh tool-free repair child receives only the bounded original request,
-focused scope, and a bounded host-captured evidence ledger. The original request remains authoritative in both hidden
-sessions, while the focused question retains structural selection and within-record passage placement rather than
-widening the repair beyond the requested subpart. Configured repair attempts use structured output
+focused question, and a bounded host-captured evidence ledger. The focused question remains authoritative in both hidden
+sessions and controls structural selection and within-record passage placement; the original task is context only. Configured repair attempts use structured output
 except that the last of two or
 more attempts is a tool-free plain fallback and can return only a bounded partial uncited answer. The host omits
 invalid optional citations rather than copying them or discarding an otherwise supported answer. Citation validation

@@ -112,14 +112,11 @@ when the complete unit spans at most 32 transport sources. Range-scoped internal
 half-open bounds. Repeated deterministic internal grep/read calls suppress duplicate payloads, and parallel primitive
 calls share synchronous reservations keyed to the trusted hidden child session rather than transient message-array
 identity or provider-supplied tool-call IDs. Every optional host execution consumes one reservation. Before the first
-child provider step, the host binds both the focused scope and at most 2,048 characters of the current non-synthetic
-user request to one bounded semantic evidence pass and copies that inert evidence only into the hidden transcript, so
-a recovery-model rewrite cannot drift the trusted assignment. The original request remains authoritative for verbs,
-qualifiers, inclusion and exclusion rules, event definitions, and evidence standards; the focused scope may narrow
-only the requested subpart, entity, time, document, or structural region. The combined text ranks candidate records,
-while the focused scope controls passage placement inside them. The same combined retrieval text is mandatory for
-every later private semantic refinement, so a model-written focus cannot remove an original qualifier from excerpt
-selection. Initial evidence may use one third of usable child
+child provider step, the host binds the focused question as the semantic assignment and copies selected inert
+evidence only into the hidden transcript. Up to 2,048 characters of the non-synthetic current task remain context only.
+A first question may ask for a prerequisite that the task did not name. The focused question controls candidate
+ranking, passage placement, structural selection, and every later private refinement; nested tool arguments cannot
+rewrite it. Initial evidence may use one third of usable child
 input up to 32,000 tokens; later optional
 query results keep their separate 16,000-token cap so both fit in the hidden context. The isolated prefetch admits the
 active frontier before overlapping lexical descendants can consume its bounded candidate allowance, then fairly
@@ -137,7 +134,7 @@ calls needed for unresolved evidence. Independent known scopes may run in one pa
 query per represented unit, preserving unit order; first/last questions reserve the requested edge or both edges in
 bounded excerpts. A per-unit scope that exactly matches the host map carries its trusted unit index into the private
 semantic assignment and back in the result. Its supplied source ranges are identified as transport fragments of that
-single unit, and the nested inference uses the original request's semantics to resolve one unit-level answer rather
+single unit, and the nested inference uses the focused question's semantics to resolve one unit-level answer rather
 than one candidate per transport range. Bounded aggregation therefore cannot reinterpret an internal candidate list
 as multiple unit answers. When research ends after
 a primitive call, the host starts a separately timed tool-free synthesis prompt in the same hidden transcript, with
@@ -159,7 +156,7 @@ reinterpret a lossy prose handoff.
 With defaults this keeps the two-step common transcript path while preserving every research message and primitive
 output outside the parent context. Evidence acquisition defaults to one provider step and 540 seconds. Primary
 same-transcript synthesis and repair share an independent 600-second finalization phase. The trusted child assignment
-always carries the original request as semantic authority and permits the parent question to narrow only its scope, so
+always carries the focused question as semantic authority and the surrounding task as context only, so
 a valid terminal structured answer is not discarded merely because the two natural-language strings differ. An absent
 or invalid structured submission starts a fresh locked repair finalizer. Independently of
 any model-authored research text, the host retains a 32,768-character

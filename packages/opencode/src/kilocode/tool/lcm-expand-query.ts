@@ -2339,7 +2339,7 @@ export const LcmExpandQueryTool = Tool.define(
               throw new LcmToolError("lcm_unavailable", "The trusted isolated recovery question is unavailable.")
             const parentRequest = lcmRecoveryParentRequest({ agent: ctx.agent, session: currentSession })
             query = lcmRecoveryRetrievalQuestion(bound, parentRequest)
-            semanticAuthority = parentRequest ?? bound
+            semanticAuthority = bound
             semanticQuestion = lcmRecoverySemanticQuestion({ agent: ctx.agent, session: currentSession }) ?? bound
           }
           if (query.length < 1 || query.length > 4096)

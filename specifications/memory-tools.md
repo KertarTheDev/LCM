@@ -16,11 +16,9 @@ the first sibling may start: another sibling cannot be a result-informed follow-
 so it receives a non-terminal pending receipt and leaves the follow-up allowance available. A later admitted follow-up
 receives the preceding bounded parent-visible result inside its inert evidence block as provisional research handoff
 and investigates only the newly focused unresolved gap. Trusted child metadata marks this result-informed phase. The
-host compares every initial and follow-up focus with the bounded current user request before child creation. It rejects
-new event-status qualifiers such as `explicit`, `actual`, `successful`, `exact`, `final`, `approved`, `confirmed`, or
-`verified`; new inclusion or exclusion rules such as `only`, `excluding`, `without`, or `non-`; and new `if`,
-`assuming`, `given that`, or `provided that` premises. Follow-ups are additionally checked against the initial focused
-question. A restriction word used only to refer to the requested output or its evidence, such as `values explicitly
+host admits the first focused question independently of the current task's vocabulary or criteria: it may ask for a
+prerequisite needed to carry out that task. The existing follow-up guard compares later questions with the initial
+focused question. A restriction word used only to refer to the requested output or its evidence, such as `values explicitly
 requested`, `final answer`, or `exact source cue`, does not authorize reusing that word as a new event criterion such
 as `explicitly cast`, `final spell`, or `exact action`; the admission guard distinguishes those contexts. Asking for
 optional exact evidence does not itself change the event definition.
@@ -89,25 +87,18 @@ order. When the focused question names a matching structural label, or there is 
 explicitly boundary-sensitive question, the child receives a bounded `hostStructuralScope` with exact ordinals and
 UTF-8 offsets. The prefetch then selects only from the matching raw boundary envelope; overlapping summary labels and
 claims cannot redefine that scope. The main session still receives none of this map or raw evidence. Retrieval uses
-the exact trusted focused scope plus at most 2,048 characters of the current non-synthetic user request. The original
-request is the semantic authority for verbs, qualifiers, inclusion and exclusion rules, event definitions, and
-evidence standards; the focus may narrow only the requested subpart, entity, time, document, or structural region.
-The deterministic pre-child admission guard enforces detectable instances of this rule against both the initial focus
-and any result-informed follow-up; trusted metadata and child prompts remain defense in depth for criteria that cannot
-be classified lexically.
-Their combined text ranks candidate records, while only the focused scope controls passage placement inside a candidate. Both are stored
-in trusted child metadata. The initial pass, including its
+the exact trusted focused question. Up to 2,048 characters of the current non-synthetic user request remain context
+only in trusted child metadata; they do not override the assignment, affect ranking, or add evidence criteria.
+The initial pass, including its
 structural map when present, may use one third of usable model input, capped at 32,000 tokens; later
 optional deterministic child query results use at most one third of usable input and retain a separate 16,000-token
 cap so both can coexist safely in the hidden context.
 The child model synthesizes that evidence and may use scoped navigation or exact grep/read verification. An unscoped,
 summary-scoped, or complete single-unit exact `lcm_expand_query` executed by a child may spend one atomically reserved
 semantic-inference allowance: the existing LCM query runtime gives the active provider/model only the trusted
-original-request-plus-focused-scope assignment and selected excerpts in a fresh tool-free context, then returns a
-concise cited synthesis to the child. Every private semantic refinement also uses the combined focused question and
-original request to rank records and excerpts, so a model-written focus cannot silently remove an original actor,
-verb, qualifier, inclusion rule, or evidence standard from evidence selection. When the exact scope equals one unit from the host structural map, the semantic
-assignment uses the original request alone as semantic authority, states that trusted unit index, and explains that
+focused-question assignment and selected excerpts in a fresh tool-free context, then returns a
+concise cited synthesis to the child. Every private semantic refinement uses the trusted focused question to rank records and excerpts. When the exact scope equals one unit from the host structural map, the semantic
+assignment uses the focused question as semantic authority, states that trusted unit index, and explains that
 every supplied range is a transport fragment of that same unit. If the request asks for one answer per unit, the
 nested inference resolves exactly one answer after considering the complete unit rather than returning one candidate
 per transport range. This cardinality rule is part of the trusted nested query's system prompt, so a cross-unit list in
@@ -220,7 +211,7 @@ defaults of 540, 600, and 60 seconds. The complete limit is their sum; active wo
 reserve. If provider teardown is still running at that boundary, its already-interrupted detached fiber may finish only
 cleanup and accounting; it cannot resume model work or supply a late result to the parent. Expiry returns a normal
 bounded `none` result naming the deadline as unresolved; it does not leave the parent tool pending until the outer
-request is aborted. The host-prefetched semantic evidence base is bound to the original request and focused scope
+request is aborted. The host-prefetched semantic evidence base is bound to the focused question
 stored in trusted child metadata. A child `lcm_expand_query` is optional: the host replaces any recovery-model rewrite
 for deterministic selection with the trusted focus and gives a private semantic inference the trusted combined
 assignment. When `hostStructuralScope.exactEnvelope` is present, a boundary-sensitive refinement
@@ -231,7 +222,7 @@ query. When an exact envelope contains one matched unit, the host recognizes the
 that same trusted unit and canonicalizes private semantic inference to its marker-interior `contentScope`; copying the
 host-authored envelope cannot accidentally lose the unit association. A complete host-matched single-unit scope uses
 trusted structural narrowing for a private semantic inference; the child-controlled query text cannot change either
-the original semantic criteria or the unit association. A clipped unit that lacks that host completeness proof returns
+the focused question's semantic criteria or the unit association. A clipped unit that lacks that host completeness proof returns
 deterministic evidence. Every non-empty exact structural unit whose initial evidence was clipped starts
 with an incomplete host coverage status until a scoped `lcm_expand_query` result covers it; lexical grep/read calls can
 locate candidates but cannot clear that status or certify a full boundary claim. Marker-only boundary records that
@@ -281,13 +272,13 @@ The host validates the newest terminal structured submission persisted in the re
 prompt call returned an earlier tool-transition message. It rejects an overlong answer for isolated rewriting, bounds
 gap strings, supplies a generic gap when partial coverage omitted one, and drops malformed, oversized, or excess
 optional citations before exact lineage validation instead of discarding an otherwise usable answer. It then copies
-only the bounded answer fields. The trusted child assignment already carries the original request as semantic
-authority and permits the parent question to narrow only its scope. A valid terminal structured answer is therefore
+only the bounded answer fields. The trusted child assignment carries the focused question as semantic authority
+and the surrounding task as context only. A valid terminal structured answer is therefore
 accepted even when the two natural-language strings differ or its claimed coverage exceeds host-tracked evidence; the
 host does not discard the evidence-bearing child's synthesis and ask a lossy reviewer to recreate it. A fresh sibling handles an absent or unusable
 evidence-bearing submission. No LCM recovery primitive or ordinary
 tool is available there. Its initial step receives only Kilo's structured-output finalizer, the bounded original
-request as semantic authority, the focused scope, and a cumulative ledger of at most 65,536 characters. A matched host
+request as context only, the authoritative focused question, and a cumulative ledger of at most 65,536 characters. A matched host
 structural scope remains in the bounded initial digest, while the research child's raw tool transcript is deliberately
 absent and only bounded host-captured outputs and any recoverable synthesis enter the ledger. If that
 repair submission is unusable, configured repair attempts continue from that same cumulative ledger. Every attempt
