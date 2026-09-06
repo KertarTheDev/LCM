@@ -2,6 +2,36 @@
 
 Status: normative v7.5.15 release policy.
 
+## Unpublished reliability changes since v7.5.15-lcm.1
+
+The next candidate keeps the 60% soft threshold and all recovery defaults unchanged. It is a reliability update,
+not a claim that those settings are optimal. Its implementation delta adds:
+
+- Summary-scoped recovery preserves the selected summary and immediate branch overview before overlapping lexical
+  descendants. Bounded summary labels expose tree level, child count, and source span to guide isolated descent.
+- Pressure-triggered soft maintenance gives overdue root promotion a turn before another raw leaf, preventing
+  continuing raw arrivals from starving branch construction without adding below-threshold model work.
+- Structural navigation pairs the complete consumed boundary index before applying display limits and orders nested
+  units by their opening positions. Display truncation no longer silently removes later complete units from pairing.
+- Recovery separates event rank and direction from ordering keys and structural-unit selectors, and distinguishes
+  full retrieval of a transport range from verified completion of a semantic unit.
+
+Focused regression tests cover these changes. Canonical exact-candidate typechecks, packaging, and publication
+verification remain required before this candidate can replace the recommended download.
+
+A focused long-session diagnostic improved its four-part answer from two returned entries to four, with three
+matching the audited target instead of one. This is not proof of reliable complete recovery: all six isolated
+answers remained partial or withheld, the parent guessed one value, and answering took about 39 minutes. Maintained
+context contents also differed between runs, so the score difference cannot be attributed entirely to these fixes.
+One exact-unit semantic analysis succeeded but the outer coverage check still required additional units: natural
+numbered labels do not necessarily narrow the current marker-qualified structural scope. This usability limitation
+remains unresolved. Deep-tree recovery effectiveness and optimal resource settings remain research questions.
+
+No raw-storage schema or derived-cache version changes are introduced by this delta. Kilo SQLite conversations,
+the isolated recovery boundary, answer/citation bounds, and ordinary upstream tools remain unchanged.
+
+## Published release policy and evidence
+
 The product branch remains a direct, narrow augmentation of upstream tag `v7.5.15`
 (`e0ef9096391ebffba8560875665a2d7249ac6dc5`). Correct the product branch with ordinary reviewable commits; do not
 rewrite its published history or replay old LCM branches.
