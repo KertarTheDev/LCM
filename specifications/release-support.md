@@ -12,13 +12,13 @@ authorization or when this document already names its exact tag, release ID, and
 history. Never select a deletion target from `latest` or tag ordering; capture and re-resolve its tag, release ID, and
 candidate SHA immediately before an authorized deletion.
 
-The v7.5.15 candidate is not yet published. It adapts the accumulated v7.5.9 LCM implementation through
+The published v7.5.15 port adapts the accumulated v7.5.9 LCM implementation through
 `fdc590135bc8c909ecad14371411c8235a283a92` directly to the new tag without replaying its commit history. The 60%
 threshold remains a cost-informed research starting point, not a proven optimum. Upstream shared boards, provider
 headers, native-plan permissions, and continued subagent execution after permission denial remain upstream-owned.
 Board tools and notifications remain unavailable to both hidden recovery phases; ordinary agents retain board
 support. Upstream single-turn pruning remains available to ordinary sessions while hidden recovery keeps its exact
-transcript bypass. Release evidence and the new asset manifest remain pending.
+transcript bypass. Verified release evidence and the asset manifest follow below.
 
 The subsequent v7.5.15 corrections restore general-purpose task decomposition. Exhausting memory queries no longer
 removes ordinary tools, forces a final answer, or ends the parent turn. The focused recovery question is the trusted
@@ -37,10 +37,46 @@ source revisions; superseded admission rules in those records are historical fin
 The first v7.5.15 canonical candidate passed the LCM/adaptation and overlay gates but failed the opencode typecheck
 before version selection or draft creation. A semantic-query error branch inferred its reason as `string` instead
 of the existing `cancelled | provider_error` union. The correction explicitly binds that branch to the existing
-semantic result type without changing runtime behavior. Focused tool contracts pass; canonical typecheck and
-publication remain pending on the corrected candidate.
+semantic result type without changing runtime behavior. Focused tool contracts and the corrected canonical
+typecheck pass.
 
-The current public prerelease is `v7.5.9-lcm.1`. It was published on 2026-09-03 from candidate
+The current public prerelease is [v7.5.15-lcm.1](https://github.com/KertarTheDev/LCM/releases/tag/v7.5.15-lcm.1),
+release ID `383480404`, published on 2026-09-06 from candidate `db58dc86efafe939c6f0dad26e797c87824c9e0e`
+containing product `88c4db6b45d649e52533b58b2c948541cfdd1669`.
+[Exact-SHA workflow 34014557476](https://github.com/KertarTheDev/LCM/actions/runs/34014557476) succeeded:
+LCM/adaptation checks, exact 27-path overlay, affected-package typechecks, stable contract generation, all 12 CLI
+and eight VSIX builds, and packaged Linux x64 Conversation Memory smoke passed. Unrelated upstream publication
+jobs were skipped. Independent REST verification confirmed the non-draft prerelease, resolved tag/candidate SHA,
+exact nonempty 20-asset profile, and byte-equivalent reviewed release-note body after outer whitespace normalization.
+Healthy older releases were retained; no release or tag was deleted. No new hosted-model benchmark was run for this
+port, and neither the 60% threshold nor recovery defaults are claimed optimal.
+
+GitHub-reported published asset manifest:
+
+|Asset|Bytes|SHA-256|
+|---|---:|---|
+|kilo-darwin-arm64.zip|52544681|afdeec772832b563e81d7c71d0403363d59e09f841fca8b55a51fd284934fd87|
+|kilo-darwin-x64-baseline.zip|54803267|3181add0ea5fa461071004d561e5b1abab5a0aaecff2d9ae5d25bad1f1bc6c44|
+|kilo-darwin-x64.zip|54803267|e10b1ad3a8af6588918d26419b65aa3de2e1066d6d8ec88e556851249cc123ad|
+|kilo-linux-arm64-musl.tar.gz|69320399|f4043519b52157a0078d6f2e493529809d8011b675da78fc28756755762eebc2|
+|kilo-linux-arm64.tar.gz|67206669|aafc38139cd69d671cb3989268cdb0f14c6b88ea42dcc5b3ef972cc586ed4be2|
+|kilo-linux-x64-baseline-musl.tar.gz|69808493|ea2c3ef697dcbe442e4c6b519f7eb7380a594b2c0fc73adff97034fc1d45defd|
+|kilo-linux-x64-baseline.tar.gz|67443012|985a36bd16438beff8e2cf4d56500460914fd2e936035050f9b35fe4d19e8937|
+|kilo-linux-x64-musl.tar.gz|69808035|609034b35f8b7bb6cdf35dbd99a5e11b4077d6a7fa30c38102419f5d4603ec98|
+|kilo-linux-x64.tar.gz|67442988|32c42c741d5daae2541a4923ae7545501b64f8fcf45d7470b99d9fe38eda4f63|
+|kilo-vscode-alpine-arm64.vsix|118919493|8c0f1bb9944ce3c3ed5256afc2a7b1d231cbf9ced435f2ca606e7ee03a2ec85c|
+|kilo-vscode-alpine-x64.vsix|126131192|cdffc7e6802f91eac70d553a35835fda37eaee7f02e6381700678f87a9a2e399|
+|kilo-vscode-darwin-arm64.vsix|101658925|0ced7a16b009e5c24fcbe723139403b56824aedcb2483e43139309f4acbc3317|
+|kilo-vscode-darwin-x64.vsix|109724657|5fc01f764313d4806f44b0cdf2a446802a9662ec43b4638788875ef5ed2bd6fc|
+|kilo-vscode-linux-arm64.vsix|116762029|cfc556df41211087d589f52158d05e6210c202fe72132b9b5c9bc8a41e19a956|
+|kilo-vscode-linux-x64.vsix|123702848|f43ded4b1d054796eca1a23e881e573d909dcf3d209023ebeab2e1083b7cd34d|
+|kilo-vscode-win32-arm64.vsix|98531773|29d784bf9d4e2e03b8c3d37c0d9abc05d21ba1b43eae7375cec91c983add62de|
+|kilo-vscode-win32-x64.vsix|122573294|ebc26a11aecd1afd4238b62cde0566123a091172082ac462daacf75d48af343a|
+|kilo-windows-arm64.zip|65130442|05fa6885cf8c426152a3a75a2329fc6482e2d4de3bc358058f94402776e24c0d|
+|kilo-windows-x64-baseline.zip|66802703|b41c5d6316655e7264f05b77bea89df85801c65fbe2d28460a864f6fd1a89854|
+|kilo-windows-x64.zip|66802703|535857d01f75572b615a6409eb3854b9a5f3eee3d2058804689cddb089812a8e|
+
+The retained previous public prerelease is `v7.5.9-lcm.1`. It was published on 2026-09-03 from candidate
 `58dfd2fa193b724f9dedc161bef10e122c1962c9`, containing verified product
 `5e7df6a67c55e5c43c2bbbb488df9c7eea2e7b0d`. Exact-SHA workflow run
 [`33737939477`](https://github.com/KertarTheDev/LCM/actions/runs/33737939477) completed successfully. Its LCM job
