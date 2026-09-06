@@ -12,8 +12,7 @@ import { SqliteConversationMemoryStore } from "@/kilocode/session/lcm/store"
 import { SummaryTree } from "@/kilocode/session/lcm/summary-tree"
 import type { FinalSource } from "@/kilocode/session/lcm/types"
 
-function makeSource(ordinal: number): FinalSource {
-  const content = sourceText(ordinal)
+function makeSource(ordinal: number, content = sourceText(ordinal)): FinalSource {
   const digest = sha256(content)
   return {
     id: sourceID({
@@ -127,6 +126,73 @@ describe("LCM projector", () => {
     expect(paired.total).toBe(2)
     expect(paired.units.map((unit) => unit.opening.byteStart)).toEqual([anchors[0]!.byteStart, anchors[1]!.byteStart])
     expect(paired.units.map((unit) => unit.closing.byteStart)).toEqual([anchors[3]!.byteStart, anchors[2]!.byteStart])
+  })
+
+  test("pairs later units independently of the displayed anchor prefix", async () => {
+    const store = SqliteConversationMemoryStore.open({ databasePath: ":memory:" })
+    try {
+      const contents = Array.from({ length: 12 }, (_, ordinal) =>
+        [
+          ...(ordinal === 0 ? Array.from({ length: 40 }, () => "<data>\n</data>") : []),
+          ...(ordinal % 3 === 0 ? ["[START DOCUMENT]"] : []),
+          `record ${ordinal} ${"detail ".repeat(500)}`,
+          ...(ordinal % 3 === 2 ? ["[END DOCUMENT]"] : []),
+        ].join("\n"),
+      )
+      const sources = contents.map((content, ordinal) => makeSource(ordinal, content))
+      const lineage = {
+        sessionID: "ses_project",
+        digest: lineageDigest(sources),
+        sourceCount: sources.length,
+        lastSourceID: sources.at(-1)?.id,
+      }
+      await store.replaceSources({ sessionID: "ses_project", lineage, sources })
+      await new SummaryTree(store).maintain({
+        sessionID: "ses_project",
+        lineage,
+        usableInputTokens: 4_000,
+        maxEligibleOrdinal: 9,
+        targetTokens: 1_600,
+        mode: "hard",
+      })
+      const messages: ModelMessage[] = sources.map((source) => ({
+        role: "user",
+        content: `message ${source.ordinal} ${"raw ".repeat(500)}`,
+      }))
+      const projector = new Projector(store)
+      for (const consumed of [10, 11]) {
+        const result = await projector.project({
+          sessionID: "ses_project",
+          lineage,
+          system: [],
+          messages,
+          tools: {},
+          usableInputTokens: 4_000,
+          thresholdRatio: 0.6,
+          recentTailTokens: 1_000,
+          protectedMessages: messages.slice(10),
+          maxEligibleOrdinal: 9,
+          maxConsumedOrdinal: consumed,
+          sourceContent: new Map(sources.map((source) => [source.id, contents[source.ordinal]!])),
+          continuationID: `msg_current_${consumed}`,
+          reason: "soft",
+          measure,
+        })
+        expect(result.type).toBe("projected")
+        if (result.type !== "projected") throw new Error("expected projection")
+        const memory = result.messages[0]!.content
+        if (typeof memory !== "string") throw new Error("expected string memory projection")
+        expect(memory).toContain(`Structural anchor map truncated: showing 64 of ${consumed === 10 ? 87 : 88}`)
+        const pairedLines = memory.split("\n").filter((line) => line.startsWith("- [START DOCUMENT] →"))
+        expect(pairedLines).toHaveLength(consumed === 10 ? 3 : 4)
+        for (const [index, line] of pairedLines.entries()) {
+          expect(line).toContain(`sources ${sources[index * 3]!.id} through ${sources[index * 3 + 2]!.id}`)
+        }
+        expect(result.messages.slice(1)).toEqual(messages.slice(10))
+      }
+    } finally {
+      store.close()
+    }
   })
 
   test("replaces only the eligible prefix and pins a continuation revision", async () => {

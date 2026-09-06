@@ -112,6 +112,8 @@ user text, assistant text, reasoning, and tool results while interpreting otherw
 
 Explicit non-XML opening/closing markers with the same normalized label are paired into bounded chronological units.
 Paired navigation lists use opening-source and opening-byte order, including nested units whose closing order differs.
+Pairing uses the full consumed boundary index before independently bounding the displayed anchor and paired-unit
+maps. An anchor display limit cannot hide later complete units from pairing or its completeness accounting.
 Each complete unit is represented when it spans at most 32 transport sources. Range-scoped internal query and grep cannot cross those
 half-open bounds. Repeated deterministic internal grep/read calls suppress duplicate payloads, and parallel primitive
 calls share synchronous reservations keyed to the trusted hidden child session rather than transient message-array

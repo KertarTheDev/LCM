@@ -144,10 +144,19 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
         : `Source ${item.source.id} (${item.source.kind}, source ${item.source.ordinal}):\n${item.content}`,
     )
     .join("\n\n")
-  const anchors = structural.anchors.map(
-    (anchor) =>
+  const anchors: string[] = []
+  let anchorBytes = 0
+  for (const anchor of structural.anchors) {
+    const bytes = Buffer.byteLength(
+      `${anchor.sourceID} ${anchor.ordinal} ${anchor.byteStart} ${anchor.byteEnd} ${anchor.marker}\n`,
+    )
+    if (anchors.length >= MAX_STRUCTURAL_ANCHORS || anchorBytes + bytes > MAX_STRUCTURAL_ANCHOR_BYTES) continue
+    anchors.push(
       `- ${anchor.sourceID} (source ${anchor.ordinal}, bytes ${anchor.byteStart}-${anchor.byteEnd}): ${anchor.marker}`,
-  )
+    )
+    anchorBytes += bytes
+  }
+  // Display limits must not hide complete units from pairing or its completeness accounting.
   const paired = pairedStructuralUnits(structural)
   const pairedLines: string[] = []
   let pairedBytes = 0
@@ -171,9 +180,9 @@ function render(items: MemoryItem[], structural: StructuralAnchorIndex) {
           "lcm_query question; its isolated researcher owns exact range construction, semantic interpretation, and",
           "bounded verification. Do not reconstruct or page the raw sources in the main session.",
           ...anchors,
-          ...(structural.anchors.length < structural.total
+          ...(anchors.length < structural.total
             ? [
-                `[Structural anchor map truncated: showing ${structural.anchors.length} of ${structural.total}; lcm_query can recover omitted anchors privately.]`,
+                `[Structural anchor map truncated: showing ${anchors.length} of ${structural.total}; lcm_query can recover omitted anchors privately.]`,
               ]
             : []),
           ...(pairedLines.length > 0
@@ -241,24 +250,16 @@ export class Projector {
     if (input.signal?.aborted || sources.some((source) => !input.sourceContent.has(source.id))) return
 
     const anchors: StructuralAnchor[] = []
-    let bytes = 0
-    let total = 0
     for (const source of sources) {
       if (input.signal?.aborted) return
       for (const occurrence of exactStructuralAnchorOccurrences(input.sourceContent.get(source.id)!)) {
-        total++
         const anchor = { sourceID: source.id, ordinal: source.ordinal, ...occurrence }
-        const nextBytes = Buffer.byteLength(
-          `${anchor.sourceID} ${anchor.ordinal} ${anchor.byteStart} ${anchor.byteEnd} ${anchor.marker}\n`,
-        )
-        if (anchors.length >= MAX_STRUCTURAL_ANCHORS || bytes + nextBytes > MAX_STRUCTURAL_ANCHOR_BYTES) continue
         anchors.push(anchor)
-        bytes += nextBytes
       }
     }
     const index = {
       anchors,
-      total,
+      total: anchors.length,
       sources: sources.map((source) => ({ sourceID: source.id, ordinal: source.ordinal })),
     }
     this.structuralIndexes.set(input.sessionID, { revisionID, maxConsumedOrdinal: input.maxConsumedOrdinal, index })
