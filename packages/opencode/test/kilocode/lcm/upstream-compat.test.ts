@@ -27,7 +27,9 @@ describe("LCM upstream compatibility contract", () => {
     for (const tool of ["RecallTool", "NotifyUserTool"]) expect(kiloRegistry).toContain(tool)
     expect(kiloRegistry).toContain('import * as LcmToolRegistry from "./lcm-registry"')
     expect(kiloRegistry).toContain("...LcmToolRegistry.extra(tools.lcm ?? [], cfg)")
-    expect(kiloRegistry).toContain('if (tool.id.startsWith("lcm_")) return LcmToolRegistry.available')
+    expect(kiloRegistry).toContain("available(tool: Tool.Def, agent?: Agent.Info)")
+    expect(kiloRegistry).toContain('if (tool.id.startsWith("lcm_")) return agent !== undefined && LcmToolRegistry.available')
+    expect(registry).toContain("KiloToolRegistry.available(tool, input.agent)")
   })
 
   test("keeps manual compaction affordances and selects LCM or upstream compaction at shared adapters", async () => {
