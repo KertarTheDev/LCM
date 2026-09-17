@@ -106,6 +106,7 @@ import { createPreferenceLoader } from "./session-preference-loader"
 import { activities, type Activity } from "../utils/session-activity"
 import { active as activeTiming, hold, type Timing } from "./session-timing"
 import type { SessionContextValue } from "./session-types"
+import { createLcmState } from "./lcm-state"
 
 const RECENT_LIMIT = 5
 const MESSAGE_PAGE_LIMIT = 80
@@ -157,6 +158,7 @@ export const SessionProvider: ParentComponent = (props) => {
   }
   const [draftSessionID, setDraftSessionID] = createSignal<string | undefined>()
   const [userClearedSession, setUserClearedSession] = createSignal(false)
+  const lcm = createLcmState({ config, sessionID: currentSessionID, connected: server.isConnected, vscode })
 
   // Per-session status map — keyed by sessionID
   const [statusMap, setStatusMap] = createStore<Record<string, SessionStatusInfo>>({})
@@ -912,6 +914,7 @@ export const SessionProvider: ParentComponent = (props) => {
   function handleExtensionMessage(message: ExtensionMessage): void {
     // Route suggestion messages (extracted to stay within complexity limit)
     routeSuggestionMessage(message)
+    lcm.route(message)
     if (handleModelUsageMessage(message)) return
     refreshModelUsageForMessage(message)
     if (handleStreamMessage(message)) return
@@ -2985,6 +2988,7 @@ export const SessionProvider: ParentComponent = (props) => {
     trackScopes: memory.track,
     costBreakdown,
     contextUsage,
+    ...lcm.context,
     modelUsage,
     agents,
     allAgents,

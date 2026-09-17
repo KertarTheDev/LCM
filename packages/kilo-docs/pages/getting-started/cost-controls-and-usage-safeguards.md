@@ -102,11 +102,18 @@ Kilo automatically skips a set of directories including `node_modules`, `dist`, 
 
 ### Compact long conversations
 
-When a conversation grows long, use `/compact` in the chat (also searchable as `smol` or `condense`) to summarize the history and free up context space. Kilo replaces older conversation turns with an anchored summary that captures your goal, constraints, progress, and next steps.
+When a conversation grows long, Conversation Memory incrementally summarizes consumed older history while protecting
+current work and an exact recent tail. Use `/compact` (also searchable as `smol` or `condense`) to force one full
+maintenance cycle. It does not add a synthetic summary turn to the chat.
 
-Auto-compaction is **enabled by default** — Kilo automatically compacts when approaching the context window limit so you do not need to intervene manually.
+Conversation Memory is currently experimental and enabled by default. Disable it under **Settings → Experimental** or
+with `experimental.conversation_memory: false` to restore legacy compaction.
 
-**Where to configure:** Toggle auto-compaction in **Settings → Context** (VS Code) or set `compaction.auto` in `kilo.jsonc`. Configure the trigger threshold with `compaction.threshold_percent` (e.g. `80` to compact at 80% of the model's context window).
+Soft maintenance starts at 60% raw-conversation pressure by default. Complete outgoing requests are also checked
+against the model's hard usable-input limit.
+
+**Where to configure:** Set the Conversation Memory soft threshold in **Settings → Context** (VS Code) or use
+`conversation_memory.soft_threshold_percent` in `kilo.jsonc`. The threshold is inactive while LCM is disabled.
 
 You can also configure a cheaper model specifically for compaction, so summarization does not consume frontier model tokens:
 
@@ -248,7 +255,8 @@ Dashboard administrative actions (model restrictions, spending limits, billing m
 
 - Use `kilo-auto/efficient` as the default model
 - Switch to `kilo-auto/free` for low-stakes questions and exploration
-- Enable auto-compaction (on by default); set `compaction.threshold_percent: 80` to compact earlier
+- Keep Conversation Memory at its 60% default, or lower `conversation_memory.soft_threshold_percent` to start reducing
+  eligible raw history earlier
 - Set Code agent max output tokens to 16k or below
 - Keep `doom_loop` permission at `ask`
 - Start a new session whenever you switch to an unrelated task
@@ -340,15 +348,16 @@ This configuration uses only `kilo-auto/efficient`.
     "summary":    { "model": "kilo-auto/free" }
   },
 
-  // ── Compaction (context management) ─────────────────────────────────────
-  // Auto-compact aggressively to keep conversation history short and cheap.
+  // ── Conversation Memory (active context management) ─────────────────────
+  // Start maintenance early to keep repeated raw-history input smaller.
+  "conversation_memory": {
+    "soft_threshold_percent": 25
+  },
+
+  // ── Legacy payload controls used independently by tool-output pruning ────
   "compaction": {
-    "auto": true,              // enable automatic compaction (default: true)
-    "threshold_percent": 50,   // compact when context reaches 50% full (default: ~80%)
-    "prune": true,             // prune old tool outputs to recover context space
-    "tail_turns": 1,           // keep only 1 recent user-turn verbatim after compaction
-    "preserve_recent_tokens": 2000, // cap on tokens preserved verbatim from recent turns
-    "reserved": 8000           // token buffer reserved so compaction itself doesn't overflow
+    "prune": true,                  // prune stale tool outputs in large request payloads
+    "preserve_recent_tokens": 2000  // exact recent-history tail protected by Conversation Memory
   },
 
   // ── Tool output truncation ───────────────────────────────────────────────
@@ -374,7 +383,10 @@ This configuration uses only `kilo-auto/efficient`.
 }
 ```
 
-Every field in this block is documented in the sections above. Use it as a starting point, then relax individual settings (for example, setting `permission.edit` to `"allow"` for a trusted project, or raising `compaction.threshold_percent` to `70` if compaction feels too aggressive) as you build confidence in how the agent behaves.
+Every field in this block is documented in the sections above. Use it as a starting point, then relax individual
+settings (for example, setting `permission.edit` to `"allow"` for a trusted project, or raising
+`conversation_memory.soft_threshold_percent` if maintenance starts earlier than you want) as you build confidence in
+how the agent behaves.
 
 ---
 
@@ -384,7 +396,8 @@ If your spend is higher than expected:
 
 - **Check your usage dashboard** at [app.kilo.ai/usage](https://app.kilo.ai/usage) for a breakdown by day, model, and project
 - **Review the model in use** — an accidental switch to a frontier model for routine tasks can significantly raise costs
-- **Look for long sessions** — sessions that were never compacted carry their full history as input tokens on every request; use `/compact` to reset them
+- **Look for long sessions** — check Conversation Memory pressure and health in **Settings → Context**; use `/compact`
+  to force one maintenance cycle when you want an immediate reduction
 - **Check MCP server configuration** — unused MCP servers add tool definitions to every system prompt
 - **Review permission settings** — auto-approving all actions with no `doom_loop` guard removes the friction that normally slows down runaway loops
 

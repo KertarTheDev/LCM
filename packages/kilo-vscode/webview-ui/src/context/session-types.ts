@@ -26,8 +26,9 @@ import type {
 import type { Activity } from "../utils/session-activity"
 import type { Timing } from "./session-timing"
 import type { MessageMutation } from "./session-utils"
+import type { LcmContextValue } from "./lcm-state"
 
-export interface SessionContextValue {
+export interface SessionContextValue extends LcmContextValue {
   // Current session
   currentSessionID: Accessor<string | undefined>
   currentSession: Accessor<SessionInfo | undefined>

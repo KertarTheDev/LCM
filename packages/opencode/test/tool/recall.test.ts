@@ -13,6 +13,7 @@ import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { RemoteSender } from "../../src/kilo-sessions/remote-sender"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { LCM_RECOVERY_AGENT, LCM_RECOVERY_FINALIZER_AGENT } from "../../src/kilocode/session/lcm/recovery-contract"
 beforeEach(() => {
   spyOn(RemoteSender, "create").mockReturnValue({ handle() {}, dispose() {} })
 })
@@ -33,11 +34,11 @@ afterEach(async () => {
   await resetDatabase()
 })
 
-const create = (title: string, text?: string | string[]) =>
+const create = (title: string, text?: string | string[], agent?: string) =>
   AppRuntime.runPromise(
     Session.Service.use((svc) =>
       Effect.gen(function* () {
-        const session = yield* svc.create({ title })
+        const session = yield* svc.create({ title, agent })
         for (const value of text ? (Array.isArray(text) ? text : [text]) : []) {
           const messageID = MessageID.ascending()
           yield* svc.updateMessage({
@@ -56,8 +57,81 @@ const create = (title: string, text?: string | string[]) =>
   )
 
 describe("tool.recall", () => {
+  test("LCM-enabled recall excludes the active session from search and direct read", async () => {
+    await using dir = await tmpdir({ git: true })
+    const result = await provideTestInstance({
+      directory: dir.path,
+      fn: async () => {
+        const active = await create("Active session", "active-session-isolation-needle")
+        await create("Historical session", "active-session-isolation-needle")
+        const info = await AppRuntime.runPromise(RecallTool)
+        const tool = await AppRuntime.runPromise(info.init())
+        const activeCtx = { ...ctx, sessionID: active.id }
+        const search = await AppRuntime.runPromise(
+          tool.execute({ mode: "search", query: "active-session-isolation-needle" }, activeCtx),
+        )
+        const error = await AppRuntime.runPromise(
+          tool.execute({ mode: "read", sessionID: active.id }, activeCtx),
+        ).catch((cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause))))
+        return { search, error }
+      },
+    })
+
+    expect(result.search.output).toContain("Historical session")
+    expect(result.search.output).not.toContain("Active session")
+    expect(result.error).toBeInstanceOf(Error)
+    if (!(result.error instanceof Error)) throw new Error("Expected active-session recall read to fail")
+    expect(result.error.message).toContain("Session not found")
+  })
+
+  test("search and direct read hide isolated Conversation Memory research and finalizer sessions", async () => {
+    await using dir = await tmpdir({ git: true })
+    const result = await provideTestInstance({
+      directory: dir.path,
+      fn: async () => {
+        const hidden = await create(
+          "Conversation Memory research",
+          "private-isolation-recall-needle",
+          LCM_RECOVERY_AGENT,
+        )
+        const finalizer = await create(
+          "Conversation Memory finalizer",
+          "private-finalizer-isolation-needle",
+          LCM_RECOVERY_FINALIZER_AGENT,
+        )
+        const info = await AppRuntime.runPromise(RecallTool)
+        const tool = await AppRuntime.runPromise(info.init())
+        const search = await AppRuntime.runPromise(
+          tool.execute({ mode: "search", query: "private-isolation-recall-needle" }, ctx),
+        )
+        const error = await AppRuntime.runPromise(tool.execute({ mode: "read", sessionID: hidden.id }, ctx)).catch(
+          (cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause))),
+        )
+        const finalizerSearch = await AppRuntime.runPromise(
+          tool.execute({ mode: "search", query: "private-finalizer-isolation-needle" }, ctx),
+        )
+        const finalizerError = await AppRuntime.runPromise(
+          tool.execute({ mode: "read", sessionID: finalizer.id }, ctx),
+        ).catch((cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause))))
+        return { search, error, finalizerSearch, finalizerError }
+      },
+    })
+
+    expect(result.search.output).toContain("No sessions found")
+    expect(result.search.output).not.toContain("Conversation Memory research")
+    expect(result.error).toBeInstanceOf(Error)
+    if (!(result.error instanceof Error)) throw new Error("Expected isolated recall read to fail")
+    expect(result.error.message).toContain("Session not found")
+    expect(result.error.message).not.toContain("Conversation Memory research")
+    expect(result.finalizerSearch.output).toContain("No sessions found")
+    expect(result.finalizerSearch.output).not.toContain("Conversation Memory finalizer")
+    expect(result.finalizerError).toBeInstanceOf(Error)
+    if (!(result.finalizerError instanceof Error)) throw new Error("Expected isolated finalizer recall read to fail")
+    expect(result.finalizerError.message).toContain("Session not found")
+  })
+
   test("search is limited to the current project worktrees", async () => {
-    await using first = await tmpdir({ git: true })
+    await using first = await tmpdir({ git: true, config: { experimental: { conversation_memory: false } } })
     await using second = await tmpdir({ git: true })
     const worktree = path.join(first.path, "..", path.basename(first.path) + "-worktree")
 

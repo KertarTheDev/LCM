@@ -8,13 +8,15 @@ import { Component, For, Show, createMemo, createEffect, createSignal, on, onCle
 import { Portal } from "solid-js/web"
 import type { AssistantMessage as SDKAssistantMessage, Part as SDKPart } from "@kilocode/sdk/v2"
 import { useSession } from "../../context/session"
+import { useVSCode } from "../../context/vscode"
+import { useLanguage } from "../../context/language"
 import { visibleParts } from "../../context/session-queue"
-import { color, label } from "../../utils/timeline/colors"
+import { color, label, palette } from "../../utils/timeline/colors"
 import { geometry, hit, navigate } from "../../utils/timeline/geometry"
 import { dispatchTimelineHighlight, same, type TimelineHighlight } from "../../utils/timeline/highlight"
 import { sizes, pinned, MAX_HEIGHT } from "../../utils/timeline/sizes"
 import { isRenderable } from "../../utils/transcript-parts"
-import type { Part, Message } from "../../types/messages"
+import type { LcmActivity, Part, Message } from "../../types/messages"
 
 export interface TimelineBar {
   bg: string
@@ -22,11 +24,18 @@ export interface TimelineBar {
   width: number
   height: number
   idx: number
+  key: string
   msgId: string
   partId: string
+  activity?: LcmActivity
 }
 
-function collect(messages: Message[], parts: Record<string, Part[]>): TimelineBar[] {
+function collect(
+  messages: Message[],
+  parts: Record<string, Part[]>,
+  activity: LcmActivity[],
+  memoryTitle: string,
+): TimelineBar[] {
   const result: { msg: Message; part: Part }[] = []
 
   for (const msg of messages) {
@@ -40,19 +49,40 @@ function collect(messages: Message[], parts: Record<string, Part[]>): TimelineBa
   }
 
   const sz = sizes(result.map((item) => item.part))
-  return result.map((item, i) => ({
-    bg: color(item.part),
-    tip: label(item.part, item.msg),
-    width: sz[i]!.width,
-    height: sz[i]!.height,
-    idx: i,
-    msgId: item.msg.id,
-    partId: item.part.id,
-  }))
+  return [
+    ...result.map((item, index) => ({
+      bg: color(item.part),
+      tip: label(item.part, item.msg),
+      width: sz[index]!.width,
+      height: sz[index]!.height,
+      key: `part:${item.part.id}`,
+      msgId: item.msg.id,
+      partId: item.part.id,
+      at:
+        ("time" in item.part ? item.part.time?.start : undefined) ??
+        item.msg.time?.created ??
+        Date.parse(item.msg.createdAt),
+    })),
+    ...activity.map((item) => ({
+      bg: item.kind === "fallback" ? palette.error : item.kind === "intervention" ? palette.step : palette.success,
+      tip: `${memoryTitle} · ${item.kind.replaceAll("_", " ")}\n${item.message}`,
+      width: 12,
+      height: item.kind === "intervention" || item.kind === "fallback" ? 22 : 16,
+      key: `lcm:${item.id}`,
+      msgId: `lcm:${item.id}`,
+      partId: `lcm:${item.id}`,
+      activity: item,
+      at: item.createdAt,
+    })),
+  ]
+    .toSorted((a, b) => a.at - b.at || a.key.localeCompare(b.key))
+    .map((item, idx) => ({ ...item, idx }))
 }
 
 export const TaskTimeline: Component = () => {
   const session = useSession()
+  const vscode = useVSCode()
+  const language = useLanguage()
   let ref: HTMLDivElement | undefined
   let dragging = false
   let dragMoved = false
@@ -82,7 +112,9 @@ export const TaskTimeline: Component = () => {
     return result
   }
 
-  const bars = createMemo(() => collect(messages(), allParts()))
+  const bars = createMemo(() =>
+    collect(messages(), allParts(), session.lcmActivity(), language.t("conversationMemory.title")),
+  )
   const layout = createMemo(() => geometry(bars(), MAX_HEIGHT))
   const busy = () => session.status() === "busy"
   const selected = () => {
@@ -146,7 +178,7 @@ export const TaskTimeline: Component = () => {
   createEffect<TimelineHighlight | undefined>((previous) => {
     const idx = hover()
     const bar = idx >= 0 ? bars()[idx] : undefined
-    const next = bar ? { msgId: bar.msgId, partId: bar.partId } : undefined
+    const next = bar && !bar.activity ? { msgId: bar.msgId, partId: bar.partId } : undefined
     if (same(previous, next)) return previous
     dispatchTimelineHighlight(next)
     return next
@@ -189,7 +221,12 @@ export const TaskTimeline: Component = () => {
     const bar = bars()[idx]
     if (!bar) return
     setActive(idx)
-    window.dispatchEvent(new CustomEvent("scrollToMessage", { detail: { id: bar.msgId, partId: bar.partId } }))
+    const memorySessionID = session.lcmStatus()?.sessionID
+    if (bar.activity && memorySessionID && !memorySessionID.startsWith("cloud:")) {
+      vscode.postMessage({ type: "showLcmTimeline", sessionID: memorySessionID })
+    } else {
+      window.dispatchEvent(new CustomEvent("scrollToMessage", { detail: { id: bar.msgId, partId: bar.partId } }))
+    }
     showTip(idx)
   }
 

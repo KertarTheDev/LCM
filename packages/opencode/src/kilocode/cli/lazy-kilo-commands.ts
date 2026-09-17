@@ -48,6 +48,12 @@ export const WorktreeCommand = lazy({
   load: async () => (await import("@/kilocode/cli/cmd/worktree")).WorktreeCommand,
 })
 
+export const LcmCommand = lazy({
+  command: "lcm",
+  describe: "inspect and export conversation memory",
+  load: async () => (await import("@/kilocode/cli/cmd/lcm")).LcmCommand,
+})
+
 export const PtySmokeCommand = lazy({
   command: "__pty-smoke",
   describe: false,

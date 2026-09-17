@@ -224,6 +224,33 @@ describe("sanitizeCustomProviderConfig", () => {
     })
   })
 
+  it("preserves explicit custom model limits", () => {
+    const result = sanitizeCustomProviderConfig({
+      name: "Local Provider",
+      options: { baseURL: "http://localhost:11434/v1" },
+      models: {
+        "qwen3.6:27b": {
+          name: "Qwen 3.6 27B",
+          limit: { context: 131072, input: 98304, output: 32768 },
+        },
+      },
+    })
+
+    expect(result).toEqual({
+      value: {
+        npm: "@ai-sdk/openai-compatible",
+        name: "Local Provider",
+        options: { baseURL: "http://localhost:11434/v1" },
+        models: {
+          "qwen3.6:27b": {
+            name: "Qwen 3.6 27B",
+            limit: { context: 131072, input: 98304, output: 32768 },
+          },
+        },
+      },
+    })
+  })
+
   it("rejects unknown fields", () => {
     const result = sanitizeCustomProviderConfig({
       name: "Bad Provider",
@@ -316,5 +343,20 @@ describe("withCustomProviderDeletions", () => {
     const result = withCustomProviderDeletions(existing, baseNext)
     const models = result.models as Record<string, unknown>
     expect(models.gone).toBeNull()
+  })
+
+  it("clears a removed optional input limit without dropping required limits", () => {
+    const existing = {
+      models: { keep: { name: "Keep", limit: { context: 131072, input: 98304, output: 32768 } } },
+    }
+    const next = {
+      ...baseNext,
+      models: { keep: { name: "Keep", limit: { context: 131072, output: 32768 } } },
+    }
+    const result = withCustomProviderDeletions(existing, next)
+    expect(result.models.keep).toEqual({
+      name: "Keep",
+      limit: { context: 131072, output: 32768, input: null },
+    })
   })
 })

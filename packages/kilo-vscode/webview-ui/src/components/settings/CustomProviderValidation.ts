@@ -23,7 +23,12 @@ export type FormErrors = {
   providerID: string | undefined
   name: string | undefined
   baseURL: string | undefined
-  models: Array<{ id?: string; name?: string; variants?: Array<{ name?: string }> }>
+  models: Array<{
+    id?: string
+    name?: string
+    limit?: { context?: string; input?: string; output?: string }
+    variants?: Array<{ name?: string }>
+  }>
   headers: Array<{ key?: string; value?: string }>
 }
 
@@ -64,6 +69,36 @@ function checkVariant(v: VariantEntry, seen: Set<string>, t: Translator) {
   return { name: undefined }
 }
 
+function positiveInteger(value: string) {
+  const trimmed = value.trim()
+  if (!/^[1-9]\d*$/.test(trimmed)) return
+  const parsed = Number(trimmed)
+  return Number.isSafeInteger(parsed) ? parsed : undefined
+}
+
+function checkLimit(m: ModelEntry, t: Translator) {
+  const context = positiveInteger(m.limit.context)
+  const output = positiveInteger(m.limit.output)
+  const input = m.limit.input.trim() ? positiveInteger(m.limit.input) : undefined
+  const errors: { context?: string; input?: string; output?: string } = {}
+
+  if (!m.limit.context.trim()) errors.context = t("provider.custom.error.required")
+  else if (context === undefined) errors.context = t("provider.custom.error.limit.positiveInteger")
+
+  if (!m.limit.output.trim()) errors.output = t("provider.custom.error.required")
+  else if (output === undefined) errors.output = t("provider.custom.error.limit.positiveInteger")
+
+  if (m.limit.input.trim() && input === undefined) errors.input = t("provider.custom.error.limit.positiveInteger")
+  if (context !== undefined && output !== undefined && output >= context)
+    errors.output = t("provider.custom.error.limit.outputBelowContext")
+  if (context !== undefined && input !== undefined && input > context)
+    errors.input = t("provider.custom.error.limit.inputWithinContext")
+  if (output !== undefined && input !== undefined && input <= output)
+    errors.input = t("provider.custom.error.limit.inputAboveOutput")
+
+  return errors
+}
+
 function checkModel(m: ModelEntry, seenModels: Set<string>, t: Translator) {
   const id = m.id.trim()
   const key = id.toLowerCase()
@@ -73,9 +108,10 @@ function checkModel(m: ModelEntry, seenModels: Set<string>, t: Translator) {
   else seenModels.add(key)
 
   const nameErr = !m.name.trim() ? t("provider.custom.error.required") : undefined
+  const limit = checkLimit(m, t)
   const seen = new Set<string>()
   const variants = m.reasoning ? m.variants.map((v) => checkVariant(v, seen, t)) : []
-  return { id: idErr, name: nameErr, variants }
+  return { id: idErr, name: nameErr, limit, variants }
 }
 
 function checkHeader(h: HeaderRow, seenKeys: Set<string>, t: Translator) {
@@ -141,7 +177,15 @@ function modalities(m: ModelEntry): Modalities | undefined {
 
 function serializeModel(m: ModelEntry): [string, Record<string, unknown>] {
   const ventries = m.reasoning ? m.variants.filter((v) => v.name.trim()).map(serializeVariant) : []
-  const entry: Record<string, unknown> = { name: m.name.trim() }
+  const input = m.limit.input.trim()
+  const entry: Record<string, unknown> = {
+    name: m.name.trim(),
+    limit: {
+      context: Number(m.limit.context.trim()),
+      output: Number(m.limit.output.trim()),
+      ...(input ? { input: Number(input) } : {}),
+    },
+  }
   const modes = modalities(m)
   if (m.reasoning) entry.reasoning = true
   if (modes) entry.modalities = modes
@@ -183,7 +227,10 @@ export function validateCustomProvider(input: ValidateArgs): ValidateResult {
 
   const seenModels = new Set<string>()
   const modelErrors = input.form.models.map((m) => checkModel(m, seenModels, input.t))
-  const modelsValid = modelErrors.every((m) => !m.id && !m.name && m.variants.every((v) => !v.name))
+  const modelsValid = modelErrors.every(
+    (m) =>
+      !m.id && !m.name && !m.limit.context && !m.limit.input && !m.limit.output && m.variants.every((v) => !v.name),
+  )
 
   const seenHeaders = new Set<string>()
   const headerErrors = input.form.headers.map((h) => checkHeader(h, seenHeaders, input.t))

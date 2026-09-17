@@ -28,6 +28,13 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { LLMEvent } from "@opencode-ai/llm"
+// kilocode_change start
+import {
+  LCM_RECOVERY_AGENT,
+  LCM_RECOVERY_FINALIZER_AGENT,
+  LCM_RECOVERY_INVALID_TOOL_INPUT_METADATA,
+} from "@/kilocode/session/lcm/recovery-contract"
+// kilocode_change end
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -140,14 +147,15 @@ const assistant = Effect.fn("TestSession.assistant")(function* (
   sessionID: SessionID,
   parentID: MessageID,
   root: string,
+  agentName = "build", // kilocode_change
 ) {
   const session = yield* Session.Service
   const msg: SessionV1.Assistant = {
     id: MessageID.ascending(),
     role: "assistant",
     sessionID,
-    mode: "build",
-    agent: "build",
+    mode: agentName, // kilocode_change
+    agent: agentName, // kilocode_change
     path: { cwd: root, root },
     cost: 0,
     tokens: {
@@ -326,6 +334,66 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
   ),
 )
 
+// kilocode_change start - isolated Conversation Memory workers are read-only and must not scan the workspace
+it.live("session.processor skips workspace snapshots only for hidden LCM recovery agents", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const chat = yield* session.create({})
+
+        yield* llm.text("ordinary")
+        const ordinaryParent = yield* user(chat.id, "ordinary turn")
+        const ordinary = yield* assistant(chat.id, ordinaryParent.id, path.resolve(dir))
+        const ordinaryHandle = yield* processors.create({ assistantMessage: ordinary, sessionID: chat.id, model: mdl })
+        yield* ordinaryHandle.process({
+          user: ordinaryParent,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "ordinary turn" }],
+          tools: {},
+        })
+        const ordinarySteps = (yield* MessageV2.parts(ordinary.id)).filter(
+          (part): part is SessionV1.StepStartPart | SessionV1.StepFinishPart =>
+            part.type === "step-start" || part.type === "step-finish",
+        )
+        expect(ordinarySteps).toHaveLength(2)
+        expect(ordinarySteps.every((part) => typeof part.snapshot === "string")).toBe(true)
+
+        for (const recoveryAgent of [LCM_RECOVERY_AGENT, LCM_RECOVERY_FINALIZER_AGENT]) {
+          yield* llm.text("recovered")
+          const recoveryParent = yield* user(chat.id, `recover detail with ${recoveryAgent}`)
+          const recovery = yield* assistant(chat.id, recoveryParent.id, path.resolve(dir), recoveryAgent)
+          const recoveryHandle = yield* processors.create({
+            assistantMessage: recovery,
+            sessionID: chat.id,
+            model: mdl,
+          })
+          yield* recoveryHandle.process({
+            user: recoveryParent,
+            sessionID: chat.id,
+            model: mdl,
+            agent: { ...agent(), name: recoveryAgent },
+            system: [],
+            messages: [{ role: "user", content: "recover detail" }],
+            tools: {},
+          })
+          const recoverySteps = (yield* MessageV2.parts(recovery.id)).filter(
+            (part): part is SessionV1.StepStartPart | SessionV1.StepFinishPart =>
+              part.type === "step-start" || part.type === "step-finish",
+          )
+          expect(recoverySteps).toHaveLength(2)
+          expect(recoverySteps.every((part) => part.snapshot === undefined)).toBe(true)
+        }
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+// kilocode_change end
+
 it.live("session.processor effect tests preserve text start time", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
@@ -458,6 +526,59 @@ it.live("session.processor effect tests stop after token overflow requests compa
     { config: (url) => providerCfg(url) },
   ),
 )
+
+// kilocode_change start
+it.live(
+  "session.processor external context management preserves a successful response across upstream thresholds",
+  () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          const { processors, session, provider } = yield* boot()
+          yield* llm.text("kept response", { usage: { input: 60_000, output: 100 } })
+
+          const chat = yield* session.create({})
+          const parent = yield* user(chat.id, "continue")
+          const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+          const handle = yield* processors.create({
+            assistantMessage: msg,
+            sessionID: chat.id,
+            model: mdl,
+            contextManagement: "external",
+          })
+
+          const value = yield* handle.process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "x".repeat(220_000) }],
+            tools: {},
+          })
+
+          const parts = yield* MessageV2.parts(msg.id)
+          expect(value).toBe("continue")
+          expect(yield* llm.calls).toBe(1)
+          expect(parts.some((part) => part.type === "text" && part.text === "kept response")).toBe(true)
+        }),
+      {
+        config: (url) => ({
+          ...providerCfg(url),
+          compaction: { auto: true, threshold_percent: 50 },
+        }),
+      },
+    ),
+)
+// kilocode_change end
 
 // kilocode_change start - configured output ceiling must reach finish-step overflow accounting
 capped.live("session.processor respects the configured output token ceiling", () =>
@@ -747,7 +868,8 @@ it.live("session.processor effect tests publish retry status updates", () =>
   ),
 )
 
-it.live("session.processor effect tests compact on structured context overflow", () =>
+// kilocode_change start
+it.live("session.processor upstream policy compacts on structured context overflow", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
       Effect.gen(function* () {
@@ -789,6 +911,104 @@ it.live("session.processor effect tests compact on structured context overflow",
     { config: (url) => providerCfg(url) },
   ),
 )
+
+it.live("session.processor external context management reports structured provider overflow for hard recovery", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.error(400, { type: "error", error: { code: "context_length_exceeded" } })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "recover with lcm")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+          contextManagement: "external",
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "recover with lcm" }],
+          tools: {},
+        })
+
+        expect(value).toBe("compact")
+        expect(yield* llm.calls).toBe(1)
+        expect(handle.message.error).toBeUndefined()
+      }),
+    {
+      config: (url) => ({
+        ...providerCfg(url),
+        compaction: { auto: false },
+      }),
+    },
+  ),
+)
+
+it.live("session.processor upstream policy surfaces provider overflow when automatic compaction is disabled", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        yield* llm.error(400, { type: "error", error: { code: "context_length_exceeded" } })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "do not compact")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+          contextManagement: "upstream",
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "do not compact" }],
+          tools: {},
+        })
+
+        expect(value).toBe("stop")
+        expect(handle.message.finish).toBe("error")
+        expect(handle.message.error?.name).toBe("ContextOverflowError")
+      }),
+    {
+      config: (url) => ({
+        ...providerCfg(url),
+        compaction: { auto: false },
+      }),
+    },
+  ),
+)
+// kilocode_change end
 
 it.live("session.processor effect tests complete AI SDK tool calls when native flag is off", () =>
   provideTmpdirServer(
@@ -854,6 +1074,64 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
     { config: (url) => providerCfg(url) },
   ),
 )
+
+// kilocode_change start - retain typed malformed-call provenance for the isolated-recovery circuit breaker
+it.live("session.processor effect tests tag schema-invalid private recovery calls", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        let executed = false
+        yield* llm.push(reply().pendingTool("lcm_expand_query", { query: "earlier detail" }).toolCalls())
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "recover")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir), LCM_RECOVERY_AGENT)
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: LCM_RECOVERY_AGENT,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: { ...agent(), name: LCM_RECOVERY_AGENT, mode: "subagent" },
+          system: [],
+          messages: [{ role: "user", content: "recover" }],
+          tools: {
+            lcm_expand_query: tool({
+              description: "Recover an earlier detail",
+              inputSchema: z.object({ query: z.string() }),
+              execute: async () => {
+                executed = true
+                return { title: "Unexpected", output: "unexpected", metadata: {} }
+              },
+            }),
+          },
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const call = parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
+        expect(executed).toBe(false)
+        expect(call?.tool).toBe("lcm_expand_query")
+        expect(call?.state.status).toBe("error")
+        if (call?.state.status !== "error") return
+        expect(call.state.metadata?.[LCM_RECOVERY_INVALID_TOOL_INPUT_METADATA]).toBe(true)
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+// kilocode_change end
 
 it.live("session.processor effect tests mark pending tools as aborted on cleanup", () =>
   provideTmpdirServer(

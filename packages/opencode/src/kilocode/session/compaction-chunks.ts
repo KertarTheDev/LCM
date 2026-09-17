@@ -34,6 +34,12 @@ export namespace KiloCompactionChunks {
     result: SessionProcessor.Result
     output: string | undefined
     error: MessageV2.Assistant["error"]
+    usage: Usage
+  }
+
+  type Usage = {
+    cost: number
+    tokens: MessageV2.Assistant["tokens"]
   }
 
   type Deps = {
@@ -60,6 +66,49 @@ export namespace KiloCompactionChunks {
     parts: MessageV2.Part[]
   }
 
+  function usage(message: MessageV2.Assistant): Usage {
+    return {
+      cost: message.cost,
+      tokens: {
+        ...(message.tokens.total === undefined ? {} : { total: message.tokens.total }),
+        input: message.tokens.input,
+        output: message.tokens.output,
+        reasoning: message.tokens.reasoning,
+        cache: { ...message.tokens.cache },
+      },
+    }
+  }
+
+  function combineUsage(...values: Usage[]): Usage {
+    const explicitTotal = values.some((value) => value.tokens.total !== undefined)
+    const tokenTotal = (value: Usage) =>
+      value.tokens.total ??
+      value.tokens.input +
+        value.tokens.output +
+        value.tokens.reasoning +
+        value.tokens.cache.read +
+        value.tokens.cache.write
+    return {
+      cost: values.reduce((total, value) => total + value.cost, 0),
+      tokens: {
+        ...(explicitTotal ? { total: values.reduce((total, value) => total + tokenTotal(value), 0) } : {}),
+        input: values.reduce((total, value) => total + value.tokens.input, 0),
+        output: values.reduce((total, value) => total + value.tokens.output, 0),
+        reasoning: values.reduce((total, value) => total + value.tokens.reasoning, 0),
+        cache: {
+          read: values.reduce((total, value) => total + value.tokens.cache.read, 0),
+          write: values.reduce((total, value) => total + value.tokens.cache.write, 0),
+        },
+      },
+    }
+  }
+
+  function charge(target: MessageV2.Assistant, outputs: Output[]) {
+    const total = combineUsage(usage(target), ...outputs.map((output) => output.usage))
+    target.cost = total.cost
+    target.tokens = total.tokens
+  }
+
   export function eligible(input: { result: SessionProcessor.Result; error: MessageV2.Assistant["error"] }) {
     if (input.result === "compact") return true
     return input.result === "stop" && input.error?.name === "ContextOverflowError"
@@ -84,6 +133,8 @@ export namespace KiloCompactionChunks {
       const size = budget({ cfg: input.cfg, model: input.model, outputTokenMax: input.outputTokenMax })
       if (!(yield* large({ messages: chunk.messages, model: input.model, size }))) return input.replay
       const result = yield* summarize({ ...input, chunk, total: 1 })
+      charge(input.target, [result])
+      yield* input.updateMessage(input.target)
       if (result.result !== "continue" || !result.output) return input.replay
       return {
         info: input.replay.info,
@@ -271,6 +322,7 @@ export namespace KiloCompactionChunks {
           result,
           output: text(worker.message, parts),
           error: worker.message.error ?? worker.compactError?.(),
+          usage: usage(worker.message),
         }
       }).pipe(
         Effect.ensuring(
@@ -279,11 +331,12 @@ export namespace KiloCompactionChunks {
       )
       const result = out.result
       const output = out.output
-      if (result !== "continue") return { result, output: undefined, error: out.error }
+      if (result !== "continue") return { result, output: undefined, error: out.error, usage: out.usage }
       if (!output)
         return {
           result: "stop" as const,
           output: undefined,
+          usage: out.usage,
           error:
             out.error ??
             new MessageV2.APIError({
@@ -291,7 +344,7 @@ export namespace KiloCompactionChunks {
               isRetryable: true,
             }).toObject(),
         }
-      return { result, output, error: undefined }
+      return { result, output, error: undefined, usage: out.usage }
     })
   }
 
@@ -360,8 +413,10 @@ export namespace KiloCompactionChunks {
         { concurrency: 1 },
       )
       const failed = next.find(fatal) ?? next.find((item) => item.result !== "continue" || !item.output)
-      if (failed) return fatal(failed) ? failed : result
-      return yield* reduce({ ...input, summaries: next.map((item) => item.output!), depth: input.depth + 2 })
+      const attempted = combineUsage(result.usage, ...next.map((item) => item.usage))
+      if (failed) return { ...(fatal(failed) ? failed : result), usage: attempted }
+      const final = yield* reduce({ ...input, summaries: next.map((item) => item.output!), depth: input.depth + 2 })
+      return { ...final, usage: combineUsage(attempted, final.usage) }
     })
   }
 
@@ -376,7 +431,9 @@ export namespace KiloCompactionChunks {
       })
       const failed = partial.find(fatal) ?? partial.find((item) => item.result !== "continue" || !item.output)
       if (failed) {
+        charge(input.target, partial)
         if (yield* fail(input, failed)) return "stop" as const
+        yield* input.updateMessage(input.target)
         return "compact" as const
       }
 
@@ -385,7 +442,9 @@ export namespace KiloCompactionChunks {
           ? partial[0]
           : yield* reduce({ ...input, summaries: partial.map((item) => item.output!), depth: 0 })
       if (!final || final.result !== "continue" || !final.output) {
+        charge(input.target, final === partial[0] ? partial : [...partial, final])
         if (yield* fail(input, final)) return "stop" as const
+        yield* input.updateMessage(input.target)
         return "compact" as const
       }
 
@@ -396,6 +455,7 @@ export namespace KiloCompactionChunks {
         type: "text",
         text: final.output,
       })
+      charge(input.target, final === partial[0] ? partial : [...partial, final])
       input.target.finish = "stop"
       input.target.error = undefined
       input.target.time.completed = Date.now()

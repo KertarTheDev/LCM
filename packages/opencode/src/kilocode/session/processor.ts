@@ -15,6 +15,7 @@ import type { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionRetry } from "@/session/retry"
 import { computeMetrics as computeMetricsHelper, type TokenRates } from "@/kilocode/session/metrics"
 import { InvalidArgumentsError } from "@/tool/tool"
+import { InvalidToolInputError, ToolCallRepairError } from "ai"
 
 export type ReviewTelemetry = {
   mode: "review"
@@ -292,6 +293,14 @@ export namespace KiloSessionProcessor {
     reset(key: string) {
       malformed.delete(key)
     },
+  }
+
+  export function invalidToolInput(error: unknown) {
+    if (error instanceof InvalidArgumentsError) return true
+    if (InvalidToolInputError.isInstance(error)) return true
+    if (ToolCallRepairError.isInstance(error) && InvalidToolInputError.isInstance(error.originalError)) return true
+    // The native LLM decoder currently emits only a message for schema failures, before Tool.wrap can add its type.
+    return /^Invalid (?:input for tool\b|tool input\b)/i.test(error instanceof Error ? error.message : String(error))
   }
 
   export function observe(attempt: Attempt, event: LLMEvent) {

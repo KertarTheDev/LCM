@@ -31,6 +31,16 @@ import { Config } from "@/config/config"
 import { PermissionProvenance } from "@/kilocode/permission/provenance"
 import { McpApps } from "@/kilocode/mcp/apps"
 import { BoardEnabled } from "@/kilocode/board/enabled"
+import {
+  LCM_RECOVERY_AGENT,
+  lcmQueryBudgetResult,
+  lcmRecoveryLimits,
+  lcmRecoveryBudgetResult,
+  lcmRecoverySourceSession,
+  lcmToolAvailableInTurn,
+  reserveLcmQueryCall,
+  reserveLcmRecoveryToolCall,
+} from "@/kilocode/session/lcm/recovery-contract"
 // kilocode_change end
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -78,6 +88,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const flags = yield* RuntimeFlags.Service
   const cfg = yield* config.get()
   const permissionOrigins = cfg.permission_origins
+  const recoveryLimits = lcmRecoveryLimits(cfg)
   const notify = BoardEnabled.resolve({
     config: cfg.shared_agent_board,
     flag: flags.experimentalSharedAgentBoard,
@@ -100,6 +111,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // kilocode_change end
   const restricted = yield* SandboxPolicy.networkRestricted(input.session.id) // kilocode_change
   const sandboxed = (yield* SandboxPolicy.status(input.session.id)).enabled // kilocode_change
+  const lcmSourceSessionID = lcmRecoverySourceSession({ agent: input.agent.name, session: input.session }) // kilocode_change
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => {
     const extra = {
       model: input.model,
@@ -107,6 +119,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       promptOps: input.promptOps,
       sandboxed, // kilocode_change
       sandboxEscalation: false,
+      ...(lcmSourceSessionID ? { lcmSourceSessionID } : {}), // kilocode_change - trusted parent-memory binding for isolated recovery
     }
     return {
       sessionID: input.session.id,
@@ -183,6 +196,8 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     networkRestricted: restricted, // kilocode_change - let the registry suppress code-mode in restricted sessions
   })) {
     if (!GoalPolicy.available(input.session.id, item.id)) continue // kilocode_change
+    // kilocode_change - stop advertising exhausted recovery work on later provider steps
+    if (!lcmToolAvailableInTurn(item.id, input.agent.name, input.messages, recoveryLimits)) continue // kilocode_change
     const base = ToolJsonSchema.fromTool(item)
     const schema = ProviderTransform.schema(input.model, base)
     tools[item.id] = tool({
@@ -198,17 +213,40 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { args },
             )
             // kilocode_change start
-            const result = yield* SandboxPolicy.executeTool(ctx.sessionID, item, item.execute(args, ctx))
+            const reservation =
+              input.agent.name === LCM_RECOVERY_AGENT
+                ? reserveLcmRecoveryToolCall(
+                    input.messages,
+                    item.id,
+                    {
+                      sessionID: ctx.sessionID,
+                    },
+                    recoveryLimits,
+                  )
+                : undefined
+            const queryReservation =
+              input.agent.name === LCM_RECOVERY_AGENT
+                ? undefined
+                : reserveLcmQueryCall(input.messages, item.id, args, recoveryLimits)
+            const result =
+              reservation && !reservation.allowed
+                ? lcmRecoveryBudgetResult(reservation)
+                : queryReservation && !queryReservation.allowed
+                  ? lcmQueryBudgetResult(queryReservation)
+                  : yield* SandboxPolicy.executeTool(ctx.sessionID, item, item.execute(args, ctx))
             // kilocode_change end
+            // kilocode_change start - host-suppressed LCM results intentionally have no attachment field
+            const attachments = "attachments" in result ? result.attachments : undefined
             const output = {
               ...result,
-              attachments: result.attachments?.map((attachment) => ({
+              attachments: attachments?.map((attachment) => ({
                 ...attachment,
                 id: PartID.ascending(),
                 sessionID: ctx.sessionID,
                 messageID: input.processor.message.id,
               })),
             }
+            // kilocode_change end
             // kilocode_change - mark successful targeted memory recalls for the assistant badge
             if (item.id === "kilo_memory_recall") MemoryMarker.recall({ result: output, cache: input.memoryCache }) // kilocode_change
             yield* plugin.trigger(

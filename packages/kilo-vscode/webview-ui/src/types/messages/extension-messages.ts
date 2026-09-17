@@ -89,6 +89,7 @@ import type {
 } from "./migration"
 import type { MemoryEventMessage, MemoryLoadedMessage, MemoryOperationResultMessage } from "./memory"
 import type { SessionBoardLoadedMessage } from "./board"
+import type { LcmActivityMessage, LcmStatusErrorMessage, LcmStatusMessage } from "./lcm"
 
 // ============================================
 // Messages FROM extension TO webview
@@ -1800,3 +1801,6 @@ export type ExtensionMessage =
   | MemoryOperationResultMessage
   | BackgroundJobsLoadedMessage
   | SessionBoardLoadedMessage
+  | LcmStatusMessage
+  | LcmStatusErrorMessage
+  | LcmActivityMessage

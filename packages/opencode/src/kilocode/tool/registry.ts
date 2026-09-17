@@ -31,6 +31,7 @@ import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
 import { KiloMemory } from "@kilocode/kilo-memory/effect"
 import { MemoryPaths } from "@kilocode/kilo-memory/effect/paths"
+import * as LcmToolRegistry from "./lcm-registry"
 
 const log = Log.create({ service: "kilocode-tool-registry" })
 type Deps = { agent: Agent.Interface; truncate: Truncate.Interface; indexing?: boolean }
@@ -91,6 +92,7 @@ export namespace KiloToolRegistry {
       const notify = yield* NotifyUserTool.pipe(Effect.provideService(KiloSessions.Service, sessions))
       const openPlan = yield* OpenPlanTool
       const send = yield* SendFileTool
+      const lcm = yield* LcmToolRegistry.infos
       // Wakeup.Service is provided by Wakeup.node in the tool-registry node graph.
       const schedule = yield* ScheduleWakeupTool
       const cancel = yield* CancelWakeupTool
@@ -115,6 +117,7 @@ export namespace KiloToolRegistry {
           send,
           schedule,
           cancel,
+          lcm,
           ...board,
         }
       const tools = yield* Effect.all({
@@ -137,6 +140,7 @@ export namespace KiloToolRegistry {
         send,
         schedule,
         cancel,
+        lcm,
         ...board,
         ...tools,
       }
@@ -163,6 +167,7 @@ export namespace KiloToolRegistry {
       cancel?: Tool.Info
       boardRead?: Tool.Info
       goalReport?: Tool.Info
+      lcm?: readonly Tool.Info[]
       boardPost?: Tool.Info
       notebookRead?: Tool.Info
       notebookEdit?: Tool.Info
@@ -193,6 +198,7 @@ export namespace KiloToolRegistry {
           ? yield* Effect.all({ boardRead: Tool.init(tools.boardRead), boardPost: Tool.init(tools.boardPost) })
           : {}
       const browser = tools.browser ? yield* Tool.init(tools.browser) : undefined
+      const lcm = yield* LcmToolRegistry.build(tools.lcm ?? [])
       const notebooks =
         tools.notebookRead && tools.notebookEdit && tools.notebookExecute
           ? yield* Effect.all({
@@ -209,6 +215,7 @@ export namespace KiloToolRegistry {
         browser,
         ...notebooks,
         semantic,
+        lcm,
         openPlan,
         schedule,
         cancel,
@@ -255,7 +262,8 @@ export namespace KiloToolRegistry {
     })
   }
 
-  export function available(tool: Tool.Def) {
+  export function available(tool: Tool.Def, agent?: Agent.Info) {
+    if (tool.id.startsWith("lcm_")) return agent !== undefined && LcmToolRegistry.available(tool.id, agent.name)
     if (tool.id === "notify_user") return KiloSessions.remoteStatus().enabled
     if (tool.id === "send_file") return KiloSessions.remoteStatus().connected
     return true
@@ -281,6 +289,7 @@ export namespace KiloToolRegistry {
       cancel?: Tool.Def
       boardRead?: Tool.Def
       goalReport?: Tool.Def
+      lcm?: Tool.Def[]
       boardPost?: Tool.Def
       notebookRead?: Tool.Def
       notebookEdit?: Tool.Def
@@ -291,6 +300,7 @@ export namespace KiloToolRegistry {
         image_generation?: boolean
         native_notebook_tools?: boolean
         task_model_selection?: boolean
+        conversation_memory?: boolean
       }
       shared_agent_board?: boolean
     },
@@ -327,6 +337,7 @@ export namespace KiloToolRegistry {
       tools.notify,
       ...(Flag.KILO_CLIENT === "vscode" && tools.openPlan ? [tools.openPlan] : []),
       tools.send,
+      ...LcmToolRegistry.extra(tools.lcm ?? [], cfg),
     ]
   }
 

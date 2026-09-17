@@ -79,6 +79,7 @@ import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
 import { InstanceRef } from "@/effect/instance-ref" // kilocode_change
+import { ConversationMemory } from "@/kilocode/session/lcm/service" // kilocode_change
 
 export function webSearchEnabled(
   providerID: ProviderV2.ID,
@@ -361,7 +362,7 @@ const layer = Layer.effect(
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const cfg = yield* config.get() // kilocode_change
       const filtered = (yield* all()).filter((tool) => {
-        if (!KiloToolRegistry.available(tool)) return false // kilocode_change
+        if (!KiloToolRegistry.available(tool, input.agent)) return false // kilocode_change
         if (tool.id === WebSearchTool.id) {
           if (cfg.web_search === true) return true // kilocode_change
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
@@ -543,6 +544,7 @@ export const node = LayerNode.suspend(() =>
       RepositoryCache.node,
       KiloSessions.node,
       Wakeup.node, // kilocode_change - provides Wakeup.Service to the schedule_wakeup/cancel_wakeup tools
+      ConversationMemory.node,
     ],
   }),
 )

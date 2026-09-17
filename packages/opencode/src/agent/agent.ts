@@ -265,6 +265,7 @@ const layer = Layer.effect(
                         [path.join(Global.Path.repos, "*")]: "allow",
                       },
                     }),
+                    KiloAgent.lcmRecoveryPermissions(),
                     user,
                   ),
                   description: `Docs and dependency-source specialist. Use this when you need to inspect external documentation, clone dependency repositories into the managed cache, and research library implementation details without modifying the user's workspace.`,
@@ -325,12 +326,13 @@ const layer = Layer.effect(
         }
 
         // kilocode_change start - rename build→code, add debug/orchestrator/ask, patch plan/explore
-        KiloAgent.patchAgents(agents, defaults, user, kilo, ctx.worktree, whitelistedDirs)
+        KiloAgent.patchAgents(agents, defaults, user, kilo, ctx.worktree, whitelistedDirs, cfg)
 
         const agentConfigs = KiloAgent.preprocessConfig(cfg.agent ?? {})
         for (const [key, value] of Object.entries(agentConfigs)) {
           // kilocode_change end
           if (value.disable) {
+            if (KiloAgent.isLockedAgent(key)) continue // kilocode_change - internal utility agents cannot be disabled
             delete agents[key]
             continue
           }
@@ -454,7 +456,7 @@ const layer = Layer.effect(
           )
         }
 
-        KiloAgent.hardenSystemAgents(agents) // kilocode_change - keep system utility agents deny-only after config merges
+        KiloAgent.hardenSystemAgents(agents, cfg) // kilocode_change - keep system utility agents deny-only after config merges
 
         const get = Effect.fnUntraced(function* (agent: string) {
           return agents[KiloAgent.resolveKey(agent)] // kilocode_change - treat "build" as "code"
