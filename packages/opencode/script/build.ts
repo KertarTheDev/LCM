@@ -478,7 +478,11 @@ if (Script.release) {
       // kilocode_change end
     }
   }
-  await $`gh release upload v${Script.version} ${archives} --clobber` // kilocode_change
+  // kilocode_change start - fork prereleases upload archives through the captured release ID
+  if (process.env.KILO_RELEASE_ARCHIVE_ONLY !== "true") {
+    await $`gh release upload v${Script.version} ${archives} --clobber`
+  }
+  // kilocode_change end
 }
 
 export { binaries }
