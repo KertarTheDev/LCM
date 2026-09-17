@@ -2,13 +2,27 @@
 
 Status: normative v7.7.3 release policy.
 
-## v7.7.3 prerelease candidate
+## Current public prerelease: v7.7.3-lcm.1
 
 The candidate is based directly on upstream `v7.7.3`
 (`633f4c0eee8e904deae2db8229db1b03610289a3`) and carries the accumulated verified LCM
 implementation through `fccb8e954b411563c81cbaf22f808b1aaf2abf30`.
-Publication and canonical verification are pending; the recommended published download remains
-`v7.5.15-lcm.2` until the new candidate passes its release gates.
+The published download is [v7.7.3-lcm.1](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1), release ID `390769825`,
+published on 2026-09-17 from candidate `7a83d190cfeac09a976cc835ee16a20ba9df7aee` and product `aaa1aead09e25381456276633db760b7eea5b874`.
+The candidate contains the exact 27-path release-only overlay.
+[Canonical workflow 35229614485](https://github.com/KertarTheDev/LCM/actions/runs/35229614485) passed the
+LCM/adaptation suites, all affected-package typechecks, stable API/SDK generation, all 12 CLI
+and eight VSIX builds, and extracted Linux x64 packaged Conversation Memory smoke.
+Only the LCM publishing job ran; upstream publishing jobs were skipped.
+
+Independent REST verification confirmed the non-draft prerelease, exact resolved tag/SHA,
+all 20 nonempty assets and their SHA-256 digests, and the byte-identical reviewed changelog.
+Healthy older prereleases, including v7.5.15-lcm.2, remain available. No release or tag was deleted.
+
+The target upstream generator omits two manually written cloud CLI paragraphs. The release
+check validates only those exact omissions and retains the upstream prose; any other drift fails.
+Two earlier candidates stopped before draft creation: one lacked the upstream tag for annotations,
+and one found an outdated registry source assertion. Both were corrected and focused checks passed.
 
 ### What changed since v7.5.15-lcm.2
 
@@ -34,6 +48,31 @@ benchmark or new-model result is claimed for this port.
 Keep the 60% threshold, 15% clamped recent tail, and default recovery budgets. Comparisons did not
 justify changing them. There is no new raw-storage or sidecar version change: Kilo SQLite retains
 conversations, and existing schema-v14/tree-v11 derived state uses normal lineage validation.
+
+### Verified v7.7.3-lcm.1 assets
+
+|Asset|Bytes|SHA-256|
+|---|---|---|
+|kilo-darwin-arm64.zip|52667211|`0c7312acadbda65a05a476ac3ba139d111a6bb885774655c044a10e081edee81`|
+|kilo-darwin-x64-baseline.zip|54915261|`a5200c1af18632177233978d26f4a334843e50c9a5874dffaf3fe59c4dbcca4b`|
+|kilo-darwin-x64.zip|54915261|`4fb5adbfd6865210d360bddec2ee22e6797d321b1f1c47fd0980ed7535bf27d1`|
+|kilo-linux-arm64-musl.tar.gz|65010233|`1851c30e7deacfc610f25db89e149bd4967a5a38026da7ade1e977a5629a60c8`|
+|kilo-linux-arm64.tar.gz|64643116|`5440a90b51119f9072bc1d13c2869007a6adb5d1c800b4763b4be698d31754dc`|
+|kilo-linux-x64-baseline-musl.tar.gz|65571234|`438881295a62d665fd25b689759639d9022e86ec57160bc85ef1a802140c906e`|
+|kilo-linux-x64-baseline.tar.gz|64922838|`0288f7cf48107f4c7128cf805e9ef67497a64954a60984751f89cc6b404c11bc`|
+|kilo-linux-x64-musl.tar.gz|65571183|`134bb50049173961bc711c5e29ed3c59231256073a6d4311e5852833bcb752b8`|
+|kilo-linux-x64.tar.gz|64922251|`84b54431f5f1c83866bfb6bd540b288ca7f5132fa65c265f077eef39ba81114c`|
+|kilo-vscode-alpine-arm64.vsix|114330699|`0694a5ae148fd82abfe492850c230620b98d82f6e250d65ef95e4fcd33193434`|
+|kilo-vscode-alpine-x64.vsix|121559453|`e310435e7b7dc7b138dcd81c602508652e49782f988cf4749f75fd1721fa05ea`|
+|kilo-vscode-darwin-arm64.vsix|101433835|`27e4c2a9a0bddeb3a7efc4ccb31a1ad3ee4b40b92dbd9cdc96a7a4051db1edcd`|
+|kilo-vscode-darwin-x64.vsix|109468270|`4d2cffe8d6163a8d7a2a8311dab72aaac788e12f1cc987d770874e06ca82f3a7`|
+|kilo-vscode-linux-arm64.vsix|113891776|`02650c7aa7cc3cce9cabe3df58c8c960a405ba381aaa7c5de2c3c734ed15e9aa`|
+|kilo-vscode-linux-x64.vsix|120842567|`f4d8bfca09b0379563ddb7db33343f127b3cff77559f91dc64d61e4c710de90c`|
+|kilo-vscode-win32-arm64.vsix|98446159|`6911f14b9f682d5f26f7c492bfcde7b5f9b1abf12ca4ac7b1f42e7ae302082ee`|
+|kilo-vscode-win32-x64.vsix|122531497|`ee2d5356056c571c71f76740ee9834c25e1956a5bf3bf48b029309aefd411c55`|
+|kilo-windows-arm64.zip|65383577|`cc3ad8aaedc6a67ab82a20ecc24326aa02e036b2008ceb6e2936949199718638`|
+|kilo-windows-x64-baseline.zip|67120813|`160bb4429d9bb3931e77c5eaa1a4a52576cb9bd5b31ea9b0538668dff2a3a27e`|
+|kilo-windows-x64.zip|67120813|`ddb8bba1d160455c6aa888a80e4d4ba32ae1d40fb9331f49a682db3579b7b0ec`|
 
 ## Reliability changes in v7.5.15-lcm.2
 
@@ -63,7 +102,7 @@ remains unresolved. Deep-tree recovery effectiveness and optimal resource settin
 No raw-storage schema or derived-cache version changes are introduced by this delta. Kilo SQLite conversations,
 the isolated recovery boundary, answer/citation bounds, and ordinary upstream tools remain unchanged.
 
-The current public prerelease is [v7.5.15-lcm.2](https://github.com/KertarTheDev/LCM/releases/tag/v7.5.15-lcm.2),
+The retained previous public prerelease is [v7.5.15-lcm.2](https://github.com/KertarTheDev/LCM/releases/tag/v7.5.15-lcm.2),
 release ID `383604105`, published on 2026-09-06 from candidate
 `a1e7a2aee8f69c6e7512fbe3eb456de8a0ec632c`, containing product
 `8172e9be16ddbcbfebdca32b17eef013ad6a61be` plus its exact 27-path release overlay.
@@ -77,8 +116,8 @@ older releases were retained; no release or tag was deleted.
 
 ## Published release policy and evidence
 
-The product branch remains a direct, narrow augmentation of upstream tag `v7.5.15`
-(`e0ef9096391ebffba8560875665a2d7249ac6dc5`). Correct the product branch with ordinary reviewable commits; do not
+The product branch remains a direct, narrow augmentation of upstream tag `v7.7.3`
+(`633f4c0eee8e904deae2db8229db1b03610289a3`). Correct the product branch with ordinary reviewable commits; do not
 rewrite its published history or replay old LCM branches.
 
 Publish and independently verify replacements before recommending them. Retain healthy older prereleases: publication
