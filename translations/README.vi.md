@@ -3,8 +3,26 @@
 </p>
 
 <!-- LCM_ONBOARDING_START -->
+<!-- LCM_EOL_START -->
+<a id="lcm-end-of-life"></a>
+
+## LCM không còn được bảo trì
+
+> [!IMPORTANT]
+> **Việc bảo trì đã kết thúc vào ngày 17 tháng 10 năm 2026.**
+
+Kilo Code hiện đã cung cấp phần lớn các cải tiến về quản lý ngữ cảnh vốn là lý do tạo ra bản fork này, bao gồm khả năng tùy chỉnh việc nén ngữ cảnh, giữ nguyên ngữ cảnh gần đây và truy xuất thông tin từ các cuộc trò chuyện. Vì vậy, việc tiếp tục duy trì một bản fork LCM riêng không còn cần thiết.
+
+**Để tiếp tục nhận các bản cập nhật, hãy sử dụng [Kilo Code chính thức](https://github.com/Kilo-Org/kilocode).**
+
+Không có kế hoạch phát hành thêm bản cập nhật, bản sửa lỗi hoặc bản phát hành để duy trì khả năng tương thích cho LCM. Kho mã này, các bản phát hành hiện có và hướng dẫn thiết lập bên dưới vẫn được giữ lại để tham khảo về lịch sử dự án và phục vụ nghiên cứu.
+
+Cảm ơn tất cả những ai đã dùng thử LCM và chia sẻ ý kiến phản hồi.
+<!-- LCM_EOL_END -->
+
 <a id="install-lcm-prerelease"></a>
-## Dùng thử bản phát hành trước LCM
+
+## Hướng dẫn cài đặt LCM được lưu lại để tham khảo
 
 Bản Kilo Code thử nghiệm này giúp bạn không mất mạch trong những cuộc trò chuyện dài: ngữ cảnh cũ đã dùng được gom thành cây tóm tắt có thể tìm kiếm. Nội dung gần đây vẫn được giữ nguyên, còn trợ lý có thể lấy lại các chi tiết trước đó khi cần.
 
@@ -13,7 +31,7 @@ Bản Kilo Code thử nghiệm này giúp bạn không mất mạch trong nhữn
 
 [Muốn hiểu ý tưởng? Hãy đọc bài báo LCM gốc của Clint Ehrlich và Theodore Blackman.](https://arxiv.org/abs/2605.04050)
 
-**Bản hiện tại:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
+**Bản phát hành trước cuối cùng của LCM:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
 
 ### Chọn file tải
 

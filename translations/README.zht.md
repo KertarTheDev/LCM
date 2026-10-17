@@ -3,8 +3,26 @@
 </p>
 
 <!-- LCM_ONBOARDING_START -->
+<!-- LCM_EOL_START -->
+<a id="lcm-end-of-life"></a>
+
+## LCM 已停止維護
+
+> [!IMPORTANT]
+> **本專案已於 2026 年 10 月 17 日停止維護。**
+
+Kilo Code 現已提供促使我們建立此分支的大部分上下文管理改進，包括可設定的上下文壓縮、近期上下文保留，以及對話資訊檢索。因此，已沒有必要繼續維護獨立的 LCM 分支。
+
+**如需持續取得更新，請使用 [Kilo Code 官方版](https://github.com/Kilo-Org/kilocode)。**
+
+LCM 不再規劃後續更新、錯誤修正或相容性版本。本儲存庫、現有發行版本及下方的設定指南將繼續保留，供歷史回顧與研究參考。
+
+感謝所有試用 LCM 並分享意見的朋友。
+<!-- LCM_EOL_END -->
+
 <a id="install-lcm-prerelease"></a>
-## 試用 LCM 預發行版
+
+## LCM 歷史安裝指南
 
 這個實驗版 Kilo Code 會把已使用的舊內容轉成可搜尋的摘要樹，讓長對話繼續實用。最近的工作會原樣保留，代理需要時也能找回較早的細節。
 
@@ -13,7 +31,7 @@
 
 [想了解背後的想法？請閱讀 Clint Ehrlich 與 Theodore Blackman 的 LCM 原始論文。](https://arxiv.org/abs/2605.04050)
 
-**目前預發行版:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
+**LCM 最終預發行版:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
 
 ### 選擇下載檔案
 

@@ -3,8 +3,26 @@
 </p>
 
 <!-- LCM_ONBOARDING_START -->
+<!-- LCM_EOL_START -->
+<a id="lcm-end-of-life"></a>
+
+## LCM is no longer maintained
+
+> [!IMPORTANT]
+> **Maintenance ended on October 17, 2026.**
+
+Kilo Code now provides most of the context-management improvements that motivated this fork, including configurable compaction, preservation of recent context, and conversation recall. Maintaining a separate LCM fork is therefore no longer justified.
+
+**For ongoing updates, please use [official Kilo Code](https://github.com/Kilo-Org/kilocode).**
+
+No further LCM updates, bug fixes, or compatibility releases are planned. This repository, its existing releases, and the setup guide below remain available as historical and research references.
+
+Thank you to everyone who tried LCM and shared feedback.
+<!-- LCM_EOL_END -->
+
 <a id="install-lcm-prerelease"></a>
-## Try the LCM prerelease
+
+## Historical LCM installation guide
 
 This experimental Kilo Code build keeps long chats useful by turning older, already-used context into a searchable summary tree. Your recent work stays exact, and the agent can recover older detail when it needs it.
 
@@ -13,7 +31,7 @@ This experimental Kilo Code build keeps long chats useful by turning older, alre
 
 [Want the idea behind it? Read the original LCM paper by Clint Ehrlich and Theodore Blackman.](https://arxiv.org/abs/2605.04050)
 
-**Current prerelease:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
+**Final LCM prerelease:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
 
 ### Pick what to download
 

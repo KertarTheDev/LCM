@@ -3,8 +3,26 @@
 </p>
 
 <!-- LCM_ONBOARDING_START -->
+<!-- LCM_EOL_START -->
+<a id="lcm-end-of-life"></a>
+
+## LCM artık bakım almıyor
+
+> [!IMPORTANT]
+> **Bakım 17 Ekim 2026 tarihinde sona erdi.**
+
+Kilo Code artık bu çatallamanın yapılmasına yol açan bağlam yönetimi iyileştirmelerinin çoğunu sunuyor. Bunlar arasında yapılandırılabilir bağlam sıkıştırma, yakın zamandaki bağlamın korunması ve konuşmalardaki bilgilerin yeniden bulunması yer alıyor. Bu nedenle ayrı bir LCM çatallamasının bakımını sürdürmek artık gerekli değil.
+
+**Güncellemeleri almaya devam etmek için lütfen [resmî Kilo Code'u](https://github.com/Kilo-Org/kilocode) kullanın.**
+
+LCM için yeni güncellemeler, hata düzeltmeleri veya uyumluluk sürümleri planlanmıyor. Bu depo, mevcut sürümler ve aşağıdaki kurulum kılavuzu, projenin geçmişine ve araştırmalara kaynak olarak erişilebilir kalacak.
+
+LCM'i deneyen ve geri bildirim paylaşan herkese teşekkürler.
+<!-- LCM_EOL_END -->
+
 <a id="install-lcm-prerelease"></a>
-## LCM ön sürümünü deneyin
+
+## Başvuru amacıyla saklanan LCM kurulum kılavuzu
 
 Bu deneysel Kilo Code derlemesi, kullanılmış eski bağlamı aranabilir bir özet ağacına dönüştürerek uzun sohbetleri kullanışlı tutar. Son çalışmalarınız aynen kalır; ajan gerektiğinde eski ayrıntıları geri getirebilir.
 
@@ -13,7 +31,7 @@ Bu deneysel Kilo Code derlemesi, kullanılmış eski bağlamı aranabilir bir ö
 
 [Fikrin kaynağını mı merak ediyorsunuz? Clint Ehrlich ve Theodore Blackman'ın özgün LCM makalesini okuyun.](https://arxiv.org/abs/2605.04050)
 
-**Güncel ön sürüm:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
+**Son LCM ön sürümü:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
 
 ### İndirmeyi seçin
 

@@ -3,8 +3,26 @@
 </p>
 
 <!-- LCM_ONBOARDING_START -->
+<!-- LCM_EOL_START -->
+<a id="lcm-end-of-life"></a>
+
+## O LCM não é mais mantido
+
+> [!IMPORTANT]
+> **A manutenção foi encerrada em 17 de outubro de 2026.**
+
+O Kilo Code agora oferece a maioria das melhorias de gerenciamento de contexto que motivaram este fork, incluindo compactação configurável, preservação do contexto recente e recuperação de informações de conversas. Por isso, manter um fork separado do LCM deixou de se justificar.
+
+**Para continuar recebendo atualizações, use o [Kilo Code oficial](https://github.com/Kilo-Org/kilocode).**
+
+Não estão previstas novas atualizações, correções de bugs ou versões de compatibilidade do LCM. Este repositório, as versões já publicadas e o guia de configuração abaixo continuarão disponíveis como referência histórica e para pesquisa.
+
+Obrigado a todos que experimentaram o LCM e compartilharam suas opiniões.
+<!-- LCM_EOL_END -->
+
 <a id="install-lcm-prerelease"></a>
-## Experimente a prévia do LCM
+
+## Guia histórico de instalação do LCM
 
 Esta versão experimental do Kilo Code mantém conversas longas úteis ao transformar contexto antigo já usado em uma árvore de resumos pesquisável. O trabalho recente continua exato, e o agente pode recuperar detalhes antigos quando precisar.
 
@@ -13,7 +31,7 @@ Esta versão experimental do Kilo Code mantém conversas longas úteis ao transf
 
 [Quer entender a ideia? Leia o artigo original do LCM, de Clint Ehrlich e Theodore Blackman.](https://arxiv.org/abs/2605.04050)
 
-**Prévia atual:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
+**Última prévia do LCM:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
 
 ### Escolha o download
 

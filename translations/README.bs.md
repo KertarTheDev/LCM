@@ -3,8 +3,26 @@
 </p>
 
 <!-- LCM_ONBOARDING_START -->
+<!-- LCM_EOL_START -->
+<a id="lcm-end-of-life"></a>
+
+## LCM se više ne održava
+
+> [!IMPORTANT]
+> **Održavanje je završeno 17. oktobra 2026.**
+
+Kilo Code sada nudi većinu poboljšanja upravljanja kontekstom zbog kojih je ovaj fork nastao, uključujući podesivo sažimanje, očuvanje nedavnog konteksta i pronalaženje informacija iz razgovora. Zato održavanje zasebnog LCM forka više nije opravdano.
+
+**Za daljnja ažuriranja koristite [službeni Kilo Code](https://github.com/Kilo-Org/kilocode).**
+
+Nisu planirana nova ažuriranja LCM-a, ispravke grešaka ni izdanja za održavanje kompatibilnosti. Ovaj repozitorij, postojeća izdanja i vodič za postavljanje u nastavku ostat će dostupni kao historijska i istraživačka građa.
+
+Hvala svima koji su isprobali LCM i podijelili svoje utiske.
+<!-- LCM_EOL_END -->
+
 <a id="install-lcm-prerelease"></a>
-## Isprobajte LCM predizdanje
+
+## Vodič za instalaciju LCM-a sačuvan za referencu
 
 Ova eksperimentalna verzija Kilo Codea održava duge razgovore korisnim tako što stariji, već iskorišteni kontekst pretvara u pretraživo stablo sažetaka. Nedavni rad ostaje tačan, a agent može vratiti starije detalje kada zatrebaju.
 
@@ -13,7 +31,7 @@ Ova eksperimentalna verzija Kilo Codea održava duge razgovore korisnim tako št
 
 [Želite pozadinu ideje? Pročitajte originalni LCM rad Clinta Ehrlicha i Theodorea Blackmana.](https://arxiv.org/abs/2605.04050)
 
-**Trenutno predizdanje:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
+**Posljednje predizdanje LCM-a:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
 
 ### Izaberite preuzimanje
 

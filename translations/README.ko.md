@@ -3,8 +3,26 @@
 </p>
 
 <!-- LCM_ONBOARDING_START -->
+<!-- LCM_EOL_START -->
+<a id="lcm-end-of-life"></a>
+
+## LCM 유지보수가 종료되었습니다
+
+> [!IMPORTANT]
+> **2026년 10월 17일부로 유지보수가 종료되었습니다.**
+
+이 포크를 만들게 된 계기였던 컨텍스트 관리 개선 사항 대부분은 이제 Kilo Code에서 제공됩니다. 여기에는 설정 가능한 컨텍스트 압축, 최근 컨텍스트 보존, 대화 정보 검색 및 복원이 포함됩니다. 따라서 별도의 LCM 포크를 계속 유지할 필요가 없다고 판단했습니다.
+
+**계속 업데이트를 받으려면 [공식 Kilo Code](https://github.com/Kilo-Org/kilocode)를 사용해 주세요.**
+
+앞으로 LCM 업데이트, 버그 수정 또는 호환성 대응 릴리스는 계획되어 있지 않습니다. 이 저장소와 기존 릴리스, 아래의 설정 가이드는 과거 구현 기록과 연구 참고 자료로 계속 공개됩니다.
+
+LCM을 사용해 보고 의견을 보내 주신 모든 분께 감사드립니다.
+<!-- LCM_EOL_END -->
+
 <a id="install-lcm-prerelease"></a>
-## LCM 프리릴리스 사용해 보기
+
+## 기록으로 보존된 LCM 설치 가이드
 
 이 실험용 Kilo Code 빌드는 이미 사용한 오래된 컨텍스트를 검색 가능한 요약 트리로 바꿔 긴 채팅을 계속 유용하게 만듭니다. 최근 작업은 정확히 남고, 에이전트는 필요할 때 이전 세부 내용을 다시 찾을 수 있습니다.
 
@@ -13,7 +31,7 @@
 
 [아이디어가 궁금하다면 Clint Ehrlich와 Theodore Blackman의 원본 LCM 논문을 읽어 보세요.](https://arxiv.org/abs/2605.04050)
 
-**현재 프리릴리스:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
+**LCM 최종 프리릴리스:** [`v7.7.3-lcm.1`](https://github.com/KertarTheDev/LCM/releases/tag/v7.7.3-lcm.1)
 
 ### 다운로드 선택
 
